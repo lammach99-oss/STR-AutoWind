@@ -2,7 +2,7 @@
 
 Preliminary Windows engineering desktop demonstration. **DEMO MODE — SYNTHETIC WIND PRESSURES — NOT FOR ENGINEERING DESIGN — REAL CSI WRITES DISABLED.**
 
-Structural Load Assistant explores an engineer-reviewed workflow for facade wind loads, roof pressure-zone mapping, independent wall gravity loads, and reproducible reports. This prototype operates entirely on synthetic fixtures and fake CSI adapters; it is not a production wind-code calculator or a qualified ETABS/SAP2000 integration.
+Structural Load Assistant explores an engineer-reviewed workflow for facade wind loads, roof pressure-zone mapping, independent wall gravity loads, and reproducible reports. Demo calculation/assignment operates on synthetic fixtures and fake CSI adapters. A separate Real CSI Read-Only mode inspects running installed ETABS/SAP2000 sessions; it cannot assign loads and is not a production wind-code calculator.
 
 Implemented features include both Equal Split 50/50 and Statically Equivalent facade distribution, genuine projected-overlap segmentation and accumulation, an editable roof polygon map with per-shell Local 3 signs, immutable simulation approvals, fake apply/readback with manual-load preservation, append-only SQLite snapshots, deterministic Markdown/HTML reports, and a seven-workspace WPF desktop with VS Code debugging configuration.
 
@@ -69,6 +69,27 @@ Actual window rendering and full workflow smoke:
 dotnet run --no-build --project src/StructuralLoadAssistant.App.Wpf -- --smoke --smoke-output artifacts/desktop-smoke
 ```
 
+## Real CSI read-only inspection (Sprint 2)
+
+1. Start a supported installed CSI product and open the model yourself. The application never starts CSI, opens a model, unlocks it or changes present units. Match the Windows user/elevation context of the running CSI process.
+2. In Structural Load Assistant select **RealReadOnly** mode. Choose ETABS or SAP2000 and browse to its installed product API assembly (`ETABSv1.dll` or `SAP2000v1.dll`). Selecting `CSiAPIv1.dll` resolves the inspected product-specific contract beside it. Do not download or copy untrusted vendor DLLs into this repository.
+3. Click **Connect running instance**. Review product/version, connection issues and read-only status. The current narrow compatibility gate accepts inspected ETABS 23 / SAP2000 27 signatures; other versions fail with diagnostics rather than guessed API calls.
+4. Select frames and/or area objects inside CSI, then click **Refresh Selection** here. Review patterns, cases, combinations, units, locked status, stories where supported, selected endpoints/polygon XYZ, Local3, and supported existing assignments. Empty selection is valid and shows no geometry.
+5. In Facade, explicitly choose lower/upper frame IDs. If facade membership is not established, use the audited group review with reviewer/reason. Pairing checks horizontal, collinear, genuinely overlapping geometry; it does not infer pairing solely from elevation. Demo mode can edit its pairs and retain both approved load-distribution methods. Live mode previews geometry only, with pressure/load calculation disabled.
+6. In Roof, click a selected projected shell to inspect original XYZ, Local3 and unknown outward-normal metadata. Pressure zones remain **Unmapped** because no verified dataset is installed. Manual Local3 choice is audited review metadata; it creates no pressure, engineering approval or load assignment. Vertical/degenerate XY projections cannot be represented reliably in this 2D viewer; original XYZ remains visible.
+
+Switching mode or refreshing clears prior context and reviews. Real mode cannot call demo calculation, approval, assignment or report commands. No real writer is implemented. If multiple CSI instances exist, this sprint uses the vendor helper's active running object; explicit PID selection is a future qualification item. Verify the displayed model identity before relying on an inspection.
+
+Read-only UI smoke with **mock getter-contract geometry**, without attaching to real CSI:
+
+```powershell
+dotnet run --no-build --project src/StructuralLoadAssistant.App.Wpf -- --smoke-readonly --smoke-output artifacts/readonly-smoke
+```
+
+This launches/renders the real WPF interface and checks mode-switch and write-gate behavior, but its geometry is deliberately labeled mock data. Live ETABS attachment/definition reads are reported separately from mock geometry tests in [API compatibility](Docs/API_COMPATIBILITY.md).
+
+GitHub Actions runs Windows locked restore, Release build and tests on every push to `main`, using `global.json`. CI needs neither a CSI installation nor a proprietary assembly. Package advisory recommendations remain in [security notes](Docs/SECURITY_NOTES.md); Sprint 2 does not silently upgrade dependencies.
+
 ## Structure
 
 ```text
@@ -78,6 +99,8 @@ src/
   StructuralLoadAssistant.Engineering/  units, math, facade, wall, gated standards
   StructuralLoadAssistant.RoofMapping/  projected polygons, sign, audited approval
   StructuralLoadAssistant.Csi.Fake/     adapter contracts, fixtures, safe simulations
+  StructuralLoadAssistant.Csi.Abstractions/ vendor-neutral read capabilities/contracts
+  StructuralLoadAssistant.Csi.ApiV1/    optional installed getter-only adapter
   StructuralLoadAssistant.Persistence/ SQLite migration and append-only snapshots
   StructuralLoadAssistant.Reporting/   typed report and deterministic renderers
   StructuralLoadAssistant.Application/ shared use cases for desktop and console
@@ -96,14 +119,14 @@ Dependencies are pinned in project files with transitive `packages.lock.json` fi
 
 No normative ASCE/SEI 7-22 or AS/NZS 1170.2:2021 coefficient dataset has been verified or bundled. Standard selectors and manifests are metadata boundaries; engineering calculation and non-simulation approval remain blocked. Demonstration pressure values and wall material values must not be used for engineering design. A successful fake readback does not qualify a live CSI model or prove code compliance.
 
-Facade UI selection currently uses fixed demonstration beam pairs. Wall loads are preview-only. Project reopening initializes a fresh synthetic mapping draft; saved report snapshots can be reopened by ID, but active fake-assignment ledgers are not restored. Reports export Markdown/HTML; PDF/DOCX and advanced roof/facade topology are future work. There is no live CSI connection or production model write path.
+Facade pairs are explicit and editable; automatic physical facade recognition remains unqualified. Real geometry has no pressure dataset and remains preview-only. Wall loads are preview-only. Project reopening initializes a fresh synthetic mapping draft; saved report snapshots can be reopened by ID, but active fake-assignment ledgers are not restored. Reports export Markdown/HTML; PDF/DOCX and advanced roof/facade topology are future work. A getter-only live connection exists; no production model write path exists.
 
 ## Roadmap
 
 1. Add licensed, rights-cleared normative datasets with exact revision control and domain-engineer reviewed reference tests.
 2. Complete independent source-workbook audit outside the public repository; separate historical parity from corrected-standard fixtures.
 3. Expand reviewed facade pair selection, complex roof geometry and typed wind-input validation.
-4. Add a version-aware, read-only CSI adapter using installed vendor API documentation and physical ETABS/SAP2000 qualification.
+4. Qualify the getter-only adapter against selected frames/shells, mixed Local3, native unit combinations and existing load assignments on real ETABS/SAP2000 models, and extend reviewed version support.
 5. Add active-draft resumption, transactional snapshot batches and richer report templates.
 6. Introduce real CSI writes only after backup/Save As, ownership/conflict controls, partial-failure recovery, rollback and readback gates have been qualified. Existing simulation approval must never authorize a real write.
 

@@ -19,4 +19,22 @@
 - [ ] ETABS and SAP physical read-only integration and full write/rollback qualification.
 - [ ] Human usability/accessibility review on multiple DPI/screen sizes.
 
+## Sprint 2 read-only gates
+
+- [x] Clean main synchronized with origin/main; direct main commits/pushes, no branch/PR/force-push.
+- [x] Domain-only Csi.Abstractions read contracts; fake behavior retained.
+- [x] Installed ETABS23/SAP27 metadata/enums/CHM inspected locally; no proprietary files added.
+- [x] Getter-only runtime adapter, STA pump, return-code/units/disconnection diagnostics.
+- [x] Actual ETABS23.2.0 attachment/definitions/units/locked/stories; empty selection disclosed.
+- [x] Mock-backed geometry/axis/load conversion and unsupported-version contracts.
+- [x] Explicit facade pairs, audited groups, existing equal/static formulas retained.
+- [x] XYZ/Local3 and unknown outward metadata; real pressure Unmapped; no real approval/apply.
+- [x] Refresh/cancel/mode changes invalidate stale inspection context.
+- [x] Windows CI locked restore/Release build/tests without CSI installation.
+- [ ] Physical selected geometry/transform/load qualification in ETABS.
+- [ ] Physical SAP2000 connection/scan qualification.
+- [ ] PID-aware instance selection and advanced 3D display.
+
+Final WPF dual-mode smoke/results are in IMPLEMENTATION_STATUS.md. Mock screenshots are not actual customer scan proof.
+
 Latest build/test counts and output paths are in IMPLEMENTATION_STATUS.md. A passing fake test does not qualify a live model or wind standard.

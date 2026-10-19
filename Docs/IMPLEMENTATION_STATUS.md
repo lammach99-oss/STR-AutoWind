@@ -1,5 +1,40 @@
 # Implementation status — 2026-10-19
 
+## Sprint 2: real CSI read-only integration
+
+This section supersedes the initial milestone's CSI and fixed-selection limitations below. No production CSI writes or normative wind calculation have been enabled.
+
+Created Csi.Abstractions (Domain-only read contracts) and Csi.ApiV1 (optional runtime-loaded installed getter adapter). Extracted the read interface while retaining fake simulated-write records/type names. Added explicit FacadeSelection and CsiInspectionSession, audited grouping/Local3 review, selection/async invalidation, and separate WPF Demo versus RealReadOnly modes. Demo facade pairs are now editable rather than hardcoded; reaction mathematics is unchanged.
+
+The adapter validates inspected getter signatures, checks return codes, converts present units to SI without changing model units, and uses an owned STA with a message pump for connect/read/release. It reads definitions, supported story/base records, selected frame/shell XYZ, Local3 and selected distributed/uniform loads. Unknown outward direction is never guessed. Unsupported axes retain XYZ with unknown-axis metadata. Fatal model/unit staleness clears the whole scan.
+
+### Actual verification
+
+- Full locked restore succeeded. Debug solution build: zero warnings/errors. Full automated suite: **128 passed, 0 failed, 0 skipped** in artifacts/sprint2/sprint2-tests.trx (91 baseline plus 37 extraction/adapter/inspection/pair regressions).
+- Actual live ETABS23.2.0 GetObject attachment and definition scan succeeded: locked model, N_mm_C, story/base records, patterns/cases/combinations, zero scan issues. Selection was empty. Therefore selected real XYZ, axes and assignment interpretation remain physically unqualified. Local private evidence: api-live-result-final.txt.
+- Actual SAP2000 absence returned Connected=false with DISCONNECTED; installed SAP27 metadata/help inspected, but no running SAP model was qualified. SAP20/other versions are outside the current gate.
+- Native WPF demo smoke passed with both fake readbacks true. Native mock-readonly smoke passed with Mode=RealReadOnly, mock source labeling, no assignment/readback, no synthetic pressure mapping, guard assertions and clean shutdown. Both rendered all seven tabs, with additional CSI/roof detail captures. Local paths: artifacts/sprint2/ui-demo-final and ui-readonly-final. These screenshots are actual windows with synthetic/mock data, not actual customer geometry scans.
+- Independent review checked getter signatures against installed help, matrix Local3 column indexing, base-story count, dimensional conversions, source/mode boundaries and refresh races. Corrected optional-axis data loss, stale-scan retention, stale capabilities display and atomic group review. Final test suite covers relevant regressions.
+- First Windows CI commit 789e90c completed successfully on a clean GitHub-hosted Windows runner without CSI installed. Main-push workflow uses pinned SDK/locked restore/Release build/tests and diagnostic TRX artifacts. Later main commits trigger the same workflow; final run URL/status is included in the handoff.
+
+### Environment and scope disclosures
+
+Checked-in global.json requested SDK10.0.400 although only8.0.422 was installed and this sprint requires .NET8. Restored pin8.0.422. Local sandbox MSBuild attempts sometimes returned no diagnostics or orphaned workers; inspected parent command lines and removed only workers from exited build processes, then used single-node builds with server/node reuse disabled for reliable verification. No application process or user model was terminated/modified for validation.
+
+No proprietary DLL/help, actual model path/name/geometry, workbook/specification, DB or generated scan was staged. Shared read-only contracts can build/test without a CSI installation. Existing dependency advisories remain documented separately in SECURITY_NOTES.md; no breaking upgrade was introduced.
+
+### Exact next steps
+
+1. Select known horizontal frame pairs and roof shells in an already open disposable ETABS23 model; Refresh Selection and independently compare XYZ, mixed Local3, load extents and SI conversion. Adapter never changes CSI selection.
+2. Repeat with nontrivial rotations and alternate native units, then verify no dirty/model-unit state change.
+3. Run SAP200027 and repeat connection, selected geometry and load tests; retain unsupported story/optional API diagnostics.
+4. Add inspected version support only after installed signature/help and physical read qualification; add explicit PID selection for multiple running instances.
+5. Add 3D display for vertical/nonplanar roofs and engineer-verified physical outward-normal provenance before pressure mapping.
+6. Resolve native SQLite/test dependency advisories in a separate regression-tested update. Import only licensed/reviewed standards data before enabling engineering pressure calculation.
+7. Production CSI writes remain a future separately authorized milestone requiring backup, ownership/conflict, rollback and physical readback qualification.
+
+## Initial P0/P1 milestone (historical evidence)
+
 Implemented preliminary P0/P1 with native WPF demo and SQLite/report proof (P2/P3). This is a simulated milestone, not production wind-code or CSI qualification.
 
 ## Created
