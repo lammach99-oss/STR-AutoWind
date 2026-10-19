@@ -44,6 +44,17 @@ public sealed class CsiPhysicalQualificationTests
         Assert.False(string.IsNullOrWhiteSpace(scan.Model.ModelId));
         Assert.NotEqual("unknown", scan.Units.NativeUnitId);
 
+        // Load reviewed physical baseline fixture
+        var fixturePath = Path.Combine(AppContext.BaseDirectory, "../../../../../fixtures/physical-csi-reviewed-baseline.json");
+        if (!File.Exists(fixturePath))
+        {
+            fixturePath = Path.Combine(Directory.GetCurrentDirectory(), "fixtures/physical-csi-reviewed-baseline.json");
+        }
+        Assert.True(File.Exists(fixturePath), $"Baseline fixture not found at {fixturePath}");
+        var fixtureJson = await File.ReadAllTextAsync(fixturePath);
+        using var doc = System.Text.Json.JsonDocument.Parse(fixtureJson);
+        var root = doc.RootElement;
+
         // Strict physical qualification: selection must not be empty or partial
         Assert.NotEqual(CsiScanOutcome.Failed, scan.Outcome);
         Assert.NotEqual(CsiScanOutcome.EmptySelection, scan.Outcome);
@@ -63,6 +74,26 @@ public sealed class CsiPhysicalQualificationTests
                 Assert.True((frame.End - frame.Start).Length > 1e-4, "Frame must have nonzero length.");
             }
 
+            // Assert against expected frames from fixture
+            if (root.TryGetProperty("expectedFrames", out var expectedFrames))
+            {
+                foreach (var expected in expectedFrames.EnumerateArray())
+                {
+                    var id = expected.GetProperty("id").GetString();
+                    var matched = scan.Model.Frames.FirstOrDefault(f => f.Id == id);
+                    if (matched != null)
+                    {
+                        var startY = expected.GetProperty("startY").GetDouble();
+                        var endY = expected.GetProperty("endY").GetDouble();
+                        var length = expected.GetProperty("lengthM").GetDouble();
+                        var tol = expected.GetProperty("toleranceM").GetDouble();
+                        Assert.True(Math.Abs(matched.Start.Y - startY) <= tol, $"Frame {id} Start.Y expected {startY} got {matched.Start.Y}");
+                        Assert.True(Math.Abs(matched.End.Y - endY) <= tol, $"Frame {id} End.Y expected {endY} got {matched.End.Y}");
+                        Assert.True(Math.Abs((matched.End - matched.Start).Length - length) <= tol, $"Frame {id} length expected {length} got {(matched.End - matched.Start).Length}");
+                    }
+                }
+            }
+
             // Verify shells: vertices, right-hand rule, unit Local 3
             foreach (var shell in scan.Model.Shells)
             {
@@ -76,6 +107,25 @@ public sealed class CsiPhysicalQualificationTests
                 }
                 Assert.True(shell.Local3.Length > 0.5, "Local 3 must be available.");
                 Assert.True(Math.Abs(shell.Local3.Length - 1.0) < 1e-4, "Local 3 must be a unit vector.");
+            }
+
+            // Assert against expected shells from fixture
+            if (root.TryGetProperty("expectedShells", out var expectedShells))
+            {
+                foreach (var expected in expectedShells.EnumerateArray())
+                {
+                    var id = expected.GetProperty("id").GetString();
+                    var matched = scan.Model.Shells.FirstOrDefault(s => s.Id == id);
+                    if (matched != null)
+                    {
+                        var l3 = expected.GetProperty("local3");
+                        var expL3 = new Vec3(l3.GetProperty("x").GetDouble(), l3.GetProperty("y").GetDouble(), l3.GetProperty("z").GetDouble());
+                        var tol = expected.TryGetProperty("tolerance", out var t) ? t.GetDouble() : 0.05;
+                        Assert.True(Math.Abs(matched.Local3.X - expL3.X) <= tol, $"Shell {id} Local3.X expected {expL3.X} got {matched.Local3.X}");
+                        Assert.True(Math.Abs(matched.Local3.Y - expL3.Y) <= tol, $"Shell {id} Local3.Y expected {expL3.Y} got {matched.Local3.Y}");
+                        Assert.True(Math.Abs(matched.Local3.Z - expL3.Z) <= tol, $"Shell {id} Local3.Z expected {expL3.Z} got {matched.Local3.Z}");
+                    }
+                }
             }
 
             // Verify opposite Local 3 vectors between horizontal slabs (Area 10 pointing +Z, Area 18 pointing -Z)
@@ -103,6 +153,23 @@ public sealed class CsiPhysicalQualificationTests
                 Assert.False(string.IsNullOrWhiteSpace(load.Pattern));
                 Assert.False(string.IsNullOrWhiteSpace(load.Kind));
                 Assert.True(double.IsFinite(load.ValueSI));
+            }
+
+            // Assert against expected loads from fixture
+            if (root.TryGetProperty("expectedLoads", out var expectedLoads))
+            {
+                foreach (var expected in expectedLoads.EnumerateArray())
+                {
+                    var objId = expected.GetProperty("objectId").GetString();
+                    var pattern = expected.GetProperty("pattern").GetString();
+                    var valueSI = expected.GetProperty("valueSI").GetDouble();
+                    var tolSI = expected.GetProperty("toleranceSI").GetDouble();
+                    var matched = scan.Model.ExistingLoads.FirstOrDefault(l => l.ObjectId == objId && l.Pattern == pattern);
+                    if (matched != null)
+                    {
+                        Assert.True(Math.Abs(matched.ValueSI - valueSI) <= tolSI, $"Load on {objId} pattern {pattern} expected {valueSI} got {matched.ValueSI}");
+                    }
+                }
             }
     }
 

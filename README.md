@@ -6,6 +6,8 @@ Structural Load Assistant explores an engineer-reviewed workflow for facade wind
 
 Implemented features include both Equal Split 50/50 and Statically Equivalent facade distribution, genuine projected-overlap segmentation and accumulation, an editable roof polygon map with per-shell Local 3 signs, immutable simulation approvals, fake apply/readback with manual-load preservation, append-only SQLite snapshots, deterministic Markdown/HTML reports, and a seven-workspace WPF desktop with VS Code debugging configuration.
 
+Sprint 3 adds an interactive 3D roof geometry viewer with hardware-accelerated orbit/pan/zoom, coordinated 2D/3D polygon selection, Local 3 orientation arrows, slope and azimuth calculations, and persistent per-wind-state SQLite mapping drafts with stale-geometry reconciliation.
+
 ## Build and run
 
 Requires Windows 10/11 x64 and .NET SDK 8.0.422 (latest patch roll-forward). Restore requires NuGet access on the first run.

@@ -55,7 +55,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private static string XYZ(Vec3 v) => string.Create(CultureInfo.InvariantCulture, $"({v.X:G6}, {v.Y:G6}, {v.Z:G6})");
     public object[] ShellRows => (IsDemo ? Session.Model.Shells : inspection.Scan?.Model.Shells ?? []).Select(s => (object)new { s.Id, s.RoofPlaneId, VerticesXYZ = string.Join("; ", s.Vertices.Select(XYZ)), Local3X = s.Local3.Length > .5 ? (double?)s.Local3.X : null, Local3Y = s.Local3.Length > .5 ? (double?)s.Local3.Y : null, Local3Z = s.Local3.Length > .5 ? (double?)s.Local3.Z : null, AxisStatus = s.Local3.Length > .5 ? "Read" : "Unknown / unavailable", Normal = IsDemo ? XYZ(s.OutwardNormal) : inspection.Scan?.AreaMetadata.FirstOrDefault(a => a.AreaId == s.Id)?.NormalStatus ?? "Unknown" }).ToArray();
     public string[] Patterns => (IsDemo ? Session.Model.Patterns : inspection.Scan?.Model.Patterns ?? []).ToArray();
-    public string[] ZoneIds => IsDemo ? Session.Zones.Select(z => z.Id).Distinct().ToArray() : ["Unmapped"];
+    public string[] ZoneIds => IsDemo ? Session.Zones.Select(z => z.Id).Distinct().ToArray() : ["Unmapped", "Edge", "Interior", "Corner", "Field", "Zone 1", "Zone 2", "Zone 3", "Crossing Warning", "Excluded"];
     public string RoofLegend => IsDemo ? "Green = Edge; blue = Interior; amber = crossing/unmapped. Click a polygon to inspect. Pressure and Local 3 are independent quantities." : "Amber = Unmapped pressure. Click a selected CSI polygon for XYZ, Local 3 and unknown outward-normal metadata. No synthetic pressures are used.";
     public string[] Cases => (IsDemo ? Session.Model.Cases : inspection.Scan?.Model.Cases ?? []).ToArray();
     public string[] Combinations => (IsDemo ? Session.Model.Combinations : inspection.Scan?.Model.Combinations ?? []).ToArray();
@@ -81,6 +81,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public string User { get; set; } = Environment.UserName;
     public string Reason { get; set; } = "Review synthetic roof mapping";
     public bool AcknowledgeMismatch { get; set; }
+    public bool ShowLocal3Arrows { get; set; } = true;
     public string SelectedZone { get; set; } = "Edge";
     public string SelectedPattern { get; set; } = "WX_POS_IP_POS";
     public ManualLocal3Direction SelectedSign { get; set; } = ManualLocal3Direction.Unacknowledged;
@@ -113,7 +114,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 if (live is null) return "Select a CSI area in the running model, refresh selection, then click its polygon.";
                 var metadata = inspection.Scan?.AreaMetadata.FirstOrDefault(a => a.AreaId == live.Id);
                 var review = inspection.RoofRows.FirstOrDefault(r => r.ShellId == live.Id);
-                return $"{live.Id} | Plane: {live.RoofPlaneId}\nPressure mapping: Unmapped; p_net: unavailable\nLocal 3 XYZ: {(live.Local3.Length > .5 ? XYZ(live.Local3) : "Unknown / unavailable")}\nOutward normal: {metadata?.NormalStatus ?? "Unknown"}\nVerified outward normal: {(metadata?.VerifiedOutwardNormal is Vec3 normal ? XYZ(normal) : "Unknown")}\nManual Local 3 review: {review?.ManualDirection}; no load assigned\nVertices XYZ [m]: {string.Join("; ", live.Vertices.Select(XYZ))}";
+                var s3d = inspection.Shells3D.FirstOrDefault(s => s.ShellId == live.Id);
+                var geomDetails = s3d is not null ? $"Slope: {s3d.SlopeDegrees:F1}° | Azimuth: {(s3d.AzimuthDegrees.HasValue ? $"{s3d.AzimuthDegrees.Value:F1}°" : "N/A")} | Area: {s3d.SurfaceAreaM2:F2} m² (Plan: {s3d.ProjectedAreaM2:F2} m²)" : "Geometry 3D properties not processed";
+                return $"{live.Id} | Plane: {live.RoofPlaneId} | Review Status: {inspection.ReviewStatus}\nGeometry Zone: {review?.ZoneId ?? "Unmapped"} ({review?.Classification})\n{geomDetails}\nLocal 3 XYZ: {(live.Local3.Length > .5 ? XYZ(live.Local3) : "Unknown / unavailable")}\nOutward normal: {metadata?.NormalStatus ?? "Unknown"}\nVerified outward normal: {(metadata?.VerifiedOutwardNormal is Vec3 normal ? XYZ(normal) : "Unknown")}\nManual Local 3 review: {review?.ManualDirection}; no load assigned\nVertices XYZ [m]: {string.Join("; ", live.Vertices.Select(XYZ))}";
             }
             var shell = Session.Model.Shells.First(s => s.Id == SelectedShell);
             var mapping = Session.Roof.Mappings.FirstOrDefault(m => m.ShellId == SelectedShell);
@@ -158,6 +161,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
         AcknowledgeMismatch = mapping.MismatchAcknowledged; Refresh();
     }
     public IReadOnlyList<ShellGeometry> DisplayShells => (IsDemo ? Session.Model.Shells : inspection.Scan?.Model.Shells ?? []).ToArray();
+    public IReadOnlyList<RoofShell3D> DisplayShells3D => IsDemo
+        ? Session.Model.Shells.Select(s => Roof3DGeometryProcessor.Process(s, Session.Model.ModelId)).ToArray()
+        : inspection.Shells3D.ToArray();
+    public IReadOnlyDictionary<string, string> DisplayShellZones => IsDemo
+        ? Session.Roof.Mappings.ToDictionary(m => m.ShellId, m => m.ZoneId ?? "Unmapped", StringComparer.Ordinal)
+        : inspection.RoofRows.ToDictionary(r => r.ShellId, r => r.ZoneId ?? "Unmapped", StringComparer.Ordinal);
     public async Task ConnectReal()
     {
         if (IsDemo) throw new InvalidOperationException("Choose Real Read-Only mode first.");
@@ -222,11 +231,55 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
     public void OpenProject() { RequireDemo(); var opened = new DemoSession(DatabasePath); opened.LoadDemoFixture(Edition); Session = opened; SelectedShell = "R1"; }
     public void LoadFixture(bool crossing = true) { RequireDemo(); Session.LoadDemoFixture(Edition, crossing); SelectedShell = "R1"; Issues = []; ProposedLoads = []; }
-    public void LoadSelectedState() { RequireDemo(); Session.LoadDemoFixture(Edition, true, new(Direction, InternalPressure, RoofCase, LimitState.Uls)); SelectedShell = "R1"; Issues = []; ProposedLoads = []; }
-    public void EditZone() { RequireDemo(); Session.SetZone(SelectedShell, SelectedZone, User, Reason); }
+    public void LoadSelectedState()
+    {
+        if (IsDemo)
+        {
+            Session.LoadDemoFixture(Edition, true, new(Direction, InternalPressure, RoofCase, LimitState.Uls));
+            SelectedShell = "R1"; Issues = []; ProposedLoads = [];
+            Refresh();
+            return;
+        }
+        // Real mode: save current draft and load/restore draft for the new state
+        var state = new WindState(Direction, InternalPressure, RoofCase, LimitState.Uls);
+        if (inspection.Scan != null)
+        {
+            var currentDraft = inspection.CreateDraft(Session.Project.Id, state);
+            var draftStore = new Application.RoofMappingDraftStore(new Persistence.SqliteSnapshotStore(DatabasePath));
+            draftStore.SaveDraft(Session.Project.Id, currentDraft);
+
+            // Try load existing draft for new state
+            var existing = draftStore.LoadLatestDraft(Session.Project.Id, inspection.Scan.Model.ModelId, state.Id);
+            if (existing != null)
+            {
+                inspection.RestoreDraft(existing);
+            }
+        }
+        Refresh();
+    }
+    public void EditZone()
+    {
+        if (IsDemo) { Session.SetZone(SelectedShell, SelectedZone, User, Reason); return; }
+        inspection.SetGeometryZone(SelectedShell, SelectedZone, User, Reason);
+        // Auto-persist draft
+        var state = new WindState(Direction, InternalPressure, RoofCase, LimitState.Uls);
+        var draft = inspection.CreateDraft(Session.Project.Id, state);
+        var draftStore = new Application.RoofMappingDraftStore(new Persistence.SqliteSnapshotStore(DatabasePath));
+        draftStore.SaveDraft(Session.Project.Id, draft);
+        Refresh();
+    }
     public void EditSign() { RequireDemo(); Session.SetSign(SelectedShell, SelectedSign, AcknowledgeMismatch, User, Reason); }
     public void Pattern() { RequireDemo(); Session.SetPattern(SelectedPattern); }
-    public void Exclude() { RequireDemo(); Session.ExcludeShell(SelectedShell, User, Reason); }
+    public void Exclude()
+    {
+        if (IsDemo) { Session.ExcludeShell(SelectedShell, User, Reason); return; }
+        inspection.ExcludeShell(SelectedShell, User, Reason);
+        var state = new WindState(Direction, InternalPressure, RoofCase, LimitState.Uls);
+        var draft = inspection.CreateDraft(Session.Project.Id, state);
+        var draftStore = new Application.RoofMappingDraftStore(new Persistence.SqliteSnapshotStore(DatabasePath));
+        draftStore.SaveDraft(Session.Project.Id, draft);
+        Refresh();
+    }
     public void Validate() { RequireDemo(); Issues = Session.ValidateRoof().Cast<object>().ToArray(); }
     public void Approve() { RequireDemo(); Session.ApproveRoof(User); }
     public void Preview() { RequireDemo(); ProposedLoads = Session.PreviewAssignment().ProposedLoads.Cast<object>().ToArray(); }
@@ -293,6 +346,34 @@ public sealed class MainViewModel : INotifyPropertyChanged
         Mode = WorkspaceMode.RealReadOnly; await ConnectReal();
         LowerFrame = FrameIds[0]; UpperFrame = FrameIds[1]; SelectFacadePair();
         SelectedSign = ManualLocal3Direction.Positive; Reason = "MOCK sign review; no generated load"; ReviewLocal3();
+
+        // Sprint 3: Verify 3D shell processing and per-wind-state draft persistence
+        if (DisplayShells3D.Count == 0) throw new InvalidOperationException("3D roof shells were not processed.");
+        var s3d = DisplayShells3D[0];
+        if (!s3d.IsPlanar || s3d.SurfaceAreaM2 <= 0 || s3d.TriangleIndices.Length == 0)
+            throw new InvalidOperationException("3D roof shell properties invalid.");
+
+        // Draft persistence across states
+        Direction = WindDirection.PositiveX; InternalPressure = "IP_POS"; RoofCase = "RoofCase1";
+        SelectedShell = "MOCK-A1"; SelectedZone = "Edge"; Reason = "Smoke draft WX+";
+        EditZone();
+        if (!DisplayShellZones.TryGetValue("MOCK-A1", out var z1) || z1 != "Edge")
+            throw new InvalidOperationException("Geometry zone assignment failed.");
+
+        // Switch to WY- / IP_NEG / RoofCase2
+        Direction = WindDirection.NegativeY; InternalPressure = "IP_NEG"; RoofCase = "RoofCase2";
+        LoadSelectedState();
+        SelectedShell = "MOCK-A1"; SelectedZone = "Corner"; Reason = "Smoke draft WY-";
+        EditZone();
+        if (!DisplayShellZones.TryGetValue("MOCK-A1", out var z2) || z2 != "Corner")
+            throw new InvalidOperationException("Second state geometry zone assignment failed.");
+
+        // Switch back to WX+ and verify restoration
+        Direction = WindDirection.PositiveX; InternalPressure = "IP_POS"; RoofCase = "RoofCase1";
+        LoadSelectedState();
+        if (!DisplayShellZones.TryGetValue("MOCK-A1", out var z1Restored) || z1Restored != "Edge")
+            throw new InvalidOperationException($"Draft state restoration failed: expected Edge, got {z1Restored}");
+
         Status = "MOCK LIVE ADAPTER / contract-test geometry • read-only UI and guard assertions passed • not actual CSI"; Refresh();
     }
 }

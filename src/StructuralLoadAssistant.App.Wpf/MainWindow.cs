@@ -15,6 +15,7 @@ public sealed class MainWindow : Window
 {
     private readonly MainViewModel vm;
     private readonly Canvas roof = new() { Width = 540, Height = 420, Background = Brushes.WhiteSmoke };
+    private readonly Roof3DViewport roof3D = new() { Width = 540, Height = 420 };
     public TabControl Tabs { get; } = new();
     public MainWindow(MainViewModel viewModel)
     {
@@ -31,6 +32,7 @@ public sealed class MainWindow : Window
         root.Children.Add(Tabs); Content = root;
         AddPage("Project", ProjectPage()); AddPage("Wind", WindPage()); AddPage("CSI", CsiPage());
         AddPage("Facade", FacadePage()); AddPage("Roof", RoofPage()); AddPage("Wall", WallPage()); AddPage("Report", ReportPage());
+        roof3D.ShellClicked += id => vm.SelectShell(id);
         vm.Refreshed += DrawRoof; DrawRoof();
     }
     public void AssertReadOnlyVisualIsolation()
@@ -178,7 +180,17 @@ public sealed class MainWindow : Window
         p.Children.Add(BoundText("RoofLegend"));
         p.Children.Add(Row(Button("Clean fixture", () => vm.LoadFixture(false)), Button("Validate Mapping", vm.Validate), Button("Approve Mapping", vm.Approve), Button("Preview loads", vm.Preview), Button("Simulate Apply to Fake CSI", () => _ = vm.Apply()), Button("Verify Fake Readback", () => _ = vm.Verify())));
         var grid = new Grid(); grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(560) }); grid.ColumnDefinitions.Add(new ColumnDefinition());
-        grid.Children.Add(roof); var inspector = new StackPanel { Margin = new Thickness(16, 0, 0, 0) }; Grid.SetColumn(inspector, 1); grid.Children.Add(inspector);
+        var viewTabs = new TabControl { Width = 550, Height = 460 };
+        var tab2D = new TabItem { Header = "2D Plan View", Content = roof };
+        var tab3D = new TabItem { Header = "3D Roof Orbit", Content = roof3D };
+        viewTabs.Items.Add(tab2D); viewTabs.Items.Add(tab3D);
+        var viewPanel = new StackPanel();
+        viewPanel.Children.Add(viewTabs);
+        var viewControls = Row(
+            Button("Reset 3D Camera", () => roof3D.ResetCamera(), false),
+            Check("Show Local 3 Arrows (3D)", "ShowLocal3Arrows"));
+        viewPanel.Children.Add(viewControls);
+        grid.Children.Add(viewPanel); var inspector = new StackPanel { Margin = new Thickness(16, 0, 0, 0) }; Grid.SetColumn(inspector, 1); grid.Children.Add(inspector);
         inspector.Children.Add(BoundText("ShellSummary")); inspector.Children.Add(Text("Pressure zone")); inspector.Children.Add(BoundCombo("SelectedZone", "ZoneIds", true)); inspector.Children.Add(Button("Set zone / invalidate approval", vm.EditZone));
         inspector.Children.Add(Row(Combo("SelectedSign", Enum.GetValues<ManualLocal3Direction>(), 185), Check("Acknowledge physical sign mismatch", "AcknowledgeMismatch")));
         inspector.Children.Add(Text("Reviewer / engineering reason (required for changes)")); inspector.Children.Add(Row(Input("User", 150), Input("Reason", 290))); inspector.Children.Add(Button("Review Local 3 sign (no real loads)", vm.ReviewLocal3, false));
@@ -191,6 +203,8 @@ public sealed class MainWindow : Window
     private void DrawRoof()
     {
         roof.Children.Clear();
+        roof3D.ShowLocal3Arrows = vm.ShowLocal3Arrows;
+        roof3D.UpdateGeometry(vm.DisplayShells3D, vm.SelectedShell, vm.DisplayShellZones);
         if (!vm.IsDemo) { DrawRealRoof(); return; }
         foreach (var zone in vm.Session.Zones)
         {
@@ -218,9 +232,15 @@ public sealed class MainWindow : Window
         Point Project(Vec3 v) => new(35 + (v.X - minX) * scale, 55 + (maxY - v.Y) * scale);
         foreach (var shell in vm.DisplayShells.Where(s => s.Vertices.Length >= 3))
         {
-            var polygon = new Polygon { Points = new PointCollection(shell.Vertices.Select(Project)), Stroke = shell.Id == vm.SelectedShell ? Brushes.Black : Brushes.SlateGray, StrokeThickness = shell.Id == vm.SelectedShell ? 4 : 2, Fill = Brush("#F4BD7C"), ToolTip = $"{shell.Id} | Unmapped | no pressure data" };
+            var zone = vm.DisplayShellZones.TryGetValue(shell.Id, out var z) ? z : "Unmapped";
+            var fillBrush = zone.Contains("Edge", StringComparison.OrdinalIgnoreCase) ? Brush("#79C9BC")
+                : zone.Contains("Interior", StringComparison.OrdinalIgnoreCase) || zone.Contains("Field", StringComparison.OrdinalIgnoreCase) ? Brush("#A7BCE9")
+                : zone.Contains("Excluded", StringComparison.OrdinalIgnoreCase) ? Brushes.LightGray
+                : zone.Contains("Cross", StringComparison.OrdinalIgnoreCase) ? Brush("#E2847A")
+                : Brush("#F4BD7C");
+            var polygon = new Polygon { Points = new PointCollection(shell.Vertices.Select(Project)), Stroke = shell.Id == vm.SelectedShell ? Brushes.Black : Brushes.SlateGray, StrokeThickness = shell.Id == vm.SelectedShell ? 4 : 2, Fill = fillBrush, ToolTip = $"{shell.Id} | {zone} | no normative pressure data" };
             polygon.MouseLeftButtonDown += (_, _) => vm.SelectShell(shell.Id); roof.Children.Add(polygon);
-            var label = Text($"{shell.Id} · Unmapped", 12); label.IsHitTestVisible = false;
+            var label = Text($"{shell.Id} · {zone}", 12); label.IsHitTestVisible = false;
             Canvas.SetLeft(label, shell.Vertices.Average(v => Project(v).X)); Canvas.SetTop(label, shell.Vertices.Average(v => Project(v).Y)); roof.Children.Add(label);
         }
         var axes = Text("CSI selected polygons · XY [m] · +Y ↑ · +X →"); Canvas.SetLeft(axes, 12); roof.Children.Add(axes);

@@ -28,6 +28,28 @@ Scans capture selected frames/areas, definitions, native units and SI conversion
 
 CsiInspectionSession separates live geometry inspection from DemoSession. It creates an unverified, pressure-free RoofMappingWorkflow that cannot be approved, plus per-shell Unmapped rows and audited Local3 review metadata. FacadeSelection requires explicit lower/upper IDs and compatible projected overlap, with audited facade-group overrides; existing facade formulas remain unchanged. Refresh/cancel/mode-switch invalidates previous selection/reviews and guards against stale async completion. Live mode blocks simulation calculation/approval/apply/report entry points and never combines demo pressure fixtures with real geometry.
 
+## Sprint 3: 3D roof geometry, visual orbit viewer & per-state mapping drafts
+
+Sprint 3 introduces real 3D roof geometry processing, interactive 2D/3D coordination, and persistent wind-state mapping drafts:
+
+1. **3D Roof Geometry Processing (Roof3DGeometryProcessor):**
+   - Computes Newell polygon normal, planarity checks, slope angles (0° horizontal to 90° vertical), azimuth compass directions, 3D true surface areas, and projected XY plan areas.
+   - Implements robust 2D/3D ear-clipping triangulation with fan-fallback for non-convex polygons to support hardware-accelerated rendering.
+   - Retains geometry fingerprints, Local 3 orientation vectors, and explicit outward normal statuses (Unknown, ReadFromCsi, EngineerVerified, InconsistentWithLocal3).
+
+2. **Interactive 2D & 3D Viewers (Roof3DViewport):**
+   - Coordinated dual 2D Plan View (Canvas) and 3D Viewport (Viewport3D with orbit, pan, zoom, reset, and two-sided shading).
+   - Interactive polygon selection across both 2D and 3D viewports.
+   - Visual Local 3 3D arrows rendered at polygon centroids.
+   - Geometry-zone coloring distinguishes mapped, unmapped, crossing, and excluded states.
+
+3. **Persistent Mapping Drafts (RoofMappingDraft & RoofMappingDraftStore):**
+   - Independent drafts keyed by project ID, CSI model ID, and WindState (Direction, InternalPressure, RoofCase).
+   - Transactionally persisted in SQLite (snapshots table under SnapshotKind.RoofMappingDraft).
+   - Survives application restarts; switching between wind states preserves previous draft edits.
+   - Detects geometry changes and flags StaleNeedsRescan to prevent stale mapping reuse against modified models.
+   - Preserves strict safety gates: engineering calculations, approvals, and production CSI assignments remain disabled in RealReadOnly mode.
+
 WPF defaults to Demo. Real Read-Only mode has explicit product/API selection, attach/refresh, native-unit and model identity indicators, issues, definition lists, explicit facade pairs and projected roof geometry. Unsupported projected geometry retains its original XYZ for future 3D viewing. Two smoke modes render actual windows: the existing full demo and a clearly labeled mock-read adapter UI fixture. The mock read-only smoke is not physical CSI proof.
 
 CSI sources consulted: [developer documentation](https://www.csiamerica.com/developer), [official .NET 8 compatibility example](https://web.wiki.csiamerica.com/wiki/spaces/kb/pages/2011456/NET%2B8%2BPlugin%2BExample%2B-%2BAll%2BProducts), plus locally installed product assembly metadata and CHM getter documentation. See API_COMPATIBILITY.md for exactly what was exercised.

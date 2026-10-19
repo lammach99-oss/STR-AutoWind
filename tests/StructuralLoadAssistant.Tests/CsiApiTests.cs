@@ -26,9 +26,16 @@ public sealed class CsiApiTests
         var scan = await a.RefreshSelectionAsync();
         Assert.Equal(CsiScanOutcome.EmptySelection, scan.Outcome);
     }
-    [Fact] public async Task ScanOutcome_ReportsPartialScan_WhenOnlyFramesSelected()
+    [Fact] public async Task ScanOutcome_ReportsSucceeded_WhenOnlyFramesSelected()
     {
         var s=new Session { FramesOnly = true }; await using var a=new InstalledCsiReadAdapter(_=>s);
+        await a.ConnectAsync(new(CsiProduct.Etabs,"unused"));
+        var scan = await a.RefreshSelectionAsync();
+        Assert.Equal(CsiScanOutcome.Succeeded, scan.Outcome);
+    }
+    [Fact] public async Task ScanOutcome_ReportsPartialScan_WhenWarningIssuePresent()
+    {
+        var s=new Session { MissingAxes = true }; await using var a=new InstalledCsiReadAdapter(_=>s);
         await a.ConnectAsync(new(CsiProduct.Etabs,"unused"));
         var scan = await a.RefreshSelectionAsync();
         Assert.Equal(CsiScanOutcome.PartialScan, scan.Outcome);

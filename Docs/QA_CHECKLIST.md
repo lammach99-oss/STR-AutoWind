@@ -36,6 +36,12 @@
 - [x] Strict physical qualification runner (`scripts/qualify-csi.ps1`) with selection capture and safe restoration.
 - [x] Independently reviewed baseline fixtures (`fixtures/physical-csi-reviewed-baseline.json`).
 - [x] Explicit scan outcomes (`CsiScanOutcome`: Disconnected, Scanning, Succeeded, EmptySelection, PartialScan, Failed) and accurate status reporting.
+- [x] Real 3D roof geometry model: Newell normal, slope, azimuth, 3D surface area, projected plan area, ear-clipping triangulation.
+- [x] Interactive coordinated 2D plan and 3D orbit viewport with Local 3 arrows and two-sided rendering.
+- [x] Persistent mapping drafts per wind state (WX+, WX-, WY+, WY-) stored transactionally in SQLite (`RoofMappingDraftStore`).
+- [x] Geometry review status tracking (GeometryDraft, GeometryValidated, GeometryReviewed, StaleNeedsRescan).
+- [x] Stale geometry detection and reconciliation preventing stale draft application to modified models.
+- [x] Real read-only safety gates preserved: engineering calculation, approvals, and CSI assignments strictly disabled.
 - [ ] Physical SAP2000 connection/scan qualification.
 - [ ] PID-aware instance selection and advanced 3D display.
 

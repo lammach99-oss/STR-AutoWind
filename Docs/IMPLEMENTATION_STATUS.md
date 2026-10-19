@@ -1,5 +1,33 @@
 # Implementation status — 2026-10-19
 
+## Sprint 3: Visual roof geometry, wind mapping drafts & persistence
+
+Built interactive 2D plan and 3D orbit viewers, real 3D roof geometry models, and persistent per-wind-state SQLite drafts with geometry staleness reconciliation:
+
+- **Sprint 2.6 Qualification Fixes:**
+  - Strict physical qualification asserts coordinates, opposite Local 3 vectors, and loads against `fixtures/physical-csi-reviewed-baseline.json`.
+  - `scripts/qualify-csi.ps1` explicitly routes SAP2000 requests to pending/inconclusive status without running ETABS tests.
+  - Selection capture and restoration preserves all CSI object types (Points, Frames, Areas, Links).
+  - Single element-type selections (e.g. only frames or only shells) correctly evaluate to `CsiScanOutcome.Succeeded`, reserving `PartialScan` for warning conditions.
+- **Real 3D Roof Geometry Model:**
+  - Added `RoofShell3D`, `Roof3DGeometryProcessor`, Newell normal calculation, slope degrees, azimuth compass angles, 3D true surface areas, plan projected areas, and triangulation.
+- **Interactive 2D and 3D Viewers:**
+  - Added hardware-accelerated WPF `Roof3DViewport` with orbit/pan/zoom/reset, two-sided shading, and centroid Local 3 arrows.
+  - Coordinated interactive shell selection across 2D plan Canvas and 3D Viewport.
+  - Dynamic coloring based on zone classifications (Edge, Interior/Field, Corner, Excluded, Crosses boundary, Unmapped).
+- **Persistent Wind-State Mapping Drafts:**
+  - Drafts keyed by project ID, model ID, and wind state (WX+, WX-, WY+, WY-, internal pressure states, roof cases).
+  - Transactionally stored in SQLite via `RoofMappingDraftStore` (`SnapshotKind.RoofMappingDraft`).
+  - State switching saves and restores independent draft mappings; drafts survive application restarts.
+  - Geometry changes detect fingerprint mismatches and flag `GeometryReviewStatus.StaleNeedsRescan`.
+- **Read-Only Safety Gates:**
+  - RealReadOnly mode keeps pressure calculations, engineering approvals, and live CSI write operations strictly disabled.
+
+### Verification summary
+- Automated test suite: **145 passed, 0 failed, 0 skipped** across all solution projects.
+- Dual-mode WPF smoke tests passed: `--smoke` (Demo mode) and `--smoke-readonly` (RealReadOnly mode) completed cleanly with visual verification artifacts generated.
+- SAP qualification reporting: correctly outputs pending status.
+
 ## Sprint 2.6: CSI qualification hardening
 
 Hardened physical qualification testing, test suite separation, and live CSI status reporting:
