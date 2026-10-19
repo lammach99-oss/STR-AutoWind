@@ -4,7 +4,7 @@ using StructuralLoadAssistant.Domain;
 namespace StructuralLoadAssistant.RoofMapping;
 
 public enum RoofWorkflowState { Draft, Scanned, Mapped, Validated, Approved, Applied, Verified }
-public enum ShellZoneClassification { FullyInsideZone, CrossesZoneBoundary, Unmapped, OverlapsAnotherShell, GeometryInvalid }
+public enum ShellZoneClassification { FullyInsideZone, CrossesZoneBoundary, Unmapped, OverlapsAnotherShell, GeometryInvalid, NotGeometricallyValidated }
 public enum ManualLocal3Direction { Unacknowledged, Positive, Negative }
 public sealed record RoofPressureZone(string Id, string RoofPlaneId, WindState State,
     ImmutableArray<Vec3> Vertices, double NetPressurePa, DataProvenance Provenance = DataProvenance.SyntheticDemoFixture);

@@ -8,6 +8,7 @@ namespace StructuralLoadAssistant.Domain;
 public readonly record struct Vec3(double X, double Y, double Z)
 {
     public double Dot(Vec3 other) => X * other.X + Y * other.Y + Z * other.Z;
+    public Vec3 Cross(Vec3 other) => new(Y * other.Z - Z * other.Y, Z * other.X - X * other.Z, X * other.Y - Y * other.X);
     public double Length => Math.Sqrt(Dot(this));
     public Vec3 Unit()
     {

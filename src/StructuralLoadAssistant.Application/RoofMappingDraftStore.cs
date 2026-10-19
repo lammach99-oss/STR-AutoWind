@@ -19,11 +19,30 @@
  
      public static string DraftId(string projectId, string modelId, string windStateId, int revision) =>
          $"{DraftIdPrefix(projectId, modelId, windStateId)}:r{revision}";
+
+    public static int ExtractRevision(string draftId)
+    {
+        int idx = draftId.LastIndexOf(":r", StringComparison.Ordinal);
+        if (idx >= 0 && int.TryParse(draftId.AsSpan(idx + 2), out int rev))
+        {
+            return rev;
+        }
+        return 0;
+    }
  
      public void SaveDraft(string projectId, RoofMappingDraft draft)
      {
          ArgumentNullException.ThrowIfNull(draft);
          ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(draft.ModelId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(draft.GeometryFingerprint);
+
+        // Optimistic concurrency check: if a newer revision already exists in the store, reject
+        var latest = LoadLatestDraft(projectId, draft.ModelId, draft.WindState.Id);
+        if (latest != null && latest.Revision > draft.Revision)
+        {
+            throw new InvalidOperationException($"Cannot save draft revision {draft.Revision}; a newer revision {latest.Revision} already exists for state {draft.WindState.Id}.");
+        }
  
          var metadata = new SnapshotMetadata(
              draft.Id,
@@ -42,8 +61,8 @@
      {
          var prefix = DraftIdPrefix(projectId, modelId, windStateId);
          var matching = store.ListIds(SnapshotKind.RoofMappingDraft, projectId)
-             .Where(id => id.StartsWith(prefix, StringComparison.Ordinal))
-             .OrderByDescending(id => id, StringComparer.Ordinal)
+            .Where(id => id.StartsWith(prefix + ":r", StringComparison.Ordinal))
+            .OrderByDescending(ExtractRevision)
              .ToArray();
  
          if (matching.Length == 0) return null;
@@ -64,7 +83,7 @@
  
          foreach (var group in byState)
          {
-             var latestId = group.OrderByDescending(id => id, StringComparer.Ordinal).First();
+            var latestId = group.OrderByDescending(ExtractRevision).First();
              var draft = store.Load<RoofMappingDraft>(latestId);
              if (draft != null) drafts.Add(draft);
          }
@@ -72,7 +91,29 @@
          return drafts;
      }
  
-     public static GeometryReviewStatus ReconcileGeometry(RoofMappingDraft draft, string currentGeometryFingerprint)
+    public static GeometryReviewStatus ValidateAndReconcile(
+        RoofMappingDraft draft,
+        string expectedProjectId,
+        string expectedModelId,
+        string expectedWindStateId,
+        string currentGeometryFingerprint)
+    {
+        ArgumentNullException.ThrowIfNull(draft);
+        if (!string.Equals(draft.ProjectId, expectedProjectId, StringComparison.Ordinal) ||
+            !string.Equals(draft.ModelId, expectedModelId, StringComparison.Ordinal) ||
+            !string.Equals(draft.WindState.Id, expectedWindStateId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Draft identity mismatch: draft belongs to project '{draft.ProjectId}', model '{draft.ModelId}', state '{draft.WindState.Id}', but attempted restoration for '{expectedProjectId}', '{expectedModelId}', '{expectedWindStateId}'.");
+        }
+        if (string.IsNullOrWhiteSpace(currentGeometryFingerprint) ||
+            !string.Equals(draft.GeometryFingerprint, currentGeometryFingerprint, StringComparison.Ordinal))
+        {
+            return GeometryReviewStatus.StaleNeedsRescan;
+        }
+        return draft.ReviewStatus;
+    }
+
+    public static GeometryReviewStatus ReconcileGeometry(RoofMappingDraft draft, string currentGeometryFingerprint)
      {
          ArgumentNullException.ThrowIfNull(draft);
          if (string.IsNullOrWhiteSpace(currentGeometryFingerprint) ||
@@ -82,5 +123,11 @@
          }
          return draft.ReviewStatus;
      }
- }
  
+ 
+    public int GetNextRevision(string projectId, string modelId, string windStateId)
+    {
+        var latest = LoadLatestDraft(projectId, modelId, windStateId);
+        return (latest?.Revision ?? 0) + 1;
+    }
+}

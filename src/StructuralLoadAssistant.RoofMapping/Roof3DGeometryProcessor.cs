@@ -20,13 +20,14 @@
          {
              return new RoofShell3D(
                  shell.Id, modelId, shell.RoofPlaneId, vertices, shell.Local3,
-                 0, null, 0, 0, "", outwardStatus, verifiedOutward, [], false, true);
+                 0, null, 0, 0, "", outwardStatus, verifiedOutward, [], false, true, false, 0, false, "Shell has fewer than 3 vertices.");
          }
  
          bool isPlanar = IsPlanar(vertices, out var planeNormal, out var planeD);
          double surfaceArea = Compute3DArea(vertices);
          double projectedArea = ComputeProjectedPlanArea(vertices);
          bool isDegenerate = surfaceArea < 1e-8 || !double.IsFinite(surfaceArea);
+        bool isSelfIntersecting = HasSelfIntersections(vertices, planeNormal);
  
          // Slope: angle of planeNormal with vertical Z-axis (0 deg = horizontal, 90 deg = vertical)
          // If plane normal points downward, reflect to upper hemisphere to compute roof pitch
@@ -47,7 +48,30 @@
          }
  
          // Triangulate 3D polygon for rendering
-         var triangles = Triangulate(vertices, planeNormal);
+         var triangles = (!isDegenerate && isPlanar && !isSelfIntersecting)
+            ? Triangulate(vertices, planeNormal)
+            : ImmutableArray<int>.Empty;
+
+        double triangulatedArea = 0;
+        if (triangles.Length >= 3)
+        {
+            for (int i = 0; i < triangles.Length; i += 3)
+            {
+                var v1 = vertices[triangles[i]];
+                var v2 = vertices[triangles[i + 1]];
+                var v3 = vertices[triangles[i + 2]];
+                triangulatedArea += (v2 - v1).Cross(v3 - v1).Length * 0.5;
+            }
+        }
+
+        bool areaMismatch = Math.Abs(triangulatedArea - surfaceArea) > Math.Max(0.01, surfaceArea * 0.05);
+        string? geomError = null;
+        if (!isPlanar) geomError = "Nonplanar polygon vertices.";
+        else if (isSelfIntersecting) geomError = "Self-intersecting polygon boundary.";
+        else if (isDegenerate) geomError = "Degenerate zero-area polygon.";
+        else if (areaMismatch) geomError = $"Triangulated area ({triangulatedArea:F3}) differs from polygon area ({surfaceArea:F3}).";
+
+        bool isValid = geomError == null;
  
          var geomHash = SnapshotJson.Hash(new
          {
@@ -73,10 +97,14 @@
              geomHash,
              effectiveOutwardStatus,
              verifiedOutward,
-             triangles.ToImmutableArray(),
-             isPlanar,
-             isDegenerate
-         );
+             triangles,
+            isPlanar,
+            isDegenerate,
+            isSelfIntersecting,
+            triangulatedArea,
+            isValid,
+            geomError
+        );
      }
  
      public static bool IsPlanar(ImmutableArray<Vec3> vertices, out Vec3 normal, out double d)
@@ -84,10 +112,32 @@
          normal = ComputeNewellNormal(vertices);
          d = 0;
          if (normal.Length < Epsilon || !double.IsFinite(normal.Length))
-         {
-             return false;
-         }
-         normal = normal.Unit();
+        {
+            // Newell normal can cancel out on self-intersecting polygons (e.g. bowtie).
+            // Try to find plane from any 3 non-collinear vertices:
+            bool foundPlane = false;
+            for (int i = 0; i < vertices.Length && !foundPlane; i++)
+            {
+                for (int j = i + 1; j < vertices.Length && !foundPlane; j++)
+                {
+                    for (int k = j + 1; k < vertices.Length; k++)
+                    {
+                        var cross = (vertices[j] - vertices[i]).Cross(vertices[k] - vertices[i]);
+                        if (cross.Length >= Epsilon && double.IsFinite(cross.Length))
+                        {
+                            normal = cross.Unit();
+                            foundPlane = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (!foundPlane) return false;
+        }
+        else
+        {
+            normal = normal.Unit();
+        }
          d = normal.Dot(vertices[0]);
          for (int i = 1; i < vertices.Length; i++)
          {
@@ -246,5 +296,54 @@
      }
  
      private readonly record struct Vec2D(double X, double Y, int OriginalIndex);
- }
  
+    public static bool HasSelfIntersections(ImmutableArray<Vec3> vertices, Vec3 normal)
+    {
+        if (vertices.Length < 4) return false;
+        if (normal.Length < 1e-6)
+        {
+            IsPlanar(vertices, out normal, out _);
+            if (normal.Length < 1e-6) normal = new Vec3(0, 0, 1);
+        }
+        var absX = Math.Abs(normal.X);
+        var absY = Math.Abs(normal.Y);
+        var absZ = Math.Abs(normal.Z);
+        int drop = (absX >= absY && absX >= absZ) ? 0 : (absY >= absZ ? 1 : 2);
+        var pts = new List<Vec2D>(vertices.Length);
+        for (int i = 0; i < vertices.Length; i++)
+        {
+            var v = vertices[i];
+            pts.Add(drop switch
+            {
+                0 => new Vec2D(v.Y, v.Z, i),
+                1 => new Vec2D(v.X, v.Z, i),
+                _ => new Vec2D(v.X, v.Y, i)
+            });
+        }
+        int n = pts.Count;
+        for (int i = 0; i < n; i++)
+        {
+            var p1 = pts[i];
+            var p2 = pts[(i + 1) % n];
+            for (int j = i + 2; j < n; j++)
+            {
+                if (i == 0 && j == n - 1) continue;
+                var p3 = pts[j];
+                var p4 = pts[(j + 1) % n];
+                if (SegmentsCross(p1, p2, p3, p4)) return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool SegmentsCross(Vec2D a, Vec2D b, Vec2D c, Vec2D d)
+    {
+        static double Ccw(Vec2D p1, Vec2D p2, Vec2D p3) => (p2.X - p1.X) * (p3.Y - p1.Y) - (p2.Y - p1.Y) * (p3.X - p1.X);
+        double c1 = Ccw(a, b, c);
+        double c2 = Ccw(a, b, d);
+        double c3 = Ccw(c, d, a);
+        double c4 = Ccw(c, d, b);
+        return ((c1 > 1e-7 && c2 < -1e-7) || (c1 < -1e-7 && c2 > 1e-7)) &&
+               ((c3 > 1e-7 && c4 < -1e-7) || (c3 < -1e-7 && c4 > 1e-7));
+    }
+}

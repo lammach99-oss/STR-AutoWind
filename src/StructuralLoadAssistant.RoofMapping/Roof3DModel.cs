@@ -22,7 +22,11 @@
      Vec3? VerifiedOutwardNormal,
      ImmutableArray<int> TriangleIndices,
      bool IsPlanar,
-     bool IsDegenerate
+    bool IsDegenerate,
+    bool IsSelfIntersecting = false,
+    double TriangulatedAreaM2 = 0.0,
+    bool IsValid = true,
+    string? GeometryError = null
  );
  
  public sealed record RoofMappingDraftItem(

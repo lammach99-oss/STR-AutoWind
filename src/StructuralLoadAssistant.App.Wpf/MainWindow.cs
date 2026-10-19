@@ -175,8 +175,14 @@ public sealed class MainWindow : Window
     }
     private UIElement RoofPage()
     {
-        var p = Stack(); p.Children.Add(Text("Roof wind mapper / projected XY geometry", 22)); p.Children.Add(BoundText("RoofSummary"));
-        p.Children.Add(Row(Combo("Direction", Enum.GetValues<WindDirection>(), 150), Combo("InternalPressure", new[] { "IP_POS", "IP_NEG" }, 125), Combo("RoofCase", new[] { "RoofCase1", "RoofCase2" }, 125), Button("Load selected independent state (resets approval)", vm.LoadSelectedState)));
+        var p = Stack(); p.Children.Add(Text("Roof wind mapper / projected XY & 3D geometry", 22)); p.Children.Add(BoundText("RoofSummary"));
+        p.Children.Add(BoundText("ActiveWindStateSummary"));
+        p.Children.Add(Row(
+            Combo("Direction", Enum.GetValues<WindDirection>(), 150),
+            Combo("InternalPressure", new[] { "IP_POS", "IP_NEG" }, 125),
+            Combo("RoofCase", new[] { "RoofCase1", "RoofCase2" }, 125),
+            Button("Switch wind state & restore draft", vm.LoadSelectedState, false),
+            Button("Save Geometry Draft", vm.SaveCurrentDraft, false)));
         p.Children.Add(BoundText("RoofLegend"));
         p.Children.Add(Row(Button("Clean fixture", () => vm.LoadFixture(false)), Button("Validate Mapping", vm.Validate), Button("Approve Mapping", vm.Approve), Button("Preview loads", vm.Preview), Button("Simulate Apply to Fake CSI", () => _ = vm.Apply()), Button("Verify Fake Readback", () => _ = vm.Verify())));
         var grid = new Grid(); grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(560) }); grid.ColumnDefinitions.Add(new ColumnDefinition());
@@ -191,10 +197,10 @@ public sealed class MainWindow : Window
             Check("Show Local 3 Arrows (3D)", "ShowLocal3Arrows"));
         viewPanel.Children.Add(viewControls);
         grid.Children.Add(viewPanel); var inspector = new StackPanel { Margin = new Thickness(16, 0, 0, 0) }; Grid.SetColumn(inspector, 1); grid.Children.Add(inspector);
-        inspector.Children.Add(BoundText("ShellSummary")); inspector.Children.Add(Text("Pressure zone")); inspector.Children.Add(BoundCombo("SelectedZone", "ZoneIds", true)); inspector.Children.Add(Button("Set zone / invalidate approval", vm.EditZone));
+        inspector.Children.Add(BoundText("ShellSummary")); inspector.Children.Add(Text("Geometry zone label (unverified)")); inspector.Children.Add(BoundCombo("SelectedZone", "ZoneIds", true)); inspector.Children.Add(Button("Assign geometry zone label", vm.EditZone, false));
         inspector.Children.Add(Row(Combo("SelectedSign", Enum.GetValues<ManualLocal3Direction>(), 185), Check("Acknowledge physical sign mismatch", "AcknowledgeMismatch")));
         inspector.Children.Add(Text("Reviewer / engineering reason (required for changes)")); inspector.Children.Add(Row(Input("User", 150), Input("Reason", 290))); inspector.Children.Add(Button("Review Local 3 sign (no real loads)", vm.ReviewLocal3, false));
-        inspector.Children.Add(Row(BoundCombo("SelectedPattern", "Patterns", true), Button("Set load pattern", vm.Pattern))); inspector.Children.Add(Button("Exclude selected shell with reason", vm.Exclude)); p.Children.Add(grid);
+        inspector.Children.Add(Row(BoundCombo("SelectedPattern", "Patterns", true), Button("Set load pattern", vm.Pattern))); inspector.Children.Add(Button("Exclude selected shell with reason", vm.Exclude, false)); p.Children.Add(grid);
         p.Children.Add(Text("Selected shell existing assignments (read only)")); p.Children.Add(Table("SelectedShellAssignments", 95));
         p.Children.Add(Text("Shell pressure mapping / Local 3 review metadata")); p.Children.Add(Table("RoofReviewRows", 100));
         p.Children.Add(Text("Local 3 review audit — no generated loads")); p.Children.Add(Table("Local3Reviews", 90));

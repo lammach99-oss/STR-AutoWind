@@ -272,5 +272,182 @@ using StructuralLoadAssistant.Csi.Abstractions;
          public Task<ImmutableArray<ExistingLoad>> GetExistingLoadsAsync(CancellationToken cancellationToken = default) => Task.FromResult(model.ExistingLoads);
          public ValueTask DisposeAsync() => ValueTask.CompletedTask;
      }
- }
+
+
+    [Fact]
+    public void Nonplanar_polygon_is_flagged_with_geometry_error()
+    {
+        // 4 vertices where 4th vertex is out of plane
+        var vertices = ImmutableArray.Create(
+            new Vec3(0, 0, 0),
+            new Vec3(5, 0, 0),
+            new Vec3(5, 5, 0),
+            new Vec3(0, 5, 2) // warped out of plane
+        );
+        var shell = new ShellGeometry("WARPED", "P1", vertices, new Vec3(0, 0, 1), default);
+        var s3d = Roof3DGeometryProcessor.Process(shell, "M1");
+
+        Assert.False(s3d.IsPlanar);
+        Assert.False(s3d.IsValid);
+        Assert.NotNull(s3d.GeometryError);
+        Assert.Contains("Nonplanar", s3d.GeometryError);
+        Assert.Empty(s3d.TriangleIndices);
+    }
+
+    [Fact]
+    public void Self_intersecting_polygon_is_flagged_with_geometry_error()
+    {
+        // Bowtie (figure-8) self-intersecting polygon
+        var vertices = ImmutableArray.Create(
+            new Vec3(0, 0, 0),
+            new Vec3(5, 5, 0),
+            new Vec3(5, 0, 0),
+            new Vec3(0, 5, 0)
+        );
+        var shell = new ShellGeometry("BOWTIE", "P1", vertices, new Vec3(0, 0, 1), default);
+        var s3d = Roof3DGeometryProcessor.Process(shell, "M1");
+
+        Assert.True(s3d.IsSelfIntersecting);
+        Assert.False(s3d.IsValid);
+        Assert.NotNull(s3d.GeometryError);
+        Assert.Contains("Self-intersecting", s3d.GeometryError);
+        Assert.Empty(s3d.TriangleIndices);
+    }
+
+    [Fact]
+    public void Numerical_revisions_ordering_handles_more_than_15_revisions_correctly()
+    {
+        var localDb = Path.Combine(Path.GetTempPath(), $"draft_rev_test_{Guid.NewGuid():N}.db");
+        try
+        {
+            var snapshotStore = new SqliteSnapshotStore(localDb);
+            var draftStore = new RoofMappingDraftStore(snapshotStore);
+            var state = new WindState(WindDirection.PositiveX, "IP_POS", "RoofCase1", LimitState.Uls);
+
+            // Save revisions 1 through 16 sequentially
+            for (int r = 1; r <= 16; r++)
+            {
+                var draft = new RoofMappingDraft(
+                    RoofMappingDraftStore.DraftId("proj1", "model1", state.Id, r),
+                    r, "proj1", "model1", "hash", state,
+                    [new("S1", $"Zone_r{r}", ShellZoneClassification.NotGeometricallyValidated, ManualLocal3Direction.Positive, false, "Eng", "Rev test", DateTimeOffset.UtcNow)],
+                    [], [], DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, GeometryReviewStatus.GeometryReviewed);
+                draftStore.SaveDraft("proj1", draft);
+            }
+
+            var latest = draftStore.LoadLatestDraft("proj1", "model1", state.Id);
+            Assert.NotNull(latest);
+            Assert.Equal(16, latest.Revision);
+            Assert.Equal("Zone_r16", latest.Items.First(i => i.ShellId == "S1").ZoneId);
+        }
+        finally
+        {
+            try { if (File.Exists(localDb)) File.Delete(localDb); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Optimistic_concurrency_rejects_older_revision_overwrite()
+    {
+        var localDb = Path.Combine(Path.GetTempPath(), $"draft_concur_test_{Guid.NewGuid():N}.db");
+        try
+        {
+            var snapshotStore = new SqliteSnapshotStore(localDb);
+            var draftStore = new RoofMappingDraftStore(snapshotStore);
+            var state = new WindState(WindDirection.PositiveX, "IP_POS", "RoofCase1", LimitState.Uls);
+
+            // Save revision 5
+            var draft5 = new RoofMappingDraft(
+                RoofMappingDraftStore.DraftId("proj1", "model1", state.Id, 5),
+                5, "proj1", "model1", "hash", state,
+                [], [], [], DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, GeometryReviewStatus.GeometryReviewed);
+            draftStore.SaveDraft("proj1", draft5);
+
+            // Attempting to save revision 3 when revision 5 already exists throws InvalidOperationException
+            var draft3 = new RoofMappingDraft(
+                RoofMappingDraftStore.DraftId("proj1", "model1", state.Id, 3),
+                3, "proj1", "model1", "hash", state,
+                [], [], [], DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, GeometryReviewStatus.GeometryReviewed);
+
+            var ex = Assert.Throws<InvalidOperationException>(() => draftStore.SaveDraft("proj1", draft3));
+            Assert.Contains("newer revision 5 already exists", ex.Message);
+        }
+        finally
+        {
+            try { if (File.Exists(localDb)) File.Delete(localDb); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Alternating_wind_states_preserves_independent_mappings_and_avoids_copying()
+    {
+        var localDb = Path.Combine(Path.GetTempPath(), $"draft_alt_test_{Guid.NewGuid():N}.db");
+        try
+        {
+            var snapshotStore = new SqliteSnapshotStore(localDb);
+            var draftStore = new RoofMappingDraftStore(snapshotStore);
+
+            var stateX = new WindState(WindDirection.PositiveX, "IP_POS", "RoofCase1", LimitState.Uls);
+            var stateY = new WindState(WindDirection.NegativeY, "IP_NEG", "RoofCase2", LimitState.Uls);
+
+            // Save stateX draft with Edge / Positive Local 3
+            var draftX = new RoofMappingDraft(
+                RoofMappingDraftStore.DraftId("proj1", "model1", stateX.Id, 1),
+                1, "proj1", "model1", "hash1", stateX,
+                [new("S1", "Edge", ShellZoneClassification.NotGeometricallyValidated, ManualLocal3Direction.Positive, false, "Eng1", "Edge zone", DateTimeOffset.UtcNow)],
+                [], [], DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, GeometryReviewStatus.GeometryReviewed);
+            draftStore.SaveDraft("proj1", draftX);
+
+            // Save stateY draft with Corner / Negative Local 3
+            var draftY = new RoofMappingDraft(
+                RoofMappingDraftStore.DraftId("proj1", "model1", stateY.Id, 1),
+                1, "proj1", "model1", "hash1", stateY,
+                [new("S1", "Corner", ShellZoneClassification.NotGeometricallyValidated, ManualLocal3Direction.Negative, false, "Eng2", "Corner zone", DateTimeOffset.UtcNow)],
+                [], [], DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, GeometryReviewStatus.GeometryReviewed);
+            draftStore.SaveDraft("proj1", draftY);
+
+            // Reload stateX and stateY repeatedly
+            for (int cycle = 0; cycle < 3; cycle++)
+            {
+                var loadedX = draftStore.LoadLatestDraft("proj1", "model1", stateX.Id);
+                Assert.NotNull(loadedX);
+                Assert.Equal("Edge", loadedX.Items.First(i => i.ShellId == "S1").ZoneId);
+                Assert.Equal(ManualLocal3Direction.Positive, loadedX.Items.First(i => i.ShellId == "S1").ManualDirection);
+
+                var loadedY = draftStore.LoadLatestDraft("proj1", "model1", stateY.Id);
+                Assert.NotNull(loadedY);
+                Assert.Equal("Corner", loadedY.Items.First(i => i.ShellId == "S1").ZoneId);
+                Assert.Equal(ManualLocal3Direction.Negative, loadedY.Items.First(i => i.ShellId == "S1").ManualDirection);
+            }
+        }
+        finally
+        {
+            try { if (File.Exists(localDb)) File.Delete(localDb); } catch { }
+        }
+    }
+
+    [Fact]
+    public async Task ShellZoneClassification_assigns_NotGeometricallyValidated_for_geometry_zones()
+    {
+        var model = new CsiModelSnapshot(
+            "id", "model-test", "Etabs", "23.2.0", "geom-123", "loads",
+            ["PAT"], ["CASE"], ["COMBO"],
+            [],
+            [new("R1", "Plane-1", [new(0, 0, 5), new(6, 0, 5), new(6, 4, 7), new(0, 4, 7)], new(0, 0, 1), default)],
+            []
+        );
+
+        var adapter = new FakeSessionAdapter(model);
+        await using var session = new CsiInspectionSession(adapter);
+        await session.ConnectAsync(new CsiConnectionOptions(CsiProduct.Etabs, "fake.dll"));
+        await session.RefreshAsync();
+
+        session.SetGeometryZone("R1", "Edge", "Eng1", "Visual edge review");
+        var row = session.RoofRows.First(r => r.ShellId == "R1");
+
+        // Per Task D: NotGeometricallyValidated, not FullyInsideZone
+        Assert.Equal(ShellZoneClassification.NotGeometricallyValidated, row.Classification);
+    }
+
  
+}

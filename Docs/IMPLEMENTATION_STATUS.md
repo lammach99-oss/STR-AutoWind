@@ -1,5 +1,36 @@
 # Implementation status — 2026-10-19
 
+## Sprint 3.1: Roof Mapping Workflow Stabilization
+
+Fixed workflow and data integrity issues identified during Sprint 3 review:
+
+- **Wind-State Switching (Task A):**
+  - Dedicated active-state identity maintained independently of the dropdown selection.
+  - Required switching sequence strictly implemented:
+    1. Persist outstanding edits under current active state ID.
+    2. Change active state to target state.
+    3. Load latest saved draft for target state.
+    4. If no draft exists, initialize clean unmapped draft (no copied mappings).
+    5. Update inspector and views.
+  - Added HasUnsavedChanges tracking to UI and view models.
+- **SQLite Draft Versioning (Task B):**
+  - Numerical revision extraction (ExtractRevision) prevents lexicographical sorting errors (e.g. revision 15 correctly ordered after revision 9).
+  - Optimistic concurrency check in RoofMappingDraftStore.SaveDraft rejects saving an older revision over a newer revision.
+  - Added ValidateAndReconcile validating project ID, model ID, wind state ID, and geometry fingerprint.
+- **Real Read-Only Geometry Draft Editing (Task C):**
+  - Enabled geometry draft operations in RealReadOnly mode: state switching, draft saving/restoring, geometry zone label assignment, Local 3 sign review, and shell exclusion.
+  - Kept normative pressure calculations, engineering approvals, load previews, and CSI assignments disabled.
+  - Renamed UI controls to distinguish "Geometry Zone Review" from verified "Wind Pressure Zone Approval".
+- **Geometry Review Semantics (Task D):**
+  - Introduced ShellZoneClassification.NotGeometricallyValidated to distinguish user-assigned geometry labels from mathematically verified zone boundary containment.
+  - Geometric review cannot be confused with engineering pressure approval.
+- **3D Geometry Validation Hardening (Task E):**
+  - Reject/flag nonplanar, degenerate zero-area, and self-intersecting (bowtie) polygon shells.
+  - Newell normal cancellation on self-intersecting polygons handled gracefully with non-collinear vertex plane discovery.
+  - Validated triangulated area against surface area within tolerance; recorded IsValid and GeometryError.
+- **Automated and End-to-End WPF Acceptance Tests (Task F):**
+  - 151 unit and integration tests passing in CI.
+  - 14-step automated WPF acceptance smoke test executed with mock read-only adapter and demo adapter.
 ## Sprint 3: Visual roof geometry, wind mapping drafts & persistence
 
 Built interactive 2D plan and 3D orbit viewers, real 3D roof geometry models, and persistent per-wind-state SQLite drafts with geometry staleness reconciliation:

@@ -34,7 +34,7 @@ public sealed class CsiInspectionSession : IAsyncDisposable
             ?? throw new ArgumentException("Shell is not in the current selection.", nameof(shellId));
         var classification = string.Equals(zoneId, "Unmapped", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(zoneId)
             ? ShellZoneClassification.Unmapped
-            : (zoneId.Contains("Cross", StringComparison.OrdinalIgnoreCase) ? ShellZoneClassification.CrossesZoneBoundary : ShellZoneClassification.FullyInsideZone);
+            : (zoneId.Contains("Cross", StringComparison.OrdinalIgnoreCase) ? ShellZoneClassification.CrossesZoneBoundary : ShellZoneClassification.NotGeometricallyValidated);
         RoofRows = RoofRows.SetItem(RoofRows.IndexOf(row), row with { ZoneId = zoneId, Classification = classification });
         Local3Reviews = Local3Reviews.Add(new(shellId, "GeometryZone", row.ZoneId ?? "", zoneId, user, DateTimeOffset.UtcNow, reason));
         ReviewStatus = GeometryReviewStatus.GeometryReviewed;
@@ -50,7 +50,7 @@ public sealed class CsiInspectionSession : IAsyncDisposable
         RoofRows = RoofRows.SetItem(RoofRows.IndexOf(row), row with { ZoneId = "Excluded", Classification = ShellZoneClassification.Unmapped });
         ReviewStatus = GeometryReviewStatus.GeometryReviewed;
     }
-    public RoofMappingDraft CreateDraft(string projectId, WindState state)
+    public RoofMappingDraft CreateDraft(string projectId, WindState state, int? explicitRevision = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         var geomHash = Scan?.Model.GeometryFingerprint ?? "";
@@ -60,7 +60,7 @@ public sealed class CsiInspectionSession : IAsyncDisposable
             Local3Reviews.LastOrDefault(rv => rv.ObjectId == r.ShellId)?.Reason,
             Local3Reviews.LastOrDefault(rv => rv.ObjectId == r.ShellId)?.CreatedAt
         )).ToImmutableArray();
-        int rev = draftsByState.TryGetValue(state.Id, out var prev) ? prev.Revision + 1 : 1;
+        int rev = explicitRevision ?? (draftsByState.TryGetValue(state.Id, out var prev) ? prev.Revision + 1 : 1);
         var draftId = RoofMappingDraftStore.DraftId(projectId, Scan?.Model.ModelId ?? "unknown", state.Id, rev);
         var draft = new RoofMappingDraft(
             draftId, rev, projectId, Scan?.Model.ModelId ?? "unknown", geomHash, state,
@@ -126,6 +126,8 @@ public sealed class CsiInspectionSession : IAsyncDisposable
     {
         ObjectDisposedException.ThrowIf(disposed,this);
         if(Connection?.Connected!=true)throw new InvalidOperationException("Connect a read-only CSI session before refreshing.");
+        var previousDrafts = draftsByState.ToDictionary(k => k.Key, v => v.Value, StringComparer.Ordinal);
+        var previousGeomHash = Scan?.Model.GeometryFingerprint;
         ClearSelection();var current=Interlocked.Increment(ref revision);
         Outcome=CsiScanOutcome.Scanning;
         try
@@ -156,6 +158,19 @@ public sealed class CsiInspectionSession : IAsyncDisposable
             }).ToImmutableArray();
             Scan=scan;Facade=facade;Roof=roof;Issues=scan.Issues;Outcome=scan.Outcome;Shells3D=shells3D;
             RoofRows=shells.Select(s=>new RoofShellMapping(s.Id,"",null,ShellZoneClassification.Unmapped)).ToImmutableArray();
+
+            // Reconcile previous drafts if rescanning identical geometry
+            if (!string.IsNullOrWhiteSpace(previousGeomHash) && previousGeomHash == scan.Model.GeometryFingerprint)
+            {
+                foreach (var kvp in previousDrafts)
+                {
+                    draftsByState[kvp.Key] = kvp.Value;
+                }
+            }
+            else if (previousDrafts.Count > 0)
+            {
+                ReviewStatus = GeometryReviewStatus.StaleNeedsRescan;
+            }
         }
         catch(OperationCanceledException){throw;}
         catch(Exception){if(current==Volatile.Read(ref revision)&&!disposed){ClearSelection();Outcome=CsiScanOutcome.Failed;Issues=[new("RefreshFailed","RefreshSelection","Selection could not be read. Stale geometry and reviews have been cleared; refresh again.")];}}
@@ -163,6 +178,18 @@ public sealed class CsiInspectionSession : IAsyncDisposable
     private static bool IsUnitNormal(Vec3 vector) => double.IsFinite(vector.X)&&double.IsFinite(vector.Y)&&double.IsFinite(vector.Z)&&Math.Abs(vector.Length-1)<=1e-6;
     private void ClearSelection(){Scan=null;Facade=null;Roof=null;Shells3D=[];RoofRows=[];Local3Reviews=[];Exclusions=[];draftsByState.Clear();ReviewStatus=GeometryReviewStatus.GeometryDraft;Issues=[];Outcome=Connection?.Connected==true?CsiScanOutcome.Disconnected:CsiScanOutcome.Disconnected;}
     public void Clear(){Interlocked.Increment(ref revision);Connection=null;ClearSelection();}
+    public void ResetToCleanUnmappedDraft(string windStateId)
+    {
+        var shells = Scan?.Model.Shells ?? ImmutableArray<ShellGeometry>.Empty;
+        RoofRows = shells.Select(s => new RoofShellMapping(s.Id, windStateId, null, ShellZoneClassification.Unmapped)).ToImmutableArray();
+        Exclusions = [];
+        Local3Reviews = [];
+        ReviewStatus = GeometryReviewStatus.GeometryDraft;
+    }
+    public int GetDraftRevision(string windStateId)
+    {
+        return draftsByState.TryGetValue(windStateId, out var draft) ? draft.Revision : 0;
+    }
     public async ValueTask DisposeAsync()
     {
         if(disposed)return;disposed=true;Clear();await adapter.DisposeAsync();

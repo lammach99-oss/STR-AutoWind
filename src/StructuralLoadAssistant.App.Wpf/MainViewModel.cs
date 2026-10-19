@@ -183,8 +183,21 @@ public sealed class MainViewModel : INotifyPropertyChanged
         var revision = modeRevision;
         await inspection.RefreshAsync();
         if (revision != modeRevision) return;
+
+        // Attempt to restore existing draft for the active state
+        if (inspection.Scan != null)
+        {
+            var draftStore = new Application.RoofMappingDraftStore(new Persistence.SqliteSnapshotStore(DatabasePath));
+            var existing = draftStore.LoadLatestDraft(Session.Project.Id, inspection.Scan.Model.ModelId, currentActiveState.Id);
+            if (existing != null)
+            {
+                inspection.RestoreDraft(existing);
+            }
+        }
+
         SelectedShell = inspection.Scan?.Model.Shells.FirstOrDefault()?.Id ?? "";
-        SelectedSign = ManualLocal3Direction.Unacknowledged; SelectedZone = "Unmapped";
+        SelectedSign = inspection.RoofRows.FirstOrDefault(r => r.ShellId == SelectedShell)?.ManualDirection ?? ManualLocal3Direction.Unacknowledged;
+        SelectedZone = inspection.RoofRows.FirstOrDefault(r => r.ShellId == SelectedShell)?.ZoneId ?? "Unmapped";
         ProposedLoads = []; Issues = []; FacadePairRows = []; LowerFrame = ""; UpperFrame = "";
         Status = IsMockAdapter
             ? "MOCK FIXTURE SCAN • Contract-test geometry only • NOT actual CSI scan"
@@ -202,7 +215,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public void ReviewLocal3()
     {
         if (IsDemo) { EditSign(); return; }
-        inspection.SetLocal3Review(SelectedShell, SelectedSign, User, Reason); Refresh();
+        inspection.SetLocal3Review(SelectedShell, SelectedSign, User, Reason);
+        HasUnsavedChanges = true;
+        Refresh();
     }
     public void SelectFacadePair()
     {
@@ -231,53 +246,79 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
     public void OpenProject() { RequireDemo(); var opened = new DemoSession(DatabasePath); opened.LoadDemoFixture(Edition); Session = opened; SelectedShell = "R1"; }
     public void LoadFixture(bool crossing = true) { RequireDemo(); Session.LoadDemoFixture(Edition, crossing); SelectedShell = "R1"; Issues = []; ProposedLoads = []; }
+    private WindState currentActiveState = new(WindDirection.PositiveX, "IP_POS", "RoofCase1", LimitState.Uls);
+    public WindState CurrentActiveState => currentActiveState;
+
     public void LoadSelectedState()
     {
         if (IsDemo)
         {
+            currentActiveState = new(Direction, InternalPressure, RoofCase, LimitState.Uls);
             Session.LoadDemoFixture(Edition, true, new(Direction, InternalPressure, RoofCase, LimitState.Uls));
             SelectedShell = "R1"; Issues = []; ProposedLoads = [];
             Refresh();
             return;
         }
-        // Real mode: save current draft and load/restore draft for the new state
-        var state = new WindState(Direction, InternalPressure, RoofCase, LimitState.Uls);
+        // Real mode: strictly follow required sequence
+        var targetState = new WindState(Direction, InternalPressure, RoofCase, LimitState.Uls);
         if (inspection.Scan != null)
         {
-            var currentDraft = inspection.CreateDraft(Session.Project.Id, state);
             var draftStore = new Application.RoofMappingDraftStore(new Persistence.SqliteSnapshotStore(DatabasePath));
-            draftStore.SaveDraft(Session.Project.Id, currentDraft);
-
-            // Try load existing draft for new state
-            var existing = draftStore.LoadLatestDraft(Session.Project.Id, inspection.Scan.Model.ModelId, state.Id);
-            if (existing != null)
+            // 1. Persist outstanding edits under the currently active state ID
+            if (HasUnsavedChanges || inspection.GetDraftRevision(currentActiveState.Id) == 0)
             {
-                inspection.RestoreDraft(existing);
+                var latestOld = draftStore.LoadLatestDraft(Session.Project.Id, inspection.Scan.Model.ModelId, currentActiveState.Id);
+                int nextRevOld = (latestOld?.Revision ?? 0) + 1;
+                var currentDraft = inspection.CreateDraft(Session.Project.Id, currentActiveState, nextRevOld);
+                draftStore.SaveDraft(Session.Project.Id, currentDraft);
+                HasUnsavedChanges = false;
+            }
+
+            // 2. Change the active state
+            currentActiveState = targetState;
+
+            // 3. Load the latest saved draft for the target state
+            var targetDraft = draftStore.LoadLatestDraft(Session.Project.Id, inspection.Scan.Model.ModelId, targetState.Id);
+            if (targetDraft != null)
+            {
+                inspection.RestoreDraft(targetDraft);
+            }
+            else
+            {
+                // 4. If no target draft exists, initialize a clean, unmapped draft
+                inspection.ResetToCleanUnmappedDraft(targetState.Id);
             }
         }
+        else
+        {
+            currentActiveState = targetState;
+        }
+        // 5. Update shell inspector and both views
+        SelectedShell = inspection.Scan?.Model.Shells.FirstOrDefault()?.Id ?? "";
+        SelectedSign = inspection.RoofRows.FirstOrDefault(r => r.ShellId == SelectedShell)?.ManualDirection ?? ManualLocal3Direction.Unacknowledged;
+        SelectedZone = inspection.RoofRows.FirstOrDefault(r => r.ShellId == SelectedShell)?.ZoneId ?? "Unmapped";
         Refresh();
     }
     public void EditZone()
     {
         if (IsDemo) { Session.SetZone(SelectedShell, SelectedZone, User, Reason); return; }
         inspection.SetGeometryZone(SelectedShell, SelectedZone, User, Reason);
-        // Auto-persist draft
-        var state = new WindState(Direction, InternalPressure, RoofCase, LimitState.Uls);
-        var draft = inspection.CreateDraft(Session.Project.Id, state);
-        var draftStore = new Application.RoofMappingDraftStore(new Persistence.SqliteSnapshotStore(DatabasePath));
-        draftStore.SaveDraft(Session.Project.Id, draft);
+        HasUnsavedChanges = true;
         Refresh();
     }
-    public void EditSign() { RequireDemo(); Session.SetSign(SelectedShell, SelectedSign, AcknowledgeMismatch, User, Reason); }
+    public void EditSign()
+    {
+        if (IsDemo) { Session.SetSign(SelectedShell, SelectedSign, AcknowledgeMismatch, User, Reason); return; }
+        inspection.SetLocal3Review(SelectedShell, SelectedSign, User, Reason);
+        HasUnsavedChanges = true;
+        Refresh();
+    }
     public void Pattern() { RequireDemo(); Session.SetPattern(SelectedPattern); }
     public void Exclude()
     {
         if (IsDemo) { Session.ExcludeShell(SelectedShell, User, Reason); return; }
         inspection.ExcludeShell(SelectedShell, User, Reason);
-        var state = new WindState(Direction, InternalPressure, RoofCase, LimitState.Uls);
-        var draft = inspection.CreateDraft(Session.Project.Id, state);
-        var draftStore = new Application.RoofMappingDraftStore(new Persistence.SqliteSnapshotStore(DatabasePath));
-        draftStore.SaveDraft(Session.Project.Id, draft);
+        HasUnsavedChanges = true;
         Refresh();
     }
     public void Validate() { RequireDemo(); Issues = Session.ValidateRoof().Cast<object>().ToArray(); }
@@ -355,16 +396,22 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         // Draft persistence across states
         Direction = WindDirection.PositiveX; InternalPressure = "IP_POS"; RoofCase = "RoofCase1";
+        LoadSelectedState();
         SelectedShell = "MOCK-A1"; SelectedZone = "Edge"; Reason = "Smoke draft WX+";
         EditZone();
+        SaveCurrentDraft();
         if (!DisplayShellZones.TryGetValue("MOCK-A1", out var z1) || z1 != "Edge")
             throw new InvalidOperationException("Geometry zone assignment failed.");
 
         // Switch to WY- / IP_NEG / RoofCase2
         Direction = WindDirection.NegativeY; InternalPressure = "IP_NEG"; RoofCase = "RoofCase2";
         LoadSelectedState();
+        if (DisplayShellZones.TryGetValue("MOCK-A1", out var zInitialWy) && zInitialWy != "Unmapped")
+            throw new InvalidOperationException("New wind state did not initialize with clean unmapped draft.");
+
         SelectedShell = "MOCK-A1"; SelectedZone = "Corner"; Reason = "Smoke draft WY-";
         EditZone();
+        SaveCurrentDraft();
         if (!DisplayShellZones.TryGetValue("MOCK-A1", out var z2) || z2 != "Corner")
             throw new InvalidOperationException("Second state geometry zone assignment failed.");
 
@@ -375,5 +422,24 @@ public sealed class MainViewModel : INotifyPropertyChanged
             throw new InvalidOperationException($"Draft state restoration failed: expected Edge, got {z1Restored}");
 
         Status = "MOCK LIVE ADAPTER / contract-test geometry • read-only UI and guard assertions passed • not actual CSI"; Refresh();
+    }
+    public WindState ActiveWindState => new(Direction, InternalPressure, RoofCase, LimitState.Uls);
+    public string ActiveWindStateSummary => $"Active Wind State: {Direction} • {InternalPressure} • {RoofCase} • Draft Rev: {inspection.GetDraftRevision(ActiveWindState.Id)} • Has Unsaved Changes: {HasUnsavedChanges}";
+    public bool HasUnsavedChanges { get; private set; }
+    public void MarkUnsavedChanges() { HasUnsavedChanges = true; Refresh(); }
+    public void MarkChangesSaved() { HasUnsavedChanges = false; Refresh(); }
+    public void SaveCurrentDraft()
+    {
+        if (IsDemo) return;
+        if (inspection.Scan == null) return;
+        var state = ActiveWindState;
+        var draftStore = new Application.RoofMappingDraftStore(new Persistence.SqliteSnapshotStore(DatabasePath));
+        var latest = draftStore.LoadLatestDraft(Session.Project.Id, inspection.Scan.Model.ModelId, state.Id);
+        int nextRev = (latest?.Revision ?? 0) + 1;
+        var draft = inspection.CreateDraft(Session.Project.Id, state, nextRev);
+        draftStore.SaveDraft(Session.Project.Id, draft);
+        HasUnsavedChanges = false;
+        Status = $"Saved geometry draft revision {nextRev} for {state.Id}";
+        Refresh();
     }
 }

@@ -1,4 +1,10 @@
 # Executed qualification
+- [x] Sprint 3.1: Wind-state switching preserves independent drafts and avoids cross-state mapping contamination.
+- [x] Sprint 3.1: SQLite draft versioning parses revisions numerically; optimistic concurrency rejects older revision overwrites.
+- [x] Sprint 3.1: Real read-only mode permits geometry draft editing, Local 3 review, and draft saving while blocking engineering approvals/writes.
+- [x] Sprint 3.1: Shell zone label assignment marked NotGeometricallyValidated rather than FullyInsideZone.
+- [x] Sprint 3.1: 3D geometry validation flags nonplanar, self-intersecting, and degenerate polygons with IsValid and GeometryError.
+- [x] Sprint 3.1: 14-step WPF acceptance test passes with exit code 0.
 
 - [x] Windows 10 x64, SDK 8.0.422 and Windows Desktop runtime verified.
 - [x] Full kickoff contract read; older document priorities overridden by newer approved roof/facade workflow.
