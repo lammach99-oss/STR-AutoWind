@@ -42,7 +42,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
     public bool IsDemo => Mode == WorkspaceMode.Demo;
     public bool IsReal => !IsDemo;
-    public string ModeBanner => IsDemo ? "DEMO / FAKE CSI • SYNTHETIC PRESSURES • NOT FOR ENGINEERING DESIGN" : (inspection.Connection?.Product.StartsWith("MOCK", StringComparison.Ordinal) == true ? "MOCK LIVE ADAPTER / NOT ACTUAL CSI • READ-ONLY • APPROVAL / APPLY DISABLED" : "REAL CSI READ-ONLY • NO PRESSURE DATASET • APPROVAL / APPLY DISABLED");
+    public bool IsMockAdapter => !IsDemo && (inspection.Connection?.Product.StartsWith("MOCK", StringComparison.OrdinalIgnoreCase) == true || inspection.Scan?.Model.Product.StartsWith("MOCK", StringComparison.OrdinalIgnoreCase) == true);
+    public string ModeBanner => IsDemo ? "DEMO / FAKE CSI • SYNTHETIC PRESSURES • NOT FOR ENGINEERING DESIGN" : (IsMockAdapter ? "MOCK LIVE ADAPTER / NOT ACTUAL CSI • READ-ONLY • APPROVAL / APPLY DISABLED" : "REAL CSI READ-ONLY • NO PRESSURE DATASET • APPROVAL / APPLY DISABLED");
     public CsiProduct Product { get; set; } = CsiProduct.Etabs;
     public string AssemblyPath { get; set; } = "";
     public string LowerFrame { get; set; } = "";
@@ -99,7 +100,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public object[] ProposedLoads { get; private set; } = [];
     public string ProjectSummary => IsDemo ? $"{Session.Project.Name}\nID: {Session.Project.Id}  |  Units: {Session.Project.UnitSystem}\nSQLite: {DatabasePath}\nData: SyntheticDemoFixture" : "Real CSI inspection — read-only session; no engineering run created.";
     public string ManifestSummary => IsDemo ? $"{Session.Manifest.Edition} | Status: {Session.Manifest.Status}\n{string.Join("\n", Session.Manifest.Revisions)}\nMissing: normative velocity / terrain tables, aerodynamic coefficients, reference heights, reviewed regression fixtures.\n{Session.Calculation.State.Id}" : EngineeringBlock;
-    public string CsiSummary => IsDemo ? $"{Session.Model.Product} | {Session.Model.Version}\nModel: {Session.Model.ModelId}\nFrames: {Session.Model.Frames.Length} | Roof shells: {Session.Model.Shells.Length}\nDemo fixture; fake adapter." : inspection.Connection is null ? "Disconnected. Attach only to an existing ETABS / SAP2000 process. No application start or model open." : $"{inspection.Connection.Product} | {inspection.Connection.Version} | Connected: {inspection.Connection.Connected}\nModel: {inspection.Scan?.Model.ModelId ?? "not refreshed"}\nNative units: {inspection.Scan?.Units.Description ?? "unknown"}; SI length multiplier: {inspection.Scan?.Units.LengthToM}; SI force multiplier: {inspection.Scan?.Units.ForceToN}\nLocked: {inspection.Scan?.IsLocked.ToString() ?? "unknown"}\nCapabilities: {inspection.Scan?.Capabilities ?? inspection.Connection.Capabilities}\nSelected frames: {inspection.Scan?.Model.Frames.Length ?? 0}; selected shells: {inspection.Scan?.Model.Shells.Length ?? 0}; issues: {inspection.Issues.Length}";
+    public string CsiSummary => IsDemo ? $"{Session.Model.Product} | {Session.Model.Version}\nModel: {Session.Model.ModelId}\nFrames: {Session.Model.Frames.Length} | Roof shells: {Session.Model.Shells.Length}\nDemo fixture; fake adapter." : inspection.Connection is null ? "Disconnected. Attach only to an existing ETABS / SAP2000 process. No application start or model open." : $"{(IsMockAdapter ? "[MOCK CONTRACT FIXTURE - NOT ACTUAL CSI DATA]\n" : "")}{inspection.Connection.Product} | {inspection.Connection.Version} | Connected: {inspection.Connection.Connected}\nModel: {inspection.Scan?.Model.ModelId ?? "not refreshed"}\nNative units: {inspection.Scan?.Units.Description ?? "unknown"}; SI length multiplier: {inspection.Scan?.Units.LengthToM}; SI force multiplier: {inspection.Scan?.Units.ForceToN}\nLocked: {inspection.Scan?.IsLocked.ToString() ?? "unknown"}\nCapabilities: {inspection.Scan?.Capabilities ?? inspection.Connection.Capabilities}\nSelected frames: {inspection.Scan?.Model.Frames.Length ?? 0}; selected shells: {inspection.Scan?.Model.Shells.Length ?? 0}; issues: {inspection.Issues.Length}";
     public string RoofSummary => IsDemo ? $"Workflow: {Session.Roof.State} | Approval: {Session.Roof.Approval?.Id ?? "none"}\nAssignment: {Session.Assignment?.Id ?? "none"} | Readback: {Session.Readback?.Matches.ToString() ?? "not performed"}" : $"Read-only selected shell geometry. Pressure mapping: Unmapped. Approval: unavailable.\n{EngineeringBlock}";
     public string FacadeSummary => IsDemo ? $"Preview: {(Session.FacadePreview is null ? "not prepared" : "prepared")} | Approval: {(Session.FacadeApproval is null ? "none" : Session.FacadeApproval.User)}\nSimulated assignment: {Session.FacadeAssignment?.Id ?? "none"} | Readback: {Session.FacadeReadback?.Matches.ToString() ?? "not performed"}" : $"Explicit selected frame pair geometry only. Method: {Method}.\n{EngineeringBlock}";
     public string ShellSummary
@@ -175,7 +176,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         if (revision != modeRevision) return;
         SelectedShell = inspection.Scan?.Model.Shells.FirstOrDefault()?.Id ?? "";
         SelectedSign = ManualLocal3Direction.Unacknowledged; SelectedZone = "Unmapped";
-        ProposedLoads = []; Issues = []; FacadePairRows = []; LowerFrame = ""; UpperFrame = ""; Refresh();
+        ProposedLoads = []; Issues = []; FacadePairRows = []; LowerFrame = ""; UpperFrame = "";
+        Status = IsMockAdapter ? "MOCK FIXTURE SCAN • Contract-test geometry only • NOT actual CSI scan" : $"LIVE CSI SCAN SUCCESSFUL • {inspection.Connection?.Product} {inspection.Connection?.Version} • {inspection.Scan?.Model.Frames.Length ?? 0} frames, {inspection.Scan?.Model.Shells.Length ?? 0} shells selected";
+        Refresh();
     }
     public void ReviewLocal3()
     {
@@ -263,6 +266,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         await ConnectReal();
         if (inspection.Connection?.Connected != true || DisplayShells.Count == 0 || FrameIds.Length == 0) throw new InvalidOperationException("Mock read-only connection did not populate selected geometry.");
         if (inspection.RoofRows.Any(r => r.ZoneId is not null) || ProposedLoads.Length != 0) throw new InvalidOperationException("Real read-only mode must leave pressure unmapped.");
+        if (IsMockAdapter && Status.Contains("LIVE CSI SCAN SUCCESSFUL", StringComparison.Ordinal)) throw new InvalidOperationException("A mock adapter was reported as a live CSI scan.");
         void Reject(Action action)
         {
             try { action(); }
