@@ -23,7 +23,7 @@ jobs:
       - name: Build open source solution (no CSI installation required)
         run: dotnet build StructuralLoadAssistant.sln --configuration Release --no-restore -m:1 -nr:false
       - name: Run automated tests
-        run: dotnet test tests/StructuralLoadAssistant.Tests --configuration Release --no-build --no-restore -m:1 -nr:false --logger "trx;LogFileName=windows-tests.trx" --results-directory artifacts/ci
+        run: dotnet test tests/StructuralLoadAssistant.Tests --configuration Release --no-build --no-restore -m:1 -nr:false --filter "Category!=PhysicalCsi" --logger "trx;LogFileName=windows-tests.trx" --results-directory artifacts/ci
       - name: Upload test diagnostics
         if: always()
         uses: actions/upload-artifact@v4
