@@ -54,9 +54,16 @@
         "resolved": "4.5.3",
         "contentHash": "3oDzvc/zzetpTKWMShs1AADwZjQ/36HnsufHRPcOjyRAAMLDlu2iD33MBI2opxnezcVUtXyqDXXjoFMOU9c7SA=="
       },
+      "structuralloadassistant.csi.abstractions": {
+        "type": "Project",
+        "dependencies": {
+          "StructuralLoadAssistant.Domain": "[1.0.0, )"
+        }
+      },
       "structuralloadassistant.csi.fake": {
         "type": "Project",
         "dependencies": {
+          "StructuralLoadAssistant.Csi.Abstractions": "[1.0.0, )",
           "StructuralLoadAssistant.Domain": "[1.0.0, )",
           "StructuralLoadAssistant.Engineering": "[1.0.0, )",
           "StructuralLoadAssistant.RoofMapping": "[1.0.0, )"

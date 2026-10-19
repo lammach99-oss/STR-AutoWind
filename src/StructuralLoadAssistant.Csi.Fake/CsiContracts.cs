@@ -5,11 +5,6 @@ using StructuralLoadAssistant.RoofMapping;
 namespace StructuralLoadAssistant.Csi.Fake;
 
 // These contracts deliberately have no live writer implementation.
-public interface ICsiReadAdapter
-{
-    Task<CsiModelSnapshot> ScanModelAsync(CancellationToken cancellationToken = default);
-    Task<ImmutableArray<ExistingLoad>> GetExistingLoadsAsync(CancellationToken cancellationToken = default);
-}
 public interface ISimulatedCsiWriteAdapter
 {
     Task<AssignmentRun> ApplyAreaLoadsAsync(RoofMappingApproval approval, CancellationToken cancellationToken = default);

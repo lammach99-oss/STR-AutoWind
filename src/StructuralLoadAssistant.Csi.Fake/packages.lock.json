@@ -2,6 +2,12 @@
   "version": 1,
   "dependencies": {
     "net8.0": {
+      "structuralloadassistant.csi.abstractions": {
+        "type": "Project",
+        "dependencies": {
+          "StructuralLoadAssistant.Domain": "[1.0.0, )"
+        }
+      },
       "structuralloadassistant.domain": {
         "type": "Project"
       },

@@ -28,6 +28,8 @@ public sealed class DemoSession
     public FacadeSimulationRun? FacadeAssignment {get;private set;}
     public FacadeReadbackVerification? FacadeReadback {get;private set;}
     public string DatabasePath { get; }
+    public ImmutableArray<FacadePairSelection> FacadePairs => _selection?.Pairs ?? [];
+    private FacadeSelection? _selection;
     private readonly SqliteSnapshotStore _store;
     private FakeCsiAdapter _adapter = new();
     private FakeFacadeAssignmentService? _facadeAdapter;
@@ -49,6 +51,9 @@ public sealed class DemoSession
         if(state!=DemoFixtures.State) Calculation=Calculation with {Id=Calculation.Id+"-"+SnapshotJson.Hash(state),State=state};
         Model=DemoFixtures.Model(includeCrossing);_adapter=new(Model);Assignment=null;Readback=null;
         _facadeAdapter=new(_adapter);
+        _selection=new(Model.Frames);
+        _selection.SelectPair("B1","B2");
+        _selection.SelectPair("B2","B3");
         Zones=[new("Edge","Roof",Calculation.State,DemoFixtures.Rectangle(0,0,5,12),-1500),
             new("Interior","Roof",Calculation.State,DemoFixtures.Rectangle(5,0,10,12),-1000)];
         string axis=state.Direction is WindDirection.PositiveX or WindDirection.NegativeX?"WX":"WY";
@@ -75,22 +80,40 @@ public sealed class DemoSession
             throw new ArgumentException("Pressure fixture has no value at requested height");
         }
         var panels=new List<FacadeReportRow>();var contributions=new List<FrameSegmentLoad>();
-        for(int i=0;i<2;i++)
+        foreach(var pair in FacadePairs)
         {
-            var lower=Model.Frames[i];var upper=Model.Frames[i+1];
+            var lower=Model.Frames.Single(f=>f.Id==pair.LowerFrameId);var upper=Model.Frames.Single(f=>f.Id==pair.UpperFrameId);
             var loads=FacadeMapper.MapPair(lower,upper,PressureAt,0,Calculation.State,FacadePattern,method);
             contributions.AddRange(loads);
-            foreach(var load in loads) panels.Add(new($"{lower.Id}-{upper.Id}",load.FrameId,method.ToString(),load.StartFraction*10,load.EndFraction*10,load.LoadNPerM));
+            foreach(var load in loads)
+            {
+                var length=(Model.Frames.Single(f=>f.Id==load.FrameId).End-Model.Frames.Single(f=>f.Id==load.FrameId).Start).Length;
+                panels.Add(new($"{lower.Id}-{upper.Id}",load.FrameId,method.ToString(),load.StartFraction*length,load.EndFraction*length,load.LoadNPerM));
+            }
         }
         PanelRows=panels.ToImmutableArray();
         _facadeContributions=FacadeMapper.Accumulate(contributions);
-        FacadeRows=FacadeMapper.Accumulate(contributions).Select(l=>new FacadeReportRow("Accumulated",l.FrameId,method.ToString(),l.StartFraction*10,l.EndFraction*10,l.LoadNPerM)).ToImmutableArray();
+        FacadeRows=FacadeMapper.Accumulate(contributions).Select(l=>
+        {
+            var frame=Model.Frames.Single(f=>f.Id==l.FrameId);var length=(frame.End-frame.Start).Length;
+            return new FacadeReportRow("Accumulated",l.FrameId,method.ToString(),l.StartFraction*length,l.EndFraction*length,l.LoadNPerM);
+        }).ToImmutableArray();
         Save("facade-"+Model.Id+"-"+Calculation.Id+"-"+SnapshotJson.Hash(FacadeRows),SnapshotKind.FacadeMappingDraft,FacadeRows);
     }
     public void PreviewWall(WallType type,double heightM,double? directNPerM = null)
     {
         var result=WallLoads.Calculate(new(type,0,heightM,0,"WALL","B1",directNPerM));
         Walls=[new("B1","WALL",type.Id+(directNPerM.HasValue?" / direct override":" / illustrative"),heightM,result.GlobalLoadNPerM.Z)];
+    }
+    public void SelectFacadePair(string lowerId,string upperId)
+    {
+        (_selection??throw new InvalidOperationException("Load selected geometry first")).SelectPair(lowerId,upperId);
+        RecalculateFacade(Method);
+    }
+    public void ClearFacadePairs()
+    {
+        (_selection??throw new InvalidOperationException("Load selected geometry first")).ClearPairs();
+        RecalculateFacade(Method);
     }
     private void Edited()
     {

@@ -1,3 +1,4 @@
+using StructuralLoadAssistant.Csi.Abstractions;
 using System.Collections.Immutable;
 using System.Text.Json.Serialization;
 using StructuralLoadAssistant.Domain;

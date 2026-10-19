@@ -5,4 +5,5 @@
   <ProjectReference Include="..\StructuralLoadAssistant.Csi.Fake\StructuralLoadAssistant.Csi.Fake.csproj" />
   <ProjectReference Include="..\StructuralLoadAssistant.Persistence\StructuralLoadAssistant.Persistence.csproj" />
   <ProjectReference Include="..\StructuralLoadAssistant.Reporting\StructuralLoadAssistant.Reporting.csproj" />
+  <ProjectReference Include="..\StructuralLoadAssistant.Csi.Abstractions\StructuralLoadAssistant.Csi.Abstractions.csproj" />
 </ItemGroup><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>

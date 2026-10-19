@@ -28,6 +28,8 @@
     <ProjectReference Include="..\..\src\StructuralLoadAssistant.Persistence\StructuralLoadAssistant.Persistence.csproj" />
     <ProjectReference Include="..\..\src\StructuralLoadAssistant.Reporting\StructuralLoadAssistant.Reporting.csproj" />
     <ProjectReference Include="..\..\src\StructuralLoadAssistant.Application\StructuralLoadAssistant.Application.csproj" />
+    <ProjectReference Include="..\..\src\StructuralLoadAssistant.Csi.Abstractions\StructuralLoadAssistant.Csi.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\StructuralLoadAssistant.Csi.ApiV1\StructuralLoadAssistant.Csi.ApiV1.csproj" />
   </ItemGroup>
 
 </Project>

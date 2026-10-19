@@ -114,6 +114,7 @@
       "structuralloadassistant.application": {
         "type": "Project",
         "dependencies": {
+          "StructuralLoadAssistant.Csi.Abstractions": "[1.0.0, )",
           "StructuralLoadAssistant.Csi.Fake": "[1.0.0, )",
           "StructuralLoadAssistant.Domain": "[1.0.0, )",
           "StructuralLoadAssistant.Engineering": "[1.0.0, )",
@@ -122,9 +123,22 @@
           "StructuralLoadAssistant.RoofMapping": "[1.0.0, )"
         }
       },
+      "structuralloadassistant.csi.abstractions": {
+        "type": "Project",
+        "dependencies": {
+          "StructuralLoadAssistant.Domain": "[1.0.0, )"
+        }
+      },
+      "structuralloadassistant.csi.apiv1": {
+        "type": "Project",
+        "dependencies": {
+          "StructuralLoadAssistant.Csi.Abstractions": "[1.0.0, )"
+        }
+      },
       "structuralloadassistant.csi.fake": {
         "type": "Project",
         "dependencies": {
+          "StructuralLoadAssistant.Csi.Abstractions": "[1.0.0, )",
           "StructuralLoadAssistant.Domain": "[1.0.0, )",
           "StructuralLoadAssistant.Engineering": "[1.0.0, )",
           "StructuralLoadAssistant.RoofMapping": "[1.0.0, )"
