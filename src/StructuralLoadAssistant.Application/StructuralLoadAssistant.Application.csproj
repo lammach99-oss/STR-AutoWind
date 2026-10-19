@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk"><ItemGroup>
+  <ProjectReference Include="..\StructuralLoadAssistant.Domain\StructuralLoadAssistant.Domain.csproj" />
+  <ProjectReference Include="..\StructuralLoadAssistant.Engineering\StructuralLoadAssistant.Engineering.csproj" />
+  <ProjectReference Include="..\StructuralLoadAssistant.RoofMapping\StructuralLoadAssistant.RoofMapping.csproj" />
+  <ProjectReference Include="..\StructuralLoadAssistant.Csi.Fake\StructuralLoadAssistant.Csi.Fake.csproj" />
+  <ProjectReference Include="..\StructuralLoadAssistant.Persistence\StructuralLoadAssistant.Persistence.csproj" />
+  <ProjectReference Include="..\StructuralLoadAssistant.Reporting\StructuralLoadAssistant.Reporting.csproj" />
+</ItemGroup><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>
