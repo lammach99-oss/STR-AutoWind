@@ -17,12 +17,17 @@ public sealed class CsiPhysicalQualificationTests
     private const string Sap2000DllPath = @"C:\Program Files\Computers and Structures\SAP2000 27\SAP2000v1.dll";
 
     [Fact]
+    [Trait("Category", "PhysicalCsi")]
     public async Task Physical_ETABS_read_only_qualification_when_running()
     {
+        if (Environment.GetEnvironmentVariable("CSI_PHYSICAL_QUALIFICATION") != "1")
+        {
+            throw new InvalidOperationException("Opt-in physical CSI qualification requires CSI_PHYSICAL_QUALIFICATION=1. Exclude this test using '--filter Category!=PhysicalCsi' or run scripts/qualify-csi.ps1.");
+        }
+
         if (!OperatingSystem.IsWindows() || !File.Exists(EtabsDllPath) || Process.GetProcessesByName("ETABS").Length == 0)
         {
-            // Gracefully pass in environments without a running ETABS 23 instance (e.g. CI)
-            return;
+            throw new InvalidOperationException("ETABS 23 is not running or ETABSv1.dll was not found on this Windows system. Physical qualification cannot proceed.");
         }
 
         await using var adapter = new InstalledCsiReadAdapter();
@@ -39,11 +44,11 @@ public sealed class CsiPhysicalQualificationTests
         Assert.False(string.IsNullOrWhiteSpace(scan.Model.ModelId));
         Assert.NotEqual("unknown", scan.Units.NativeUnitId);
 
-        // When frames and shells are selected, verify real geometry, opposite Local 3, rotated shells, and loads
-        if (scan.Model.Frames.Length > 0 || scan.Model.Shells.Length > 0)
-        {
-            Assert.True(scan.Model.Frames.Length >= 2, $"Expected at least 2 frames in selection, got {scan.Model.Frames.Length}");
-            Assert.True(scan.Model.Shells.Length >= 2, $"Expected at least 2 shells in selection, got {scan.Model.Shells.Length}");
+        // Strict physical qualification: selection must not be empty or partial
+        Assert.NotEqual(CsiScanOutcome.Failed, scan.Outcome);
+        Assert.NotEqual(CsiScanOutcome.EmptySelection, scan.Outcome);
+        Assert.True(scan.Model.Frames.Length >= 2, $"Strict qualification requires at least 2 frames in selection, got {scan.Model.Frames.Length}");
+        Assert.True(scan.Model.Shells.Length >= 2, $"Strict qualification requires at least 2 shells in selection, got {scan.Model.Shells.Length}");
 
             // Verify frames: coordinates in SI metres, valid nonzero length
             foreach (var frame in scan.Model.Frames)
@@ -99,7 +104,6 @@ public sealed class CsiPhysicalQualificationTests
                 Assert.False(string.IsNullOrWhiteSpace(load.Kind));
                 Assert.True(double.IsFinite(load.ValueSI));
             }
-        }
     }
 
     [Fact]

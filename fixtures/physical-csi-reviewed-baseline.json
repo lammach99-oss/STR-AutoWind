@@ -1,0 +1,139 @@
+ {
+   "$schema": "https://json-schema.org/draft/2020-12/schema",
+   "description": "Independently reviewed physical ETABS 23.2.0 baseline for read-only qualification.",
+   "qualificationDate": "2026-10-19",
+   "software": {
+     "product": "Etabs",
+     "version": "23.2.0",
+     "major": 23,
+     "nativeUnits": {
+       "id": "9",
+       "name": "N_mm_C",
+       "lengthToM": 0.001,
+       "forceToN": 1
+     },
+     "isLocked": true
+   },
+   "benchmarkElements": {
+     "frameIds": [
+       "49",
+       "75",
+       "50",
+       "78"
+     ],
+     "shellIds": [
+       "10",
+       "18",
+       "64",
+       "84"
+     ]
+   },
+   "expectedFrames": [
+     {
+       "id": "49",
+       "description": "Lower facade perimeter beam at Y = -0.1m",
+       "startY": -0.1,
+       "endY": -0.1,
+       "startZ": 0.125,
+       "endZ": 0.125,
+       "lengthM": 11.49,
+       "toleranceM": 0.01
+     },
+     {
+       "id": "75",
+       "description": "Upper facade perimeter beam at Y = -0.1m",
+       "startY": -0.1,
+       "endY": -0.1,
+       "startZ": 3.315,
+       "endZ": 3.315,
+       "lengthM": 11.49,
+       "toleranceM": 0.01
+     },
+     {
+       "id": "50",
+       "description": "Lower facade perimeter beam at Y = 7.63m",
+       "startY": 7.63,
+       "endY": 7.63,
+       "startZ": 0.125,
+       "endZ": 0.125,
+       "lengthM": 11.49,
+       "toleranceM": 0.01
+     },
+     {
+       "id": "78",
+       "description": "Upper facade perimeter beam at Y = 7.63m",
+       "startY": 7.63,
+       "endY": 7.63,
+       "startZ": 3.315,
+       "endZ": 3.315,
+       "lengthM": 11.49,
+       "toleranceM": 0.01
+     }
+   ],
+   "expectedShells": [
+     {
+       "id": "10",
+       "description": "Horizontal slab at Z = 0.125m with upward Local 3 (+Z)",
+       "isPlanar": true,
+       "local3": {
+         "x": 0,
+         "y": 0,
+         "z": 1
+       },
+       "minZ": 0.125,
+       "maxZ": 0.125,
+       "local3ZTolerance": 0.05
+     },
+     {
+       "id": "18",
+       "description": "Horizontal slab at Z = 3.635m with downward Local 3 (-Z, opposite Local 3 qualification)",
+       "isPlanar": true,
+       "local3": {
+         "x": 0,
+         "y": 0,
+         "z": -1
+       },
+       "minZ": 3.635,
+       "maxZ": 3.635,
+       "local3ZTolerance": 0.05
+     },
+     {
+       "id": "64",
+       "description": "Sloped roof shell with horizontal Local 3 component (rotated shell geometry)",
+       "isPlanar": true,
+       "local3": {
+         "x": -0.1965,
+         "y": 0,
+         "z": 0.9805
+       },
+       "tolerance": 0.02
+     },
+     {
+       "id": "84",
+       "description": "Sloped roof shell with horizontal Local 3 component (rotated shell geometry)",
+       "isPlanar": true,
+       "local3": {
+         "x": 0.2218,
+         "y": 0,
+         "z": 0.9751
+       },
+       "tolerance": 0.02
+     }
+   ],
+   "expectedLoads": [
+     {
+       "objectId": "49",
+       "loadType": "FrameDistributed",
+       "pattern": "W_internal",
+       "valueSI": 579.378,
+       "toleranceSI": 5
+     },
+     {
+       "objectId": "10",
+       "loadType": "AreaUniform",
+       "pattern": "L-Uniform Live 1",
+       "valueSI": 1915.21,
+       "toleranceSI": 10
+     }
+   ]
+ }

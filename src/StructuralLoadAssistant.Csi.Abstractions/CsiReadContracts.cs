@@ -9,6 +9,7 @@ public interface ICsiReadAdapter
     Task<ImmutableArray<ExistingLoad>> GetExistingLoadsAsync(CancellationToken cancellationToken = default);
 }
 public enum CsiProduct { Etabs, Sap2000 }
+public enum CsiScanOutcome { Disconnected, Scanning, Succeeded, EmptySelection, PartialScan, Failed }
 public enum CsiIssueSeverity { Information, Warning, Error }
 public sealed record CsiReadIssue(string Code, string Operation, string Message, CsiIssueSeverity Severity = CsiIssueSeverity.Error, int? ReturnCode = null);
 public sealed record CsiCapabilities(bool Stories, bool FrameDistributedLoads, bool AreaUniformLoads, bool LocalAxes, bool IsReadOnly = true);
@@ -18,7 +19,8 @@ public sealed record CsiConnectionOptions(CsiProduct Product, string AssemblyPat
 public sealed record CsiConnectionResult(bool Connected, string Product, string Version, CsiCapabilities Capabilities, ImmutableArray<CsiReadIssue> Issues);
 public sealed record CsiAreaReadInfo(string AreaId, string RoofPlaneId, Vec3? VerifiedOutwardNormal, string NormalStatus);
 public sealed record CsiReadScan(CsiModelSnapshot Model, CsiUnits Units, bool IsLocked, CsiCapabilities Capabilities,
-    ImmutableArray<CsiStory> Stories, ImmutableArray<CsiAreaReadInfo> AreaMetadata, ImmutableArray<CsiReadIssue> Issues);
+    ImmutableArray<CsiStory> Stories, ImmutableArray<CsiAreaReadInfo> AreaMetadata, ImmutableArray<CsiReadIssue> Issues,
+    CsiScanOutcome Outcome = CsiScanOutcome.Succeeded);
 public interface ICsiSessionReadAdapter : ICsiReadAdapter, IAsyncDisposable
 {
     Task<CsiConnectionResult> ConnectAsync(CsiConnectionOptions options, CancellationToken cancellationToken = default);

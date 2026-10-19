@@ -177,7 +177,17 @@ public sealed class MainViewModel : INotifyPropertyChanged
         SelectedShell = inspection.Scan?.Model.Shells.FirstOrDefault()?.Id ?? "";
         SelectedSign = ManualLocal3Direction.Unacknowledged; SelectedZone = "Unmapped";
         ProposedLoads = []; Issues = []; FacadePairRows = []; LowerFrame = ""; UpperFrame = "";
-        Status = IsMockAdapter ? "MOCK FIXTURE SCAN • Contract-test geometry only • NOT actual CSI scan" : $"LIVE CSI SCAN SUCCESSFUL • {inspection.Connection?.Product} {inspection.Connection?.Version} • {inspection.Scan?.Model.Frames.Length ?? 0} frames, {inspection.Scan?.Model.Shells.Length ?? 0} shells selected";
+        Status = IsMockAdapter
+            ? "MOCK FIXTURE SCAN • Contract-test geometry only • NOT actual CSI scan"
+            : inspection.Outcome switch
+            {
+                CsiScanOutcome.Succeeded => $"LIVE CSI SCAN SUCCEEDED • {inspection.Connection?.Product} {inspection.Connection?.Version} • {inspection.Scan?.Model.Frames.Length ?? 0} frames, {inspection.Scan?.Model.Shells.Length ?? 0} shells selected",
+                CsiScanOutcome.EmptySelection => $"EMPTY CSI SELECTION • {inspection.Connection?.Product} {inspection.Connection?.Version} • 0 frames, 0 shells selected • Select elements in CSI and refresh",
+                CsiScanOutcome.PartialScan => $"PARTIAL CSI SCAN • {inspection.Connection?.Product} {inspection.Connection?.Version} • {inspection.Scan?.Model.Frames.Length ?? 0} frames, {inspection.Scan?.Model.Shells.Length ?? 0} shells selected • Issues: {inspection.Issues.Length}",
+                CsiScanOutcome.Failed => $"CSI SCAN FAILED • {inspection.Connection?.Product} {inspection.Connection?.Version} • {string.Join("; ", inspection.Issues.Select(i => i.Message))}",
+                CsiScanOutcome.Scanning => $"SCANNING CSI MODEL • {inspection.Connection?.Product} {inspection.Connection?.Version}...",
+                _ => "DISCONNECTED • Connect to a running CSI instance first"
+            };
         Refresh();
     }
     public void ReviewLocal3()
@@ -266,7 +276,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         await ConnectReal();
         if (inspection.Connection?.Connected != true || DisplayShells.Count == 0 || FrameIds.Length == 0) throw new InvalidOperationException("Mock read-only connection did not populate selected geometry.");
         if (inspection.RoofRows.Any(r => r.ZoneId is not null) || ProposedLoads.Length != 0) throw new InvalidOperationException("Real read-only mode must leave pressure unmapped.");
-        if (IsMockAdapter && Status.Contains("LIVE CSI SCAN SUCCESSFUL", StringComparison.Ordinal)) throw new InvalidOperationException("A mock adapter was reported as a live CSI scan.");
+          if (IsMockAdapter && (Status.Contains("LIVE CSI SCAN SUCCESSFUL", StringComparison.Ordinal) || Status.Contains("LIVE CSI SCAN SUCCEEDED", StringComparison.Ordinal))) throw new InvalidOperationException("A mock adapter was reported as a live CSI scan.");
         void Reject(Action action)
         {
             try { action(); }

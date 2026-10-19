@@ -62,7 +62,14 @@ public sealed class InstalledCsiReadAdapter : ICsiSessionReadAdapter
    modelId=string.IsNullOrWhiteSpace(beforeModel)?"unsaved:"+unsavedIdentity:beforeModel;
   } catch(OperationCanceledException){throw;} catch(Exception e){issues.Add(Issue(e,"RefreshSelection"));frames.Clear();shells.Clear();metadata.Clear();loads.Clear();stories.Clear();patterns=[];cases=[];combos=[];units=new("unknown",0,0,"Scan invalidated");locked=false;modelId="";}
   var geometry=SnapshotJson.Hash(new{frames,shells});var loadHash=SnapshotJson.Hash(loads);var snapshot=new CsiModelSnapshot(SnapshotJson.Hash(new{modelId,geometry,loadHash}),modelId,product.ToString(),version,geometry,loadHash,patterns,cases,combos,frames.ToImmutableArray(),shells.ToImmutableArray(),loads.ToImmutableArray());
-  return new(snapshot,units,locked,capabilities,stories.ToImmutableArray(),metadata.ToImmutableArray(),issues.ToImmutableArray());
+  var outcome = issues.Any(i => i.Severity == CsiIssueSeverity.Error)
+      ? CsiScanOutcome.Failed
+      : (frames.Count == 0 && shells.Count == 0)
+          ? CsiScanOutcome.EmptySelection
+          : (issues.Any(i => i.Severity == CsiIssueSeverity.Warning) || frames.Count == 0 || shells.Count == 0)
+              ? CsiScanOutcome.PartialScan
+              : CsiScanOutcome.Succeeded;
+  return new(snapshot,units,locked,capabilities,stories.ToImmutableArray(),metadata.ToImmutableArray(),issues.ToImmutableArray(),outcome);
  }
  private ImmutableArray<string> Names(string component,List<CsiReadIssue> issues,bool caseType=false){ImmutableArray<string> result=[];Try(()=>{object?[] a=caseType?[0,null,0]:[0,null];Check(component,"GetNameList",a);result=ArrayOf<string>(a[1],(int)a[0]!).OrderBy(x=>x,StringComparer.Ordinal).ToImmutableArray();},issues);return result;}
  private Vec3 Point(string id,CsiUnits u){object?[] a={id,0d,0d,0d,"Global"};Check("PointObj","GetCoordCartesian",a);return new(Finite((double)a[1]!)*u.LengthToM,Finite((double)a[2]!)*u.LengthToM,Finite((double)a[3]!)*u.LengthToM);}

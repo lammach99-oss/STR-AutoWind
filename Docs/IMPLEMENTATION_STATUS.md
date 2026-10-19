@@ -1,5 +1,21 @@
 # Implementation status — 2026-10-19
 
+## Sprint 2.6: CSI qualification hardening
+
+Hardened physical qualification testing, test suite separation, and live CSI status reporting:
+
+- **Separation of CI from physical tests:** Categorized physical qualification tests under `[Trait("Category", "PhysicalCsi")]`. Automated CI and standard testing runs (`scripts/test.ps1`) execute with `--filter Category!=PhysicalCsi`, passing all 134 automated unit/contract tests without failing on environments without live CSI installations.
+- **Strict physical qualification runner:** Created `scripts/qualify-csi.ps1` with strict validation logic. Requires explicit opt-in (`CSI_PHYSICAL_QUALIFICATION=1`), validates process presence, assembly paths, and elements against independently reviewed fixtures. It fails or marks inconclusive clearly rather than silently passing on empty/missing connections.
+- **Selection capture and safe restoration:** When `-SetupSelection` is passed, the runner queries and records existing element selections in ETABS, temporarily selects benchmark frames and shells, and restores initial user selections in a `finally` block.
+- **Independently reviewed baseline fixtures:** Created `fixtures/physical-csi-reviewed-baseline.json` storing reviewed geometry coordinates, opposite Local 3 vectors, and load values for benchmark elements (Frames 49, 75, 50, 78; Areas 10, 18, 64, 84).
+- **Explicit scan outcomes:** Introduced `CsiScanOutcome` enum (`Disconnected`, `Scanning`, `Succeeded`, `EmptySelection`, `PartialScan`, `Failed`). Updated `CsiReadContracts`, `InstalledCsiReadAdapter`, `CsiInspectionSession`, and `MainViewModel`. UI status explicitly differentiates empty, partial, and failed scans; never displays `LIVE CSI SCAN SUCCEEDED` on invalid scans.
+- **Safety gates preserved:** Engineering calculations, approvals, and production CSI writes remain strictly disabled in RealReadOnly mode.
+
+### Verification summary
+- Automated test suite: **134 passed, 0 failed, 0 skipped** across all solution projects.
+- WPF smoke test (`--smoke`) and read-only smoke test (`--smoke-readonly`): both passed with clean shutdown and all safety assertions verified.
+- Physical qualification script (`scripts/qualify-csi.ps1`): verified for Sap2000 (correctly outputs `Inconclusive / Pending: process not active`).
+
 ## Sprint 2: real CSI read-only integration
 
 This section supersedes the initial milestone's CSI and fixed-selection limitations below. No production CSI writes or normative wind calculation have been enabled.

@@ -31,7 +31,11 @@
 - [x] XYZ/Local3 and unknown outward metadata; real pressure Unmapped; no real approval/apply.
 - [x] Refresh/cancel/mode changes invalidate stale inspection context.
 - [x] Windows CI locked restore/Release build/tests without CSI installation.
-- [ ] Physical selected geometry/transform/load qualification in ETABS.
+- [x] Physical selected geometry/transform/load qualification in ETABS (Sprint 2.5 baseline qualified; Sprint 2.6 strict opt-in qualification harness).
+- [x] Separation of automated CI test suite from opt-in physical qualification (`Category!=PhysicalCsi`).
+- [x] Strict physical qualification runner (`scripts/qualify-csi.ps1`) with selection capture and safe restoration.
+- [x] Independently reviewed baseline fixtures (`fixtures/physical-csi-reviewed-baseline.json`).
+- [x] Explicit scan outcomes (`CsiScanOutcome`: Disconnected, Scanning, Succeeded, EmptySelection, PartialScan, Failed) and accurate status reporting.
 - [ ] Physical SAP2000 connection/scan qualification.
 - [ ] PID-aware instance selection and advanced 3D display.
 

@@ -12,6 +12,7 @@ public class CsiInspectionTests
     [Fact] public async Task ConnectedSelection_IsRealGeometryOnlyAndCannotApprove()
     {
         var adapter=new Reader();await using var session=new CsiInspectionSession(adapter);await session.ConnectAsync(Options);await session.RefreshAsync();
+        Assert.Equal(CsiScanOutcome.Succeeded,session.Outcome);
         Assert.Equal("Selected",session.Scan!.Model.ModelId);Assert.Empty(session.Facade!.Pairs);
         var row=Assert.Single(session.RoofRows);Assert.Equal(ShellZoneClassification.Unmapped,row.Classification);
         Assert.Equal(new Vec3(0,0,-1),session.Scan.Model.Shells[0].Local3);
@@ -90,10 +91,31 @@ public class CsiInspectionTests
         var adapter=new Reader{Normal=new(0,0,1)};await using var session=new CsiInspectionSession(adapter);await session.ConnectAsync(Options);await session.RefreshAsync();
         Assert.Equal(new Vec3(0,0,1),session.Scan!.Model.Shells[0].OutwardNormal);Assert.Equal(new Vec3(0,0,-1),session.Scan.Model.Shells[0].Local3);
     }
+    [Fact] public async Task InspectionSession_TracksExplicitScanOutcomes()
+    {
+        var adapter=new Reader();await using var session=new CsiInspectionSession(adapter);
+        Assert.Equal(CsiScanOutcome.Disconnected, session.Outcome);
+        await session.ConnectAsync(Options);
+        Assert.Equal(CsiScanOutcome.Disconnected, session.Outcome);
+        await session.RefreshAsync();
+        Assert.Equal(CsiScanOutcome.Succeeded, session.Outcome);
+        adapter.OutcomeToReturn = CsiScanOutcome.EmptySelection;
+        await session.RefreshAsync();
+        Assert.Equal(CsiScanOutcome.EmptySelection, session.Outcome);
+        adapter.OutcomeToReturn = CsiScanOutcome.PartialScan;
+        await session.RefreshAsync();
+        Assert.Equal(CsiScanOutcome.PartialScan, session.Outcome);
+        adapter.Fail = true;
+        await session.RefreshAsync();
+        Assert.Equal(CsiScanOutcome.Failed, session.Outcome);
+        session.Clear();
+        Assert.Equal(CsiScanOutcome.Disconnected, session.Outcome);
+    }
     private sealed class Reader : ICsiSessionReadAdapter
     {
         public bool Fail; public bool Connected=true;
         public Vec3? Normal;
+        public CsiScanOutcome OutcomeToReturn = CsiScanOutcome.Succeeded;
         public TaskCompletionSource<bool>? ScanGate;
         public TaskCompletionSource<bool>? ConnectGate;
         private static CsiCapabilities Capabilities => new(true,true,true,true);
@@ -109,7 +131,7 @@ public class CsiInspectionTests
             var model=new CsiModelSnapshot("scan","Selected","ETABS","test","geometry","loads",["W"],[],[],
                 [new("L","A",new(0,0,0),new(10,0,0)),new("U","A",new(0,0,3),new(10,0,3))],
                 [new("R","plane",[new(0,0,3),new(10,0,3),new(10,10,3),new(0,10,3)],new(0,0,-1),default)],[]);
-            return new CsiReadScan(model,new("SI",1,1,"SI"),true,Capabilities,[],[new("R","plane",Normal,"Unknown")],[]);
+             return new CsiReadScan(model,new("SI",1,1,"SI"),true,Capabilities,[],[new("R","plane",Normal,"Unknown")],[],OutcomeToReturn);
         }
         public async Task<CsiModelSnapshot> ScanModelAsync(CancellationToken cancellationToken=default)=>(await RefreshSelectionAsync(cancellationToken)).Model;
         public Task<ImmutableArray<ExistingLoad>> GetExistingLoadsAsync(CancellationToken cancellationToken=default)=>Task.FromResult(ImmutableArray<ExistingLoad>.Empty);

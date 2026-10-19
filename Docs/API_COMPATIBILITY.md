@@ -1,14 +1,34 @@
-# CSI read-only compatibility — Sprint 2.5
+# CSI read-only compatibility — Sprint 2.6
 
 | Product / adapter | Installed metadata/help inspected | Actual running connection | Actual definition scan | Selected geometry / axes / loads | Writes |
 |---|---|---|---|---|---|
 | Fake adapters | Open-source contracts | Deterministic demo | Automated tests | Automated synthetic tests | Fake simulation only |
-| ETABS 23 | Product assembly metadata + installed CHM | Passed: 23.2.0 | Passed: units, locked state, stories/base, patterns, cases, combinations | **Passed physical qualification**: perimeter frame pairs, horizontal slabs (opposite Local 3 ±Z), rotated/sloped roof shells, distributed frame loads, area uniform loads | No live writer |
+| ETABS 23 | Product assembly metadata + installed CHM | Passed: 23.2.0 | Passed: units, locked state, stories/base, patterns, cases, combinations | **Passed physical qualification**: perimeter frame pairs, horizontal slabs (opposite Local 3 ±Z), rotated/sloped roof shells, distributed frame loads, area uniform loads. Opt-in qualification via `scripts/qualify-csi.ps1`. | No live writer |
 | SAP2000 27 | Product assembly metadata + installed CHM | Pending: process not active during validation | Disconnected contract test passed | Pending physical qualification | No live writer |
 | SAP2000 20 | Legacy install detected | Unsupported by current gate | Unsupported | Unsupported | No live writer |
 | Other versions | Not inspected | Conservatively rejected | Unqualified | Unqualified | No live writer |
 
-## Physical qualification summary (Sprint 2.5)
+## Physical qualification hardening summary (Sprint 2.6)
+
+Sprint 2.6 separates automated CI-compatible test suites from opt-in physical CSI qualification:
+1. **Test categorization and isolation:**
+   - Physical qualification tests are decorated with `[Trait("Category", "PhysicalCsi")]`.
+   - Standard CI and test runs (`scripts/test.ps1`) execute with `--filter Category!=PhysicalCsi`.
+   - Physical tests require explicit opt-in via environment variable `CSI_PHYSICAL_QUALIFICATION=1` and enforce strict assertions; they never silently return or pass if ETABS is missing, disconnected, or has empty selections.
+2. **Strict physical qualification runner:**
+   - `scripts/qualify-csi.ps1` executes strict physical qualification against ETABS (or SAP2000).
+   - Queries running processes, installed assemblies, and baseline element fixtures.
+   - If not running, clearly reports `Inconclusive / Pending` and outputs diagnostic JSON report.
+3. **Independently reviewed baseline fixture:**
+   - Expected element IDs (Frames 49, 75, 50, 78; Areas 10, 18, 64, 84), global XYZ coordinates, opposite Local 3 vectors, and load values are recorded in `fixtures/physical-csi-reviewed-baseline.json`.
+4. **Explicit scan outcomes:**
+   - Introduced `CsiScanOutcome` enum: `Disconnected`, `Scanning`, `Succeeded`, `EmptySelection`, `PartialScan`, `Failed`.
+   - Status bar displays explicit status for empty, partial, and failed scans. Never reports `LIVE CSI SCAN SUCCEEDED` when element selection is empty or invalid.
+5. **Selection preservation and safety:**
+   - Qualification runner queries and preserves initial user element selections before modifying selection for test setup (`-SetupSelection`), and restores initial selection in a `finally` block.
+   - RealReadOnly mode keeps all engineering calculations, approvals, and CSI assignments disabled.
+
+## Physical qualification summary (Sprint 2.5 Baseline)
 
 Live ETABS read-only qualification was conducted locally on 2026-10-19 against an active ETABS 23.2.0 instance. The running model was locked, with native N/mm units.
 

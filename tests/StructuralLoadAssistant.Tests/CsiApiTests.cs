@@ -19,9 +19,37 @@ public sealed class CsiApiTests
     [Fact] public async Task Missing_optional_axes_preserve_geometry_as_unknown() {var s=new Session {MissingAxes=true};await using var a=new InstalledCsiReadAdapter(_=>s);await a.ConnectAsync(new(CsiProduct.Etabs,"unused"));var r=await a.RefreshSelectionAsync();Assert.Single(r.Model.Frames);var shell=Assert.Single(r.Model.Shells);Assert.Equal(default,shell.Local3);Assert.StartsWith("unknown-plane:",shell.RoofPlaneId);Assert.False(r.Capabilities.LocalAxes);Assert.Contains(r.Issues,x=>x.Code=="UNSUPPORTED_GETTER");}
     [Fact] public async Task Model_change_during_scan_invalidates_all_scope() {var s=new Session {ModelChanges=true};await using var a=new InstalledCsiReadAdapter(_=>s);await a.ConnectAsync(new(CsiProduct.Etabs,"unused"));var r=await a.RefreshSelectionAsync();Assert.Empty(r.Model.Frames);Assert.Empty(r.Model.Shells);Assert.Empty(r.Model.Patterns);Assert.Empty(r.Stories);Assert.Equal("",r.Model.ModelId);Assert.Equal("unknown",r.Units.NativeUnitId);Assert.Contains(r.Issues,x=>x.Code=="STALE_SCAN");}
     [Fact] public async Task Connect_read_and_release_share_owned_apartment() {var s=new Session();var a=new InstalledCsiReadAdapter(_=>s);await a.ConnectAsync(new(CsiProduct.Etabs,"unused"));await a.RefreshSelectionAsync();await a.DisposeAsync();Assert.Single(s.Threads);Assert.True(s.Disposed);if(OperatingSystem.IsWindows())Assert.Equal(ApartmentState.STA,s.Apartment);}
+    [Fact] public async Task ScanOutcome_ReportsEmptySelection_WhenNoObjectsSelected()
+    {
+        var s=new Session { EmptySelection = true }; await using var a=new InstalledCsiReadAdapter(_=>s);
+        await a.ConnectAsync(new(CsiProduct.Etabs,"unused"));
+        var scan = await a.RefreshSelectionAsync();
+        Assert.Equal(CsiScanOutcome.EmptySelection, scan.Outcome);
+    }
+    [Fact] public async Task ScanOutcome_ReportsPartialScan_WhenOnlyFramesSelected()
+    {
+        var s=new Session { FramesOnly = true }; await using var a=new InstalledCsiReadAdapter(_=>s);
+        await a.ConnectAsync(new(CsiProduct.Etabs,"unused"));
+        var scan = await a.RefreshSelectionAsync();
+        Assert.Equal(CsiScanOutcome.PartialScan, scan.Outcome);
+    }
+    [Fact] public async Task ScanOutcome_ReportsSucceeded_WhenBothFramesAndShellsSelected()
+    {
+        var s=new Session(); await using var a=new InstalledCsiReadAdapter(_=>s);
+        await a.ConnectAsync(new(CsiProduct.Etabs,"unused"));
+        var scan = await a.RefreshSelectionAsync();
+        Assert.Equal(CsiScanOutcome.Succeeded, scan.Outcome);
+    }
+    [Fact] public async Task ScanOutcome_ReportsFailed_WhenReadErrorOccurs()
+    {
+        var s=new Session { BadSelection = true }; await using var a=new InstalledCsiReadAdapter(_=>s);
+        await a.ConnectAsync(new(CsiProduct.Etabs,"unused"));
+        var scan = await a.RefreshSelectionAsync();
+        Assert.Equal(CsiScanOutcome.Failed, scan.Outcome);
+    }
     private sealed class Session(string version="23.0.0") : ICsiApiSession
     {
-        public bool BadSelection, BadCoordinate, Rotated, WithLoads, MissingStories, MissingAxes, ModelChanges; public int UnitId=10; private int filenameReads; public bool Disposed; public ApartmentState Apartment; public List<string> Calls=new(); public HashSet<int> Threads=new();
+        public bool BadSelection, BadCoordinate, Rotated, WithLoads, MissingStories, MissingAxes, ModelChanges, EmptySelection, FramesOnly; public int UnitId=10; private int filenameReads; public bool Disposed; public ApartmentState Apartment; public List<string> Calls=new(); public HashSet<int> Threads=new();
         public object? Read(string component,string getter,object?[] args) { Calls.Add(getter); Threads.Add(Environment.CurrentManagedThreadId); Apartment=Thread.CurrentThread.GetApartmentState();
             switch(getter) {
             case "GetVersion": args[0]=version; args[1]=23d; return 0;
@@ -30,7 +58,7 @@ public sealed class CsiApiTests
             case "GetModelIsLocked": return true;
             case "GetNameList": args[0]=0; args[1]=Array.Empty<string>(); return 0;
             case "GetStories": if(MissingStories)throw new NotSupportedException(); args[0]=0; args[1]=new[]{"Base"}; args[2]=new[]{0d}; args[3]=new[]{0d}; return 0;
-            case "GetSelected": if(BadSelection)return 7; args[0]=2; args[1]=new[]{2,5};args[2]=new[]{"F1","A1"};return 0;
+            case "GetSelected": if(BadSelection)return 7; if(EmptySelection){args[0]=0;args[1]=Array.Empty<int>();args[2]=Array.Empty<string>();return 0;} if(FramesOnly){args[0]=1;args[1]=new[]{2};args[2]=new[]{"F1"};return 0;} args[0]=2; args[1]=new[]{2,5};args[2]=new[]{"F1","A1"};return 0;
             case "GetPoints": if(component=="FrameObj"){args[1]="P1";args[2]="P2";}else{args[1]=3;args[2]=new[]{"P1","P2","P3"};}return 0;
             case "GetCoordCartesian": args[1]=BadCoordinate?double.NaN:((string)args[0]! =="P2"?2d:1d);args[2]=(string)args[0]! =="P3"?3d:2d;args[3]=(string)args[0]! =="P1"?3d:4d;return 0;
             case "GetTransformationMatrix": if(MissingAxes)throw new NotSupportedException();args[1]=Rotated?new[]{0d,0,1,0,1,0,-1,0,0}:new[]{1d,0,0,0,1,0,0,0,1};return 0;
