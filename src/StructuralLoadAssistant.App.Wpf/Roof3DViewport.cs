@@ -16,6 +16,7 @@
      private readonly ModelVisual3D lightVisual = new();
      private readonly ModelVisual3D meshVisual = new();
      private readonly ModelVisual3D arrowVisual = new();
+     private readonly ModelVisual3D zoneVisual = new();
      private readonly PerspectiveCamera camera = new();
  
      private Point lastMousePos;
@@ -44,6 +45,7 @@
          rootVisual.Children.Add(lightVisual);
          rootVisual.Children.Add(meshVisual);
          rootVisual.Children.Add(arrowVisual);
+         rootVisual.Children.Add(zoneVisual);
  
          SetupLights();
          UpdateCamera();
@@ -73,7 +75,7 @@
          UpdateCamera();
      }
  
-     public void UpdateGeometry(IReadOnlyList<RoofShell3D> shells, string selectedShellId, IReadOnlyDictionary<string, string>? shellZones = null)
+     public void UpdateGeometry(IReadOnlyList<RoofShell3D> shells, string selectedShellId, IReadOnlyDictionary<string, string>? shellZones = null,IReadOnlyCollection<string>? selectedShellIds=null)
      {
          modelToShellId.Clear();
          var meshGroup = new Model3DGroup();
@@ -133,7 +135,7 @@
                  foreach (int idx in indices) mesh.TriangleIndices.Add(idx);
              }
  
-             bool isSelected = shell.ShellId == selectedShellId;
+             bool isSelected = shell.ShellId == selectedShellId || selectedShellIds?.Contains(shell.ShellId)==true;
              Color baseColor = GetShellColor(shell, shellZones);
              if (isSelected)
              {
@@ -184,6 +186,22 @@
          UpdateCamera();
      }
  
+     public void UpdateZoneGeometry(IEnumerable<EditableRoofZone> zones,IReadOnlyList<RoofPlaneCoordinateSystem> planes,string? selectedId)
+     {
+         var group=new Model3DGroup();
+         foreach(var zone in zones)
+         {
+             var plane=planes.FirstOrDefault(p=>p.Id==zone.RoofPlaneId);
+             if(plane is null || ZonePolygonEngine.Validate(zone.Vertices) is not null)continue;
+             var points=zone.Vertices.Select(p=>plane.Unproject(p)-plane.Normal*-.008).ToImmutableArray();
+             var shell=new ShellGeometry(zone.Id,plane.Id,points,plane.Normal,default);
+             var processed=Roof3DGeometryProcessor.Process(shell,"zone-overlay");
+             var mesh=new MeshGeometry3D {Positions=new Point3DCollection(points.Select(p=>new Point3D(p.X,p.Y,p.Z))),TriangleIndices=new Int32Collection(processed.TriangleIndices)};
+             var material=new DiffuseMaterial(new SolidColorBrush(zone.Id==selectedId?Color.FromArgb(190,0,150,210):Color.FromArgb(100,30,180,130)));
+             group.Children.Add(new GeometryModel3D(mesh,material){BackMaterial=material});
+         }
+         zoneVisual.Content=group;
+     }
      private static Color GetShellColor(RoofShell3D shell, IReadOnlyDictionary<string, string>? shellZones)
      {
          if (shellZones != null && shellZones.TryGetValue(shell.ShellId, out var zone) && !string.IsNullOrWhiteSpace(zone))
@@ -274,9 +292,14 @@
      // Shared by pointer input and dispatcher-based WPF regression checks.
      internal string? SelectShellAt(Point viewportPoint)
      {
-         var hit = VisualTreeHelper.HitTest(viewport, viewportPoint) as RayMeshGeometry3DHitTestResult;
-         if (hit?.ModelHit is not GeometryModel3D geom || !modelToShellId.TryGetValue(geom, out var shellId)) return null;
-         ShellClicked?.Invoke(shellId);
+         string? shellId=null;
+         VisualTreeHelper.HitTest(viewport,null,result=>
+         {
+             if(result is RayMeshGeometry3DHitTestResult hit && hit.ModelHit is GeometryModel3D geom && modelToShellId.TryGetValue(geom,out var id))
+             {shellId=id;return HitTestResultBehavior.Stop;}
+             return HitTestResultBehavior.Continue;
+         },new PointHitTestParameters(viewportPoint));
+         if(shellId is not null)ShellClicked?.Invoke(shellId);
          return shellId;
      }
  

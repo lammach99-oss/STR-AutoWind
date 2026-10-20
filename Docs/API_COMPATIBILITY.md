@@ -1,5 +1,7 @@
 # CSI read-only compatibility — Sprint 2.6
 
+Sprint 3.2 adds a geometry-only UV editor over immutable selected-shell snapshots. Its WPF proof uses a labeled four-shell gable mock; no new physical CSI qualification is claimed. Existing ETABS 23.2.0 getter qualification below is historical; SAP2000 physical qualification remains pending. Polygon operations never call CSI setters, change selection, split areas or assign loads. Selection-scope differences require explicit merge review; changed coordinates/Local 3 on an existing saved shell are stale.
+
 | Product / adapter | Installed metadata/help inspected | Actual running connection | Actual definition scan | Selected geometry / axes / loads | Writes |
 |---|---|---|---|---|---|
 | Fake adapters | Open-source contracts | Deterministic demo | Automated tests | Automated synthetic tests | Fake simulation only |

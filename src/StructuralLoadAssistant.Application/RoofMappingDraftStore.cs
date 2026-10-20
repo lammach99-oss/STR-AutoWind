@@ -94,7 +94,8 @@
         string expectedProjectId,
         string expectedModelId,
         string expectedWindStateId,
-        string currentGeometryFingerprint)
+        string currentGeometryFingerprint,
+        IEnumerable<RoofShell3D>? currentShells = null)
     {
         ArgumentNullException.ThrowIfNull(draft);
         if (!string.Equals(draft.ProjectId, expectedProjectId, StringComparison.Ordinal) ||
@@ -102,6 +103,17 @@
             !string.Equals(draft.WindState.Id, expectedWindStateId, StringComparison.Ordinal))
         {
             throw new InvalidOperationException($"Draft identity mismatch: draft belongs to project '{draft.ProjectId}', model '{draft.ModelId}', state '{draft.WindState.Id}', but attempted restoration for '{expectedProjectId}', '{expectedModelId}', '{expectedWindStateId}'.");
+        }
+        if (!draft.SourceShells.IsDefaultOrEmpty && currentShells is not null)
+        {
+            var current = currentShells.ToArray();
+            var saved = draft.SourceShells.ToDictionary(s => s.ShellId, s => s.Fingerprint, StringComparer.Ordinal);
+            if (current.Any(s => saved.TryGetValue(s.ShellId, out var fingerprint) && fingerprint != s.GeometryFingerprint))
+                return GeometryReviewStatus.StaleNeedsRescan;
+            var previousScope = draft.SelectedScope.IsDefault ? saved.Keys : (IEnumerable<string>)draft.SelectedScope;
+            if (!previousScope.ToHashSet(StringComparer.Ordinal).SetEquals(current.Select(s => s.ShellId)))
+                return GeometryReviewStatus.ScopeReviewRequired;
+            return draft.ReviewStatus;
         }
         if (string.IsNullOrWhiteSpace(currentGeometryFingerprint) ||
             !string.Equals(draft.GeometryFingerprint, currentGeometryFingerprint, StringComparison.Ordinal))

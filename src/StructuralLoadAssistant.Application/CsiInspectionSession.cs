@@ -25,6 +25,35 @@ public sealed class CsiInspectionSession : IAsyncDisposable
     private readonly Dictionary<string, RoofMappingDraft> draftsByState = new(StringComparer.Ordinal);
     public ImmutableArray<EngineeringOverride> Local3Reviews { get; private set; } = [];
     public GeometryReviewStatus ReviewStatus { get; private set; } = GeometryReviewStatus.GeometryDraft;
+    private RoofMappingDraft? retainedDraft;
+    public RoofMappingDraft? PendingScopeDraft { get; private set; }
+    public void RecordZoneGeometryEdit(string beforeHash,string afterHash,string user,string reason)
+    {
+        if(string.IsNullOrWhiteSpace(user)||string.IsNullOrWhiteSpace(reason))throw new ArgumentException("Reviewer and reason required.");
+        Local3Reviews=Local3Reviews.Add(new("Roof","ZonePolygonGeometry",beforeHash,afterHash,user,DateTimeOffset.UtcNow,reason));
+    }
+    public void InvalidateGeometryReview()
+    {
+        ReviewStatus=GeometryReviewStatus.GeometryDraft;
+        RoofRows=RoofRows.Select(r=>Exclusions.Any(e=>e.ShellId==r.ShellId)?r:r with{Classification=ShellZoneClassification.Unmapped,ZoneId=null}).ToImmutableArray();
+        if(retainedDraft is { } old)retainedDraft=old with{ReviewStatus=GeometryReviewStatus.GeometryDraft,
+            Items=old.Items.Select(i=>old.Exclusions.Any(e=>e.ShellId==i.ShellId)?i:i with{Classification=ShellZoneClassification.Unmapped,ZoneId=null}).ToImmutableArray()};
+    }
+    public void SetIntersectionMappings(IEnumerable<ShellZoneIntersection> classifications,string stateId)
+    {
+        foreach(var result in classifications)
+        {
+            var row=RoofRows.First(r=>r.ShellId==result.ShellId);
+            var classification=result.Classification switch {
+                GeometryClassification.FullyInsideZone=>ShellZoneClassification.FullyInsideZone,
+                GeometryClassification.CrossesZoneBoundary=>ShellZoneClassification.CrossesZoneBoundary,
+                GeometryClassification.OverlappingZones=>ShellZoneClassification.OverlapsAnotherShell,
+                GeometryClassification.InvalidGeometry=>ShellZoneClassification.GeometryInvalid,
+                _=>ShellZoneClassification.Unmapped };
+            RoofRows=RoofRows.SetItem(RoofRows.IndexOf(row),row with{StateId=stateId,
+                ZoneId=result.Classification==GeometryClassification.ExcludedWithReason?"Excluded":string.Join(",",result.Coverages.Select(c=>c.ZoneId)),Classification=classification});
+        }
+    }
     public void SetGeometryZone(string shellId, string zoneId, string user, string reason)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
@@ -62,9 +91,14 @@ public sealed class CsiInspectionSession : IAsyncDisposable
         )).ToImmutableArray();
         int rev = explicitRevision ?? (draftsByState.TryGetValue(state.Id, out var prev) ? prev.Revision + 1 : 1);
         var draftId = RoofMappingDraftStore.DraftId(projectId, Scan?.Model.ModelId ?? "unknown", state.Id, rev);
+        var retainedItems = retainedDraft?.Items.Where(i => !items.Any(current => current.ShellId == i.ShellId)) ?? [];
+        var stamps = Shells3D.Select(s => new SourceShellFingerprint(s.ShellId, s.GeometryFingerprint)).ToImmutableArray();
+        var retainedStamps = retainedDraft is { SourceShells.IsDefault: false } old
+            ? old.SourceShells.Where(s => !stamps.Any(current => current.ShellId == s.ShellId)) : [];
         var draft = new RoofMappingDraft(
             draftId, rev, projectId, Scan?.Model.ModelId ?? "unknown", geomHash, state,
-            items, Exclusions, Local3Reviews, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, ReviewStatus);
+            items.AddRange(retainedItems), Exclusions, Local3Reviews, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, ReviewStatus,
+            stamps.AddRange(retainedStamps), Shells3D.Select(s => s.ShellId).ToImmutableArray());
         return draft;
     }
     public void RememberSavedDraft(RoofMappingDraft draft) => draftsByState[draft.WindState.Id] = draft;
@@ -74,14 +108,19 @@ public sealed class CsiInspectionSession : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(draft);
         var currentGeomHash = Scan?.Model.GeometryFingerprint ?? "";
         var reconciledStatus = RoofMappingDraftStore.ValidateAndReconcile(draft, expectedProjectId,
-            Scan?.Model.ModelId ?? "", expectedWindStateId, currentGeomHash);
+            Scan?.Model.ModelId ?? "", expectedWindStateId, currentGeomHash, Shells3D);
         ResetToCleanUnmappedDraft(expectedWindStateId);
+        if (reconciledStatus == GeometryReviewStatus.ScopeReviewRequired)
+        {
+            PendingScopeDraft = draft; ReviewStatus = reconciledStatus; return false;
+        }
         if (reconciledStatus == GeometryReviewStatus.StaleNeedsRescan)
         {
             ReviewStatus = GeometryReviewStatus.StaleNeedsRescan;
             return false;
         }
         ReviewStatus = draft.ReviewStatus;
+        retainedDraft = draft;
         draftsByState[draft.WindState.Id] = draft;
         Exclusions = draft.Exclusions;
         Local3Reviews = draft.Overrides;
@@ -101,6 +140,18 @@ public sealed class CsiInspectionSession : IAsyncDisposable
         RoofRows = rows.ToImmutableArray();
         return true;
     }
+    public void AcceptScopeMerge(string user, string reason)
+    {
+        if (PendingScopeDraft is not { } pending || string.IsNullOrWhiteSpace(user) || string.IsNullOrWhiteSpace(reason))
+            throw new InvalidOperationException("A pending selection-scope change, reviewer and reason are required.");
+        // Retain omitted objects and their mappings; the decision changes the selected scope only.
+        var reconciled = pending with { SelectedScope = Shells3D.Select(s => s.ShellId).ToImmutableArray() };
+        if (!RestoreDraft(reconciled, pending.ProjectId, pending.WindState.Id))
+            throw new InvalidOperationException("Scope merge cannot accept modified source geometry.");
+        ReviewStatus = GeometryReviewStatus.GeometryDraft;
+        Local3Reviews = Local3Reviews.Add(new("Roof", "ScopeMerge", string.Join(",", pending.SelectedScope),
+            string.Join(",", reconciled.SelectedScope), user, DateTimeOffset.UtcNow, reason));
+    }
     public void SetLocal3Review(string shellId,ManualLocal3Direction direction,string user,string reason)
     {
         ObjectDisposedException.ThrowIf(disposed,this);
@@ -114,7 +165,7 @@ public sealed class CsiInspectionSession : IAsyncDisposable
 
     public void ValidateGeometry()
     {
-        if (Scan is null || Shells3D.IsEmpty || Shells3D.Any(s => !s.IsValid) || ReviewStatus == GeometryReviewStatus.StaleNeedsRescan)
+        if (Scan is null || Shells3D.IsEmpty || Shells3D.Any(s => !s.IsValid) || ReviewStatus is GeometryReviewStatus.StaleNeedsRescan or GeometryReviewStatus.ScopeReviewRequired)
             throw new InvalidOperationException("Refresh and resolve invalid or stale shell geometry before geometry validation.");
         ReviewStatus = GeometryReviewStatus.GeometryValidated;
     }
@@ -195,10 +246,11 @@ public sealed class CsiInspectionSession : IAsyncDisposable
         catch(Exception){if(current==Volatile.Read(ref revision)&&!disposed){ClearSelection();Outcome=CsiScanOutcome.Failed;Issues=[new("RefreshFailed","RefreshSelection","Selection could not be read. Stale geometry and reviews have been cleared; refresh again.")];}}
     }
     private static bool IsUnitNormal(Vec3 vector) => double.IsFinite(vector.X)&&double.IsFinite(vector.Y)&&double.IsFinite(vector.Z)&&Math.Abs(vector.Length-1)<=1e-6;
-    private void ClearSelection(){Scan=null;Facade=null;Roof=null;Shells3D=[];RoofRows=[];Local3Reviews=[];Exclusions=[];draftsByState.Clear();ReviewStatus=GeometryReviewStatus.GeometryDraft;Issues=[];Outcome=Connection?.Connected==true?CsiScanOutcome.Disconnected:CsiScanOutcome.Disconnected;}
+    private void ClearSelection(){retainedDraft=null;PendingScopeDraft=null;Scan=null;Facade=null;Roof=null;Shells3D=[];RoofRows=[];Local3Reviews=[];Exclusions=[];draftsByState.Clear();ReviewStatus=GeometryReviewStatus.GeometryDraft;Issues=[];Outcome=CsiScanOutcome.Disconnected;}
     public void Clear(){Interlocked.Increment(ref revision);Connection=null;ClearSelection();}
     public void ResetToCleanUnmappedDraft(string windStateId)
     {
+        retainedDraft = null; PendingScopeDraft = null;
         var shells = Scan?.Model.Shells ?? ImmutableArray<ShellGeometry>.Empty;
         RoofRows = shells.Select(s => new RoofShellMapping(s.Id, windStateId, null, ShellZoneClassification.Unmapped)).ToImmutableArray();
         Exclusions = [];

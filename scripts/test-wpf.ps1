@@ -37,6 +37,9 @@ try {
     # The first OS process must have exited before reopening its exact database.
     $database = Join-Path $runRoot 'roof-initial/demo.db'
     Invoke-Smoke 'roof-reopened' @('--smoke-roof-workflow', '--reopen', '--database', $database)
+    Invoke-Smoke 'zone-initial' @('--smoke-zone-editor')
+    $zoneDatabase=Join-Path $runRoot 'zone-initial/demo.db'
+    Invoke-Smoke 'zone-reopened' @('--smoke-zone-editor','--reopen','--database',$zoneDatabase)
     $results | ConvertTo-Json | Set-Content (Join-Path $runRoot 'process-results.json')
     Write-Output "WPF evidence: $runRoot"
 }

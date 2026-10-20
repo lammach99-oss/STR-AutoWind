@@ -19,8 +19,9 @@ public static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        var zoneSmoke=args.Contains("--smoke-zone-editor",StringComparer.Ordinal);
         var workflowSmoke = args.Contains("--smoke-roof-workflow", StringComparer.Ordinal);
-        var readOnlySmoke = workflowSmoke || args.Contains("--smoke-readonly", StringComparer.Ordinal);
+        var readOnlySmoke = zoneSmoke || workflowSmoke || args.Contains("--smoke-readonly", StringComparer.Ordinal);
         var smoke = readOnlySmoke || args.Contains("--smoke", StringComparer.Ordinal);
         string? Option(string name) { var index = Array.IndexOf(args, name); return index >= 0 && index + 1 < args.Length ? args[index + 1] : null; }
         var output = Path.GetFullPath(Option("--smoke-output") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StructuralLoadAssistant", "smoke"));
@@ -28,7 +29,7 @@ public static class Program
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(database))!);
         if (smoke) Directory.CreateDirectory(output);
         var services = new ServiceCollection();
-        ICsiSessionReadAdapter readAdapter = readOnlySmoke ? new MockInspectionAdapter() : new InstalledCsiReadAdapter();
+        ICsiSessionReadAdapter readAdapter = readOnlySmoke ? new MockInspectionAdapter{UseGable=zoneSmoke} : new InstalledCsiReadAdapter();
         var inspection = new CsiInspectionSession(readAdapter);
         services.AddLogging(builder => builder.AddDebug());
         services.AddSingleton(inspection);
@@ -53,7 +54,8 @@ public static class Program
                     var vm = provider.GetRequiredService<MainViewModel>();
                     if (readOnlySmoke)
                     {
-                        if (workflowSmoke) await window.RunRoofWorkflowSmokeAsync(args.Contains("--reopen"), () => ((MockInspectionAdapter)readAdapter).ChangedGeometry = true);
+                        if(zoneSmoke)await window.RunZoneEditorSmokeAsync(args.Contains("--reopen"),()=>((MockInspectionAdapter)readAdapter).ChangedGeometry=true,output);
+                        else if (workflowSmoke) await window.RunRoofWorkflowSmokeAsync(args.Contains("--reopen"), () => ((MockInspectionAdapter)readAdapter).ChangedGeometry = true);
                         else await vm.SmokeReadOnlyAsync();
                     }
                     else await vm.SmokeAsync();
@@ -108,6 +110,12 @@ public static class Program
     private sealed class MockInspectionAdapter : ICsiSessionReadAdapter
     {
         public bool ChangedGeometry { get; set; }
+        public bool UseGable {get;init;}
+        private CsiModelSnapshot ActiveModel=>!UseGable?Model:Model with{GeometryFingerprint="mock-gable",Shells=[
+            new("MOCK-A1","MOCK-ROOF",[new(0,0,6),new(2,0,7),new(2,4,7),new(0,4,6)],new(-.447213595,0,.894427191),default),
+            new("MOCK-A2","MOCK-ROOF",[new(2,0,7),new(4,0,8),new(4,4,8),new(2,4,7)],new(-.447213595,0,.894427191),default),
+            new("MOCK-B1","MOCK-ROOF",[new(4,0,8),new(6,0,7),new(6,4,7),new(4,4,8)],new(.447213595,0,.894427191),default),
+            new("MOCK-B2","MOCK-ROOF",[new(6,0,7),new(8,0,6),new(8,4,6),new(6,4,7)],new(.447213595,0,.894427191),default)]};
         private static readonly CsiCapabilities Capabilities = new(true, true, true, true);
         private static readonly CsiModelSnapshot Model = new("mock-scan", "MOCK LIVE ADAPTER / not actual CSI", "MOCK LIVE ADAPTER", "contract-test 1", "mock-geometry", "mock-loads",
             ["MOCK_EXISTING_PATTERN"], ["MOCK_ANALYSIS_CASE"], ["MOCK_COMBINATION"],
@@ -116,7 +124,7 @@ public static class Program
              new("MOCK-A2", "MOCK-ROOF", [new(5, 0, 6), new(8, 0, 6), new(8, 4, 7), new(5, 4, 7)], new(0, -.242535625, .9701425), default)],
             [new("MOCK-A1", "MOCK_EXISTING_PATTERN", "AreaUniform/Local3", -450, "MOCK existing assignment (not generated)")]);
         public Task<CsiConnectionResult> ConnectAsync(CsiConnectionOptions options, CancellationToken cancellationToken = default) => Task.FromResult(new CsiConnectionResult(true, "MOCK LIVE ADAPTER / NOT actual CSI", "getter contract-test 1", Capabilities, []));
-        public Task<CsiReadScan> RefreshSelectionAsync(CancellationToken cancellationToken = default) => Task.FromResult(new CsiReadScan(ChangedGeometry ? Model with { GeometryFingerprint = "mock-changed-geometry", Shells = Model.Shells.SetItem(0, Model.Shells[0] with { Vertices = Model.Shells[0].Vertices.Select(v => new Vec3(v.X, v.Y, v.Z + 1)).ToImmutableArray() }) } : Model, new("N_m_C", 1, 1, "MOCK native N, m; geometry converted to SI"), true, Capabilities,
+        public Task<CsiReadScan> RefreshSelectionAsync(CancellationToken cancellationToken = default) => Task.FromResult(new CsiReadScan(ChangedGeometry ? ActiveModel with { GeometryFingerprint = "mock-changed-geometry", Shells = ActiveModel.Shells.SetItem(0, ActiveModel.Shells[0] with { Vertices = ActiveModel.Shells[0].Vertices.Select(v => new Vec3(v.X, v.Y, v.Z + 1)).ToImmutableArray() }) } : ActiveModel, new("N_m_C", 1, 1, "MOCK native N, m; geometry converted to SI"), true, Capabilities,
             [new("MOCK-L1", 3, 3), new("MOCK-L2", 6, 3)],
             [new("MOCK-A1", "MOCK-ROOF", null, "Unknown / no verified physical outward normal"), new("MOCK-A2", "MOCK-ROOF", null, "Unknown / no verified physical outward normal")],
             [new("MOCK_SOURCE", "Smoke", "Dedicated synthetic getter-contract geometry; never attached to actual CSI.", CsiIssueSeverity.Information)]));

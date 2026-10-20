@@ -16,10 +16,11 @@ public sealed partial class MainWindow : Window
     private readonly MainViewModel vm;
     private readonly Canvas roof = new() { Width = 540, Height = 420, Background = Brushes.WhiteSmoke };
     private readonly Roof3DViewport roof3D = new() { Width = 540, Height = 420 };
+    private readonly RoofZoneEditor zoneEditor;
     public TabControl Tabs { get; } = new();
     public MainWindow(MainViewModel viewModel)
     {
-        vm = viewModel; DataContext = vm;
+        vm = viewModel; DataContext = vm; zoneEditor=new(vm);
         Title = "Structural Load Assistant | Demo / CSI Read-Only"; Width = 1380; Height = 920;
         MinWidth = 1000; MinHeight = 700; Background = Brush("#EEF2F6");
         FontFamily = new FontFamily("Segoe UI"); FontSize = 14;
@@ -33,6 +34,7 @@ public sealed partial class MainWindow : Window
         AddPage("Project", ProjectPage()); AddPage("Wind", WindPage()); AddPage("CSI", CsiPage());
         AddPage("Facade", FacadePage()); AddPage("Roof", RoofPage()); AddPage("Wall", WallPage()); AddPage("Report", ReportPage());
         roof3D.ShellClicked += id => vm.SelectShell(id);
+        zoneEditor.SelectionChanged+=DrawRoof;
         vm.Refreshed += DrawRoof; DrawRoof();
         Closing += (_, e) =>
         {
@@ -195,6 +197,8 @@ public sealed partial class MainWindow : Window
         var tab2D = new TabItem { Header = "2D Plan View", Content = roof };
         var tab3D = new TabItem { Header = "3D Roof Orbit", Content = roof3D };
         viewTabs.Items.Add(tab2D); viewTabs.Items.Add(tab3D);
+        p.Children.Add(new TextBlock{Text="Interactive surface geometry editor • no pressures or CSI mutations",FontSize=18,Margin=new Thickness(0,12,0,4)});
+        var editorTabs=new TabControl();editorTabs.Items.Add(new TabItem{Header="Surface UV Zone Polygons",Content=zoneEditor});p.Children.Add(editorTabs);
         var viewPanel = new StackPanel();
         viewPanel.Children.Add(viewTabs);
         var viewControls = Row(
@@ -220,7 +224,8 @@ public sealed partial class MainWindow : Window
     {
         roof.Children.Clear();
         roof3D.ShowLocal3Arrows = vm.ShowLocal3Arrows;
-        roof3D.UpdateGeometry(vm.DisplayShells3D, vm.SelectedShell, vm.DisplayShellZones);
+        roof3D.UpdateGeometry(vm.DisplayShells3D, vm.SelectedShell, vm.DisplayShellZones,zoneEditor.SelectedShellIds);
+        roof3D.UpdateZoneGeometry(vm.ZoneEditor.Zones,vm.ZoneEditor.Planes,zoneEditor.SelectedZoneId);
         if (!vm.IsDemo) { DrawRealRoof(); return; }
         foreach (var zone in vm.Session.Zones)
         {

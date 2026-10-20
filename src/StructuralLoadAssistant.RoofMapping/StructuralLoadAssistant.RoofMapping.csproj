@@ -1,3 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk"><ItemGroup>
   <ProjectReference Include="..\StructuralLoadAssistant.Domain\StructuralLoadAssistant.Domain.csproj" />
+  <PackageReference Include="NetTopologySuite" Version="[2.6.0]" />
 </ItemGroup><PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>

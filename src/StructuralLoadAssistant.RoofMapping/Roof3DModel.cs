@@ -5,7 +5,7 @@
  
  public enum OutwardNormalStatus { Unknown, ReadFromCsi, EngineerVerified, InconsistentWithLocal3 }
  
- public enum GeometryReviewStatus { GeometryDraft, GeometryValidated, GeometryReviewed, StaleNeedsRescan, PressureMappingUnavailable }
+ public enum GeometryReviewStatus { GeometryDraft, GeometryValidated, GeometryReviewed, StaleNeedsRescan, PressureMappingUnavailable, ScopeReviewRequired }
  
  public sealed record RoofShell3D(
      string ShellId,
@@ -40,6 +40,7 @@
      DateTimeOffset? ReviewedAt = null
  );
  
+ public sealed record SourceShellFingerprint(string ShellId, string Fingerprint);
  public sealed record RoofMappingDraft(
      string Id,
      int Revision,
@@ -52,6 +53,14 @@
      ImmutableArray<EngineeringOverride> Overrides,
      DateTimeOffset CreatedAt,
      DateTimeOffset UpdatedAt,
-     GeometryReviewStatus ReviewStatus = GeometryReviewStatus.GeometryDraft
- );
+     GeometryReviewStatus ReviewStatus = GeometryReviewStatus.GeometryDraft,
+     ImmutableArray<SourceShellFingerprint> SourceShells = default,
+     ImmutableArray<string> SelectedScope = default,
+     ImmutableArray<EditableRoofZone> ZonePolygons = default
+ )
+ {
+     public ImmutableArray<SourceShellFingerprint> SourceShells { get; init; }=SourceShells.IsDefault?[]:SourceShells;
+     public ImmutableArray<string> SelectedScope { get; init; }=SelectedScope.IsDefault?[]:SelectedScope;
+     public ImmutableArray<EditableRoofZone> ZonePolygons { get; init; }=ZonePolygons.IsDefault?[]:ZonePolygons;
+ }
  

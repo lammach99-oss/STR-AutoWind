@@ -1,4 +1,12 @@
 # Executed qualification
+- [x] Sprint 3.2: XYZ/UV round trips; sloped/rotated/flat frames; stable coordinates across coplanar selection changes.
+- [x] Concave/convex intersections; full/crossing/overlapping/unmapped classifications; tolerances, invalid/degenerate polygons.
+- [x] Footprint union and explicit disconnected/holed rejection; edge snapping; undo/redo with audit and monotonic revisions.
+- [x] SQLite polygon/audit restart, legacy snapshot compatibility and expected-base revision rejection.
+- [x] Selection scope review and explicit merge retain omitted mapping/exclusion history; changed source shell is stale.
+- [x] Actual WPF gable editor controls/vertex drag/crossing correction and exact polygon hashes across two processes.
+- [x] Mock/live labels and disabled pressure approval/production assignment gates remain in place.
+- [ ] Physical ETABS/SAP editor workflow qualification (mock regression is separate).
 - [x] Sprint 3.1.1: 156 deterministic tests pass; physical CSI tests remain opt-in and excluded.
 - [x] Pending dropdown values do not change active draft Save identity.
 - [x] Actual WPF zone control enabled for valid mock read-only geometry; engineering controls disabled.

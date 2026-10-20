@@ -1,5 +1,24 @@
 # Implementation status — 2026-10-20
 
+## Sprint 3.2: Interactive roof zone geometry
+
+Geometry-only roof editing now uses plane-local surface meters with a deterministic orthonormal frame and global XYZ inverse transform. Coplanar shells share a plane; separate slopes/elevations remain separate even with overlapping XY projections. Plane normal, CSI Local 3 and physical outward normal remain distinct.
+
+- Persistent editable polygons include identity, label, plane/state, UV coordinates, source fingerprint, revision, notes, timestamps and edit audit. Legacy label-only snapshots remain readable and immutable. Existing SQLite expected-base concurrency is unchanged.
+- Surface editor supports polygon drawing/finish/cancel, shell multi-selection, footprint union, zone selection, vertex and whole-polygon drag, insert/delete vertices, edge/vertex snapping within 0.10 m, zoom/pan/reset, undo/redo and metadata editing. Coordinates and areas are displayed in meters/m²; 3D overlays follow the selected zone and shell scope.
+- NetTopologySuite 2.6.0 performs validated simple-polygon intersections and union. Each shell reports true surface area, per-zone intersection and coverage, full containment, crossing/NeedsSplitInCSI, overlapping zones, invalid geometry, unmapped or audited exclusion. Labels alone never establish polygon containment. Absolute area tolerance is 1e-6 m² and relative tolerance 1e-7 of shell area.
+- Geometry edits invalidate review. Intersection validation and engineer geometry review remain separate; no pressure dataset, engineering approval or CSI assignment is enabled.
+- Per-shell source fingerprints distinguish changed selection scope from changed existing geometry. Scope differences block editing/saving until an explicit reviewer/reason merge. Omitted mappings, exclusions and polygon data are retained; no CSI selection or model is modified by the editor.
+- WPF acceptance uses a clearly labeled divided gable mock with four shells. Actual vertex-drag events produce a crossing, Undo restores full containment, independent WX+/WY− geometries survive separate OS processes, exact coordinate/identity hashes match after restart, and changed source geometry blocks reuse. Windows CI runs the same six-process smoke script.
+
+Geometry limits: zones represent one simple polygon without holes. Disconnected or holed shell unions are rejected explicitly. Curved/nonplanar shells are invalid; no auto-repair, mesh splitting or normative zone generation occurs. Planarity tolerance is 1e-6 m; near-coincident roof planes require engineer inspection. The legacy XY view remains a global projection; the UV editor supplies surface geometry for sloped roofs. Session undo history restarts on state/source reload, while polygon audit history persists.
+
+Dependency review: pinned NTS package is BSD-style with bundled third-party notices, retained in `NETTOPOLOGYSUITE_LICENSE.md`; it adds no vendor binary. Historical ETABS physical getter qualification is unchanged and was not rerun in this sprint; SAP2000 physical qualification remains pending. New editor proof is mock-only.
+
+Verification: locked restore, Debug/Release builds with zero warnings/errors; **184 automated tests, zero failed/skipped**, excluding opt-in PhysicalCsi. All six WPF smoke processes pass, including exact polygon restart hashes. Independent geometry and integration review findings were reproduced with regressions and corrected (stable UV axes, invalid polygon rendering, omitted-shell invalidation and undo audit lineage). Screenshots and process evidence remain under ignored `artifacts/sprint32`; CI uploads synthetic PNG/JSON diagnostics without databases.
+
+Next normative integration: obtain licensed, independently reviewed ASCE 7-22 and AS/NZS 1170.2:2021 zone definitions and applicability inputs; add versioned provenance and source clause references; map verified definitions into this plane-local polygon contract with reviewed reference geometry tests. Geometry validation must remain separate from normative pressure validation and engineering approval. No coefficients are supplied by this sprint.
+
 ## Sprint 3.1.1: Final roof workflow fixes
 
 This section supersedes earlier Sprint 3.1 acceptance claims. Verification uses explicitly labeled mock read-only geometry; it does not physically qualify ETABS or SAP2000.

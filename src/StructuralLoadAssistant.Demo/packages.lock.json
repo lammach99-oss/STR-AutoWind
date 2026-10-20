@@ -19,6 +19,11 @@
           "SQLitePCLRaw.core": "2.1.6"
         }
       },
+      "NetTopologySuite": {
+        "type": "Transitive",
+        "resolved": "2.6.0",
+        "contentHash": "1B1OTacTd4QtFyBeuIOcThwSSLUdRZU3bSFIwM8vk36XiZlBMi3K36u74e4OqwwHRHUuJC1PhbDx4hyI266X1Q=="
+      },
       "SQLitePCLRaw.bundle_e_sqlite3": {
         "type": "Transitive",
         "resolved": "2.1.6",
@@ -109,6 +114,7 @@
       "structuralloadassistant.roofmapping": {
         "type": "Project",
         "dependencies": {
+          "NetTopologySuite": "[2.6.0, 2.6.0]",
           "StructuralLoadAssistant.Domain": "[1.0.0, )"
         }
       }

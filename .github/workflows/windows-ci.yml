@@ -24,7 +24,7 @@ jobs:
         run: dotnet build StructuralLoadAssistant.sln --configuration Release --no-restore -m:1 -nr:false
       - name: Run automated tests
         run: dotnet test tests/StructuralLoadAssistant.Tests --configuration Release --no-build --no-restore -m:1 -nr:false --filter "Category!=PhysicalCsi" --logger "trx;LogFileName=windows-tests.trx" --results-directory artifacts/ci
-      - name: WPF dual-mode smoke and two-process roof workflow
+      - name: WPF dual-mode smoke and roof polygon restart workflows
         shell: pwsh
         run: ./scripts/test-wpf.ps1 -Configuration Release -OutputRoot artifacts/wpf
       - name: Upload test diagnostics

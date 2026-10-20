@@ -143,7 +143,8 @@ public class CsiInspectionTests
         Assert.Throws<InvalidOperationException>(() => session.RestoreDraft(draft, "other-project", state.Id));
         Assert.Throws<InvalidOperationException>(() => session.RestoreDraft(draft with { ModelId = "other-model" }, "P", state.Id));
         Assert.Throws<InvalidOperationException>(() => session.RestoreDraft(draft, "P", "other-state"));
-        Assert.False(session.RestoreDraft(draft with { GeometryFingerprint = "changed" }, "P", state.Id));
+        Assert.False(session.RestoreDraft(draft with { GeometryFingerprint = "changed",
+            SourceShells = [new("R", "changed")] }, "P", state.Id));
         Assert.Equal(GeometryReviewStatus.StaleNeedsRescan, session.ReviewStatus);
         Assert.All(session.RoofRows, row => Assert.Null(row.ZoneId));
         Assert.Empty(session.Local3Reviews);

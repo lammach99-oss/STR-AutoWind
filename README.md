@@ -140,6 +140,10 @@ Run the WPF acceptance checks after building on Windows:
 ./scripts/test-wpf.ps1 -Configuration Release
 ```
 
+In **RealReadOnly → Roof → Surface UV Zone Polygons**, select a roof plane, multi-select shells and choose **Create Zone from Selected Shells**, or draw vertices with **Create Zone Polygon** and **Finish Polygon**. Drag vertex handles or the center handle; Shift snaps within 0.10 m. Use **Validate zone intersections** to inspect surface coverage and `NeedsSplitInCSI`, then review geometry separately and save the active wind-state draft. Zone labels are unverified engineer definitions; pressure approval and live writes remain disabled. Scope changes require an explicit reviewer/reason merge.
+
+The acceptance script also runs a divided-gable editor and a separate reopened process, comparing exact WX+/WY− polygon-coordinate hashes. Its PNG evidence includes actual editing, crossing classification and the 3D roof. Polygon operations use pinned NetTopologySuite 2.6.0; [upstream license and third-party notices](Docs/NETTOPOLOGYSUITE_LICENSE.md) are included.
+
 The script runs demo and labeled mock read-only smoke tests, then closes and reopens separate WPF processes against the same disposable database to verify independent wind-state drafts. It also checks actual zone controls, 2D/3D selection, save-before-switch/refresh/disconnect/close, stale geometry and disabled engineering operations. Evidence is written under `artifacts/wpf/<run-id>`; no installed CSI process is accessed. Physical CSI qualification remains a separate opt-in workflow.
 
 After cloning the verified GitHub destination, work from the repository folder:
