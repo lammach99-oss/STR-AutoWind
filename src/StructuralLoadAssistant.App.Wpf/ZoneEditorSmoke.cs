@@ -58,6 +58,7 @@ public sealed partial class MainWindow
             Click("Create Zone from Selected Shells");
             Check(vm.ZoneEditor.Zones.Length==2,"two actual zone polygons");
             zoneEditor.SelectZone(vm.ZoneEditor.Zones[0].Id); await Idle();
+            Check(zoneEditor.ZoneLabelInput.Text=="WX Edge","polygon selection synchronizes editable label");
             var original=vm.ZoneEditor.Zones[0].Vertices;
             var first=zoneEditor.Surface.Children.OfType<Thumb>().Single(t=>t.Tag is int index&&index==0);
             var opposite=zoneEditor.Surface.Children.OfType<Thumb>().Single(t=>t.Tag is int index&&index==2);

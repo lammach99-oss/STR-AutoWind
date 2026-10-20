@@ -92,7 +92,14 @@ public sealed class RoofZoneEditor : DockPanel
     private void RequireEditable(){if(!vm.ZoneEditor.Editable)throw new InvalidOperationException("Connect current valid read-only geometry; resolve stale/scope review first.");}
     public void ShowEditor(){if(Parent is TabItem item&&item.Parent is TabControl tabs)tabs.SelectedItem=item;}
     public void SelectPlaneForShell(string id){planes.SelectedItem=vm.ZoneEditor.PlaneForShell(id);RefreshLists();ResetView();}
-    public void SelectZone(string id){selectedZone=id;RefreshLists();Redraw();SelectionChanged?.Invoke();}
+    public void SelectZone(string id)
+    {
+        var zone=vm.ZoneEditor.Zones.Single(z=>z.Id==id);
+        if((planes.SelectedItem as RoofPlaneCoordinateSystem)?.Id!=zone.RoofPlaneId)
+            planes.SelectedItem=vm.ZoneEditor.Planes.Single(p=>p.Id==zone.RoofPlaneId);
+        selectedZone=id;selectedVertex=0;label.Text=zone.Label;notes.Text=zone.Notes??"";
+        RefreshLists();Redraw();SelectionChanged?.Invoke();
+    }
     private void RefreshEditor()
     {
         var id=(planes.SelectedItem as RoofPlaneCoordinateSystem)?.Id;
