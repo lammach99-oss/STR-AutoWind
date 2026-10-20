@@ -37,7 +37,7 @@ public sealed class CsiInspectionSession : IAsyncDisposable
             : (zoneId.Contains("Cross", StringComparison.OrdinalIgnoreCase) ? ShellZoneClassification.CrossesZoneBoundary : ShellZoneClassification.NotGeometricallyValidated);
         RoofRows = RoofRows.SetItem(RoofRows.IndexOf(row), row with { ZoneId = zoneId, Classification = classification });
         Local3Reviews = Local3Reviews.Add(new(shellId, "GeometryZone", row.ZoneId ?? "", zoneId, user, DateTimeOffset.UtcNow, reason));
-        ReviewStatus = GeometryReviewStatus.GeometryReviewed;
+        ReviewStatus = GeometryReviewStatus.GeometryDraft;
     }
     public void ExcludeShell(string shellId, string user, string reason)
     {
@@ -48,7 +48,7 @@ public sealed class CsiInspectionSession : IAsyncDisposable
             ?? throw new ArgumentException("Shell is not in the current selection.", nameof(shellId));
         Exclusions = Exclusions.RemoveAll(e => e.ShellId == shellId).Add(new(shellId, user, reason, DateTimeOffset.UtcNow));
         RoofRows = RoofRows.SetItem(RoofRows.IndexOf(row), row with { ZoneId = "Excluded", Classification = ShellZoneClassification.Unmapped });
-        ReviewStatus = GeometryReviewStatus.GeometryReviewed;
+        ReviewStatus = GeometryReviewStatus.GeometryDraft;
     }
     public RoofMappingDraft CreateDraft(string projectId, WindState state, int? explicitRevision = null)
     {
@@ -65,14 +65,17 @@ public sealed class CsiInspectionSession : IAsyncDisposable
         var draft = new RoofMappingDraft(
             draftId, rev, projectId, Scan?.Model.ModelId ?? "unknown", geomHash, state,
             items, Exclusions, Local3Reviews, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, ReviewStatus);
-        draftsByState[state.Id] = draft;
         return draft;
     }
-    public bool RestoreDraft(RoofMappingDraft draft)
+    public void RememberSavedDraft(RoofMappingDraft draft) => draftsByState[draft.WindState.Id] = draft;
+
+    public bool RestoreDraft(RoofMappingDraft draft, string expectedProjectId, string expectedWindStateId)
     {
         ArgumentNullException.ThrowIfNull(draft);
         var currentGeomHash = Scan?.Model.GeometryFingerprint ?? "";
-        var reconciledStatus = RoofMappingDraftStore.ReconcileGeometry(draft, currentGeomHash);
+        var reconciledStatus = RoofMappingDraftStore.ValidateAndReconcile(draft, expectedProjectId,
+            Scan?.Model.ModelId ?? "", expectedWindStateId, currentGeomHash);
+        ResetToCleanUnmappedDraft(expectedWindStateId);
         if (reconciledStatus == GeometryReviewStatus.StaleNeedsRescan)
         {
             ReviewStatus = GeometryReviewStatus.StaleNeedsRescan;
@@ -106,6 +109,22 @@ public sealed class CsiInspectionSession : IAsyncDisposable
         var row=RoofRows.FirstOrDefault(r=>r.ShellId==shellId)??throw new ArgumentException("Shell is not in the current selection.",nameof(shellId));
         RoofRows=RoofRows.SetItem(RoofRows.IndexOf(row),row with{ManualDirection=direction});
         Local3Reviews=Local3Reviews.Add(new(shellId,"Local3Review",row.ManualDirection.ToString(),direction.ToString(),user,DateTimeOffset.UtcNow,reason));
+        ReviewStatus = GeometryReviewStatus.GeometryDraft;
+    }
+
+    public void ValidateGeometry()
+    {
+        if (Scan is null || Shells3D.IsEmpty || Shells3D.Any(s => !s.IsValid) || ReviewStatus == GeometryReviewStatus.StaleNeedsRescan)
+            throw new InvalidOperationException("Refresh and resolve invalid or stale shell geometry before geometry validation.");
+        ReviewStatus = GeometryReviewStatus.GeometryValidated;
+    }
+
+    public void CompleteGeometryReview(string user, string reason)
+    {
+        if (ReviewStatus != GeometryReviewStatus.GeometryValidated || string.IsNullOrWhiteSpace(user) || string.IsNullOrWhiteSpace(reason))
+            throw new InvalidOperationException("Explicit geometry validation, reviewer and reason are required. Pressure approval remains unavailable.");
+        Local3Reviews = Local3Reviews.Add(new("Roof", "GeometryReview", "GeometryValidated", "GeometryReviewed", user, DateTimeOffset.UtcNow, reason));
+        ReviewStatus = GeometryReviewStatus.GeometryReviewed;
     }
     public async Task ConnectAsync(CsiConnectionOptions options,CancellationToken cancellationToken=default)
     {

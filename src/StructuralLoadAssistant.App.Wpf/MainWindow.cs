@@ -11,7 +11,7 @@ using StructuralLoadAssistant.RoofMapping;
 
 namespace StructuralLoadAssistant.App.Wpf;
 
-public sealed class MainWindow : Window
+public sealed partial class MainWindow : Window
 {
     private readonly MainViewModel vm;
     private readonly Canvas roof = new() { Width = 540, Height = 420, Background = Brushes.WhiteSmoke };
@@ -34,6 +34,11 @@ public sealed class MainWindow : Window
         AddPage("Facade", FacadePage()); AddPage("Roof", RoofPage()); AddPage("Wall", WallPage()); AddPage("Report", ReportPage());
         roof3D.ShellClicked += id => vm.SelectShell(id);
         vm.Refreshed += DrawRoof; DrawRoof();
+        Closing += (_, e) =>
+        {
+            try { vm.ProtectUnsavedDraft(); }
+            catch (Exception error) { e.Cancel = true; vm.Run(() => throw new InvalidOperationException("Close blocked: " + error.Message)); }
+        };
     }
     public void AssertReadOnlyVisualIsolation()
     {
@@ -139,7 +144,7 @@ public sealed class MainWindow : Window
             if (System.IO.Directory.Exists(installed)) dialog.InitialDirectory = installed;
             if (dialog.ShowDialog(this) == true) { vm.AssemblyPath = dialog.FileName; vm.Refresh(); }
         }, false)));
-        p.Children.Add(Row(Button("Attach existing process (read-only)", () => _ = vm.RunAsync(vm.ConnectReal), false), Button("Refresh current CSI selection", () => _ = vm.RunAsync(vm.RefreshReal), false), Button("Rescan demo fixture", () => vm.LoadFixture())));
+        p.Children.Add(Row(Button("Attach existing process (read-only)", () => _ = vm.RunAsync(vm.ConnectReal), false), Button("Refresh current CSI selection", () => _ = vm.RunAsync(vm.RefreshReal), false), Button("Disconnect read-only", vm.DisconnectReal, false), Button("Rescan demo fixture", () => vm.LoadFixture())));
         p.Children.Add(BoundText("CsiSummary"));
         p.Children.Add(Text("Issues / unsupported reads / return codes")); p.Children.Add(Table("ReadIssues", 95));
         p.Children.Add(Row(DefinitionList("PATTERNS", "Patterns"), DefinitionList("Analysis CASES", "Cases"), DefinitionList("COMBINATIONS", "Combinations")));
@@ -197,7 +202,12 @@ public sealed class MainWindow : Window
             Check("Show Local 3 Arrows (3D)", "ShowLocal3Arrows"));
         viewPanel.Children.Add(viewControls);
         grid.Children.Add(viewPanel); var inspector = new StackPanel { Margin = new Thickness(16, 0, 0, 0) }; Grid.SetColumn(inspector, 1); grid.Children.Add(inspector);
-        inspector.Children.Add(BoundText("ShellSummary")); inspector.Children.Add(Text("Geometry zone label (unverified)")); inspector.Children.Add(BoundCombo("SelectedZone", "ZoneIds", true)); inspector.Children.Add(Button("Assign geometry zone label", vm.EditZone, false));
+        inspector.Children.Add(BoundText("ShellSummary")); inspector.Children.Add(Text("Geometry zone label (unverified)"));
+        var geometryZone = BoundCombo("SelectedZone", "ZoneIds");
+        geometryZone.SetBinding(IsEnabledProperty, "CanEditGeometry");
+        inspector.Children.Add(geometryZone); inspector.Children.Add(Button("Assign geometry zone label", vm.EditZone, false));
+        inspector.Children.Add(BoundText("SelectedExcluded"));
+        inspector.Children.Add(Row(Button("Validate geometry draft", vm.ValidateGeometryDraft, false), Button("Complete geometry review", vm.ReviewGeometryDraft, false)));
         inspector.Children.Add(Row(Combo("SelectedSign", Enum.GetValues<ManualLocal3Direction>(), 185), Check("Acknowledge physical sign mismatch", "AcknowledgeMismatch")));
         inspector.Children.Add(Text("Reviewer / engineering reason (required for changes)")); inspector.Children.Add(Row(Input("User", 150), Input("Reason", 290))); inspector.Children.Add(Button("Review Local 3 sign (no real loads)", vm.ReviewLocal3, false));
         inspector.Children.Add(Row(BoundCombo("SelectedPattern", "Patterns", true), Button("Set load pattern", vm.Pattern))); inspector.Children.Add(Button("Exclude selected shell with reason", vm.Exclude, false)); p.Children.Add(grid);

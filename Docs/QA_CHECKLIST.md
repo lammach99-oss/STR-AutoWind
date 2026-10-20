@@ -1,10 +1,22 @@
 # Executed qualification
+- [x] Sprint 3.1.1: 156 deterministic tests pass; physical CSI tests remain opt-in and excluded.
+- [x] Pending dropdown values do not change active draft Save identity.
+- [x] Actual WPF zone control enabled for valid mock read-only geometry; engineering controls disabled.
+- [x] 2D polygon and 3D ray hits synchronize independent shell zone, sign, metadata and exclusion.
+- [x] Geometry edits invalidate validation/review; explicit validation and separate review required.
+- [x] Restore rejects project/model/state mismatch and clears mappings on stale geometry.
+- [x] Transactional expected-base revision rejects stale saves and concurrent duplicate append.
+- [x] Dirty edits survive refresh/disconnect/mode switching/close; failed saves retain edits and cancel close.
+- [x] Two separate WPF processes share one database and restore independent WX+/WY- mappings and close-saved exclusion.
+- [x] Repeated switching, revisions beyond 9, unchanged rescan, changed-geometry staleness, demo/read-only smoke.
+- [ ] Sprint 3.1.1 physical CSI requalification (not required for mock workflow regression; no live assignments).
+
 - [x] Sprint 3.1: Wind-state switching preserves independent drafts and avoids cross-state mapping contamination.
 - [x] Sprint 3.1: SQLite draft versioning parses revisions numerically; optimistic concurrency rejects older revision overwrites.
 - [x] Sprint 3.1: Real read-only mode permits geometry draft editing, Local 3 review, and draft saving while blocking engineering approvals/writes.
 - [x] Sprint 3.1: Shell zone label assignment marked NotGeometricallyValidated rather than FullyInsideZone.
 - [x] Sprint 3.1: 3D geometry validation flags nonplanar, self-intersecting, and degenerate polygons with IsValid and GeometryError.
-- [x] Sprint 3.1: 14-step WPF acceptance test passes with exit code 0.
+- [x] Sprint 3.1.1: Full control/restart sequence covered by `scripts/test-wpf.ps1`; earlier Sprint 3.1 smoke alone did not prove this sequence.
 
 - [x] Windows 10 x64, SDK 8.0.422 and Windows Desktop runtime verified.
 - [x] Full kickoff contract read; older document priorities overridden by newer approved roof/facade workflow.

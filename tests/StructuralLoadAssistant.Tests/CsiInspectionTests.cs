@@ -111,6 +111,46 @@ public class CsiInspectionTests
         session.Clear();
         Assert.Equal(CsiScanOutcome.Disconnected, session.Outcome);
     }
+    [Fact]
+    public async Task Geometry_edits_invalidate_explicit_validation_and_review()
+    {
+        await using var session = new CsiInspectionSession(new Reader());
+        await session.ConnectAsync(Options); await session.RefreshAsync();
+        Assert.Throws<InvalidOperationException>(() => session.CompleteGeometryReview("Engineer", "Reviewed"));
+        session.ValidateGeometry();
+        Assert.Equal(GeometryReviewStatus.GeometryValidated, session.ReviewStatus);
+        session.CompleteGeometryReview("Engineer", "Geometry only");
+        Assert.Equal(GeometryReviewStatus.GeometryReviewed, session.ReviewStatus);
+        session.SetGeometryZone("R", "Edge", "Engineer", "Changed label");
+        Assert.Equal(GeometryReviewStatus.GeometryDraft, session.ReviewStatus);
+        session.ValidateGeometry(); session.CompleteGeometryReview("Engineer", "Reviewed");
+        session.SetLocal3Review("R", ManualLocal3Direction.Negative, "Engineer", "Reviewed axis");
+        Assert.Equal(GeometryReviewStatus.GeometryDraft, session.ReviewStatus);
+        session.ValidateGeometry(); session.CompleteGeometryReview("Engineer", "Reviewed");
+        session.ExcludeShell("R", "Engineer", "Excluded");
+        Assert.Equal(GeometryReviewStatus.GeometryDraft, session.ReviewStatus);
+        Assert.Throws<InvalidOperationException>(() => session.Roof!.Approve("Engineer", DateTimeOffset.UtcNow));
+    }
+
+    [Fact]
+    public async Task Restore_checks_all_identities_and_clears_mappings_for_stale_geometry()
+    {
+        await using var session = new CsiInspectionSession(new Reader());
+        await session.ConnectAsync(Options); await session.RefreshAsync();
+        var state = new WindState(WindDirection.PositiveX, "IP_POS", "RoofCase1", LimitState.Uls);
+        session.SetGeometryZone("R", "Edge", "Engineer", "Label");
+        var draft = session.CreateDraft("P", state);
+        Assert.Throws<InvalidOperationException>(() => session.RestoreDraft(draft, "other-project", state.Id));
+        Assert.Throws<InvalidOperationException>(() => session.RestoreDraft(draft with { ModelId = "other-model" }, "P", state.Id));
+        Assert.Throws<InvalidOperationException>(() => session.RestoreDraft(draft, "P", "other-state"));
+        Assert.False(session.RestoreDraft(draft with { GeometryFingerprint = "changed" }, "P", state.Id));
+        Assert.Equal(GeometryReviewStatus.StaleNeedsRescan, session.ReviewStatus);
+        Assert.All(session.RoofRows, row => Assert.Null(row.ZoneId));
+        Assert.Empty(session.Local3Reviews);
+        Assert.True(session.RestoreDraft(draft, "P", state.Id));
+        Assert.Equal("Edge", session.RoofRows[0].ZoneId);
+    }
+
     private sealed class Reader : ICsiSessionReadAdapter
     {
         public bool Fail; public bool Connected=true;

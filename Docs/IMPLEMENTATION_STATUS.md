@@ -1,4 +1,19 @@
-# Implementation status — 2026-10-19
+# Implementation status — 2026-10-20
+
+## Sprint 3.1.1: Final roof workflow fixes
+
+This section supersedes earlier Sprint 3.1 acceptance claims. Verification uses explicitly labeled mock read-only geometry; it does not physically qualify ETABS or SAP2000.
+
+- Active state is `currentActiveState`; pending direction/internal-pressure/roof-case dropdown changes cannot redirect Save. Switching saves dirty edits under the old active state before restoring the target.
+- RealReadOnly zone control binds to valid selected geometry. Both 2D polygon events and 3D ray hit selection synchronize zone, Local 3 sign, exclusion, review status and shell metadata.
+- Zone, exclusion and Local 3 changes invalidate geometry validation. Explicit geometry validation and a separate reviewer action are required for GeometryReviewed. Neither action grants pressure approval.
+- Restoration validates project, model, wind-state and geometry identity. Stale geometry clears mappings and blocks editing/saving.
+- Expected-base revisions are checked inside the same SQLite immediate transaction as insertion. Stale editors cannot invent a newer revision; concurrent append regression permits exactly one winner.
+- Dirty applied geometry edits save before refresh, disconnect, mode switch and close. Save failures retain edits and block the destructive operation; close is cancelled.
+- `scripts/test-wpf.ps1` runs demo and mock read-only smoke plus the actual-control roof regression in two distinct OS processes sharing one SQLite database. It checks pending dropdown Save, independent states/shells, 3D hits, review invalidation, revisions beyond 9, reconnect, dirty-close persistence, unchanged refresh and changed-geometry staleness. A changed database destination exercises failed-save refresh/disconnect/close guards.
+- Locked restore succeeds. Debug and Release builds: zero warnings/errors. Automated tests: **156 passed, 0 failed, 0 skipped**, excluding opt-in PhysicalCsi. All four WPF processes pass with clean shutdown. CI executes the same WPF script and retains synthetic screenshots/JSON without databases.
+
+Limitations: physical CSI tests were not run for this UI/persistence correction; SAP physical qualification remains pending. Existing normative-data and production-write blockers remain. A stale draft requires matching geometry to resume; no automatic geometry migration is provided. Only edits applied through the geometry commands become draft changes; uncommitted dropdown selections are editor inputs.
 
 ## Sprint 3.1: Roof Mapping Workflow Stabilization
 
@@ -30,7 +45,7 @@ Fixed workflow and data integrity issues identified during Sprint 3 review:
   - Validated triangulated area against surface area within tolerance; recorded IsValid and GeometryError.
 - **Automated and End-to-End WPF Acceptance Tests (Task F):**
   - 151 unit and integration tests passing in CI.
-  - 14-step automated WPF acceptance smoke test executed with mock read-only adapter and demo adapter.
+  - Historical smoke coverage did not prove the full control/restart sequence; superseded by the Sprint 3.1.1 two-process control harness above.
 ## Sprint 3: Visual roof geometry, wind mapping drafts & persistence
 
 Built interactive 2D plan and 3D orbit viewers, real 3D roof geometry models, and persistent per-wind-state SQLite drafts with geometry staleness reconciliation:

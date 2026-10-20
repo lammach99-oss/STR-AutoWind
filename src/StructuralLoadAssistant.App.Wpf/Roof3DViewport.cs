@@ -268,12 +268,16 @@
              viewport.CaptureMouse();
  
              // Hit test for shell selection
-             var hit = VisualTreeHelper.HitTest(viewport, lastMousePos) as RayMeshGeometry3DHitTestResult;
-             if (hit?.ModelHit is GeometryModel3D geom && modelToShellId.TryGetValue(geom, out var shellId))
-             {
-                 ShellClicked?.Invoke(shellId);
-             }
+             SelectShellAt(e.GetPosition(viewport));
          }
+     }
+     // Shared by pointer input and dispatcher-based WPF regression checks.
+     internal string? SelectShellAt(Point viewportPoint)
+     {
+         var hit = VisualTreeHelper.HitTest(viewport, viewportPoint) as RayMeshGeometry3DHitTestResult;
+         if (hit?.ModelHit is not GeometryModel3D geom || !modelToShellId.TryGetValue(geom, out var shellId)) return null;
+         ShellClicked?.Invoke(shellId);
+         return shellId;
      }
  
      private void OnMouseMove(object sender, MouseEventArgs e)

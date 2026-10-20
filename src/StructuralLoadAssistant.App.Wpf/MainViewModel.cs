@@ -32,7 +32,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         set
         {
             if (mode == value) return;
+            ProtectUnsavedDraft();
             mode = value; modeRevision++; inspection.Clear(); Session.LoadDemoFixture(Edition); SelectedShell = IsDemo ? "R1" : "";
+            expectedBaseRevision = 0; HasUnsavedChanges = false;
             SelectedZone = IsDemo ? "Edge" : "Unmapped"; SelectedPattern = IsDemo ? "WX_POS_IP_POS" : "";
             ReportText = IsDemo ? "Preview the current synthetic calculation." : EngineeringBlock; SelectedReport = null;
             Issues = []; ProposedLoads = []; FacadePairRows = []; LowerFrame = ""; UpperFrame = "";
@@ -42,6 +44,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
     public bool IsDemo => Mode == WorkspaceMode.Demo;
     public bool IsReal => !IsDemo;
+    public bool CanEditGeometry => IsDemo || (inspection.Scan is not null &&
+        inspection.Shells3D.FirstOrDefault(s => s.ShellId == SelectedShell)?.IsValid == true &&
+        inspection.ReviewStatus != GeometryReviewStatus.StaleNeedsRescan);
+    public bool SelectedExcluded => !IsDemo && inspection.Exclusions.Any(e => e.ShellId == SelectedShell);
+    public GeometryReviewStatus SelectedGeometryReviewStatus => inspection.ReviewStatus;
     public bool IsMockAdapter => !IsDemo && (inspection.Connection?.Product.StartsWith("MOCK", StringComparison.OrdinalIgnoreCase) == true || inspection.Scan?.Model.Product.StartsWith("MOCK", StringComparison.OrdinalIgnoreCase) == true);
     public string ModeBanner => IsDemo ? "DEMO / FAKE CSI • SYNTHETIC PRESSURES • NOT FOR ENGINEERING DESIGN" : (IsMockAdapter ? "MOCK LIVE ADAPTER / NOT ACTUAL CSI • READ-ONLY • APPROVAL / APPLY DISABLED" : "REAL CSI READ-ONLY • NO PRESSURE DATASET • APPROVAL / APPLY DISABLED");
     public CsiProduct Product { get; set; } = CsiProduct.Etabs;
@@ -155,7 +162,14 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public void SelectShell(string shell)
     {
         SelectedShell = shell;
-        if (!IsDemo) { SelectedSign = inspection.RoofRows.FirstOrDefault(r => r.ShellId == shell)?.ManualDirection ?? ManualLocal3Direction.Unacknowledged; Refresh(); return; }
+        if (!IsDemo)
+        {
+            var row = inspection.RoofRows.FirstOrDefault(r => r.ShellId == shell);
+            SelectedZone = row?.ZoneId ?? "Unmapped";
+            SelectedSign = row?.ManualDirection ?? ManualLocal3Direction.Unacknowledged;
+            AcknowledgeMismatch = row?.MismatchAcknowledged ?? false;
+            Refresh(); return;
+        }
         var mapping = Session.Roof.Mappings.First(m => m.ShellId == shell);
         SelectedZone = mapping.ZoneId ?? Session.Zones[0].Id; SelectedSign = mapping.ManualDirection;
         AcknowledgeMismatch = mapping.MismatchAcknowledged; Refresh();
@@ -170,6 +184,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public async Task ConnectReal()
     {
         if (IsDemo) throw new InvalidOperationException("Choose Real Read-Only mode first.");
+        ProtectUnsavedDraft();
         var revision = modeRevision;
         await inspection.ConnectAsync(new(Product, AssemblyPath));
         if (revision != modeRevision) return;
@@ -180,6 +195,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public async Task RefreshReal()
     {
         if (IsDemo) throw new InvalidOperationException("Choose Real Read-Only mode first.");
+        ProtectUnsavedDraft();
         var revision = modeRevision;
         await inspection.RefreshAsync();
         if (revision != modeRevision) return;
@@ -191,8 +207,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
             var existing = draftStore.LoadLatestDraft(Session.Project.Id, inspection.Scan.Model.ModelId, currentActiveState.Id);
             if (existing != null)
             {
-                inspection.RestoreDraft(existing);
+                inspection.RestoreDraft(existing, Session.Project.Id, currentActiveState.Id);
             }
+            expectedBaseRevision = existing?.Revision ?? 0;
+            editorDatabasePath = DatabasePath;
         }
 
         SelectedShell = inspection.Scan?.Model.Shells.FirstOrDefault()?.Id ?? "";
@@ -215,6 +233,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public void ReviewLocal3()
     {
         if (IsDemo) { EditSign(); return; }
+        RequireEditableGeometry();
         inspection.SetLocal3Review(SelectedShell, SelectedSign, User, Reason);
         HasUnsavedChanges = true;
         Refresh();
@@ -247,6 +266,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public void OpenProject() { RequireDemo(); var opened = new DemoSession(DatabasePath); opened.LoadDemoFixture(Edition); Session = opened; SelectedShell = "R1"; }
     public void LoadFixture(bool crossing = true) { RequireDemo(); Session.LoadDemoFixture(Edition, crossing); SelectedShell = "R1"; Issues = []; ProposedLoads = []; }
     private WindState currentActiveState = new(WindDirection.PositiveX, "IP_POS", "RoofCase1", LimitState.Uls);
+    private int expectedBaseRevision;
+    private string? editorDatabasePath;
     public WindState CurrentActiveState => currentActiveState;
 
     public void LoadSelectedState()
@@ -264,15 +285,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         if (inspection.Scan != null)
         {
             var draftStore = new Application.RoofMappingDraftStore(new Persistence.SqliteSnapshotStore(DatabasePath));
-            // 1. Persist outstanding edits under the currently active state ID
-            if (HasUnsavedChanges || inspection.GetDraftRevision(currentActiveState.Id) == 0)
-            {
-                var latestOld = draftStore.LoadLatestDraft(Session.Project.Id, inspection.Scan.Model.ModelId, currentActiveState.Id);
-                int nextRevOld = (latestOld?.Revision ?? 0) + 1;
-                var currentDraft = inspection.CreateDraft(Session.Project.Id, currentActiveState, nextRevOld);
-                draftStore.SaveDraft(Session.Project.Id, currentDraft);
-                HasUnsavedChanges = false;
-            }
+            ProtectUnsavedDraft();
 
             // 2. Change the active state
             currentActiveState = targetState;
@@ -281,13 +294,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
             var targetDraft = draftStore.LoadLatestDraft(Session.Project.Id, inspection.Scan.Model.ModelId, targetState.Id);
             if (targetDraft != null)
             {
-                inspection.RestoreDraft(targetDraft);
+                inspection.RestoreDraft(targetDraft, Session.Project.Id, targetState.Id);
             }
             else
             {
                 // 4. If no target draft exists, initialize a clean, unmapped draft
                 inspection.ResetToCleanUnmappedDraft(targetState.Id);
             }
+            expectedBaseRevision = targetDraft?.Revision ?? 0;
+            editorDatabasePath = DatabasePath;
         }
         else
         {
@@ -302,6 +317,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public void EditZone()
     {
         if (IsDemo) { Session.SetZone(SelectedShell, SelectedZone, User, Reason); return; }
+        RequireEditableGeometry();
         inspection.SetGeometryZone(SelectedShell, SelectedZone, User, Reason);
         HasUnsavedChanges = true;
         Refresh();
@@ -309,6 +325,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public void EditSign()
     {
         if (IsDemo) { Session.SetSign(SelectedShell, SelectedSign, AcknowledgeMismatch, User, Reason); return; }
+        RequireEditableGeometry();
         inspection.SetLocal3Review(SelectedShell, SelectedSign, User, Reason);
         HasUnsavedChanges = true;
         Refresh();
@@ -317,6 +334,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public void Exclude()
     {
         if (IsDemo) { Session.ExcludeShell(SelectedShell, User, Reason); return; }
+        RequireEditableGeometry();
         inspection.ExcludeShell(SelectedShell, User, Reason);
         HasUnsavedChanges = true;
         Refresh();
@@ -423,21 +441,47 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
         Status = "MOCK LIVE ADAPTER / contract-test geometry • read-only UI and guard assertions passed • not actual CSI"; Refresh();
     }
-    public WindState ActiveWindState => new(Direction, InternalPressure, RoofCase, LimitState.Uls);
-    public string ActiveWindStateSummary => $"Active Wind State: {Direction} • {InternalPressure} • {RoofCase} • Draft Rev: {inspection.GetDraftRevision(ActiveWindState.Id)} • Has Unsaved Changes: {HasUnsavedChanges}";
+    public WindState ActiveWindState => currentActiveState;
+    public string ActiveWindStateSummary => $"Active Wind State: {currentActiveState.Id} • Draft Rev: {expectedBaseRevision} • Unsaved changes: {HasUnsavedChanges}";
     public bool HasUnsavedChanges { get; private set; }
     public void MarkUnsavedChanges() { HasUnsavedChanges = true; Refresh(); }
-    public void MarkChangesSaved() { HasUnsavedChanges = false; Refresh(); }
+    public void ProtectUnsavedDraft()
+    {
+        if (!IsDemo && HasUnsavedChanges) SaveCurrentDraft();
+    }
+    private void RequireEditableGeometry()
+    {
+        if (!CanEditGeometry) throw new InvalidOperationException("Select valid, current shell geometry before editing.");
+    }
+    public void DisconnectReal()
+    {
+        ProtectUnsavedDraft(); inspection.Clear(); expectedBaseRevision = 0; Refresh();
+    }
+    public void ValidateGeometryDraft()
+    {
+        if (IsDemo) throw new InvalidOperationException("Select read-only geometry first.");
+        inspection.ValidateGeometry(); HasUnsavedChanges = true; Refresh();
+    }
+    public void ReviewGeometryDraft()
+    {
+        if (IsDemo) throw new InvalidOperationException("Select read-only geometry first.");
+        inspection.CompleteGeometryReview(User, Reason); HasUnsavedChanges = true; Refresh();
+    }
     public void SaveCurrentDraft()
     {
         if (IsDemo) return;
-        if (inspection.Scan == null) return;
+        if (inspection.Scan == null) throw new InvalidOperationException("No geometry available; unsaved edits retained.");
+        if (inspection.ReviewStatus == GeometryReviewStatus.StaleNeedsRescan)
+            throw new InvalidOperationException("Geometry is stale; reopen a matching model before saving this draft.");
+        if (editorDatabasePath is not null && editorDatabasePath != DatabasePath)
+            throw new InvalidOperationException("Save unsaved geometry to its original database before changing database path.");
         var state = ActiveWindState;
         var draftStore = new Application.RoofMappingDraftStore(new Persistence.SqliteSnapshotStore(DatabasePath));
-        var latest = draftStore.LoadLatestDraft(Session.Project.Id, inspection.Scan.Model.ModelId, state.Id);
-        int nextRev = (latest?.Revision ?? 0) + 1;
+        int nextRev = expectedBaseRevision + 1;
         var draft = inspection.CreateDraft(Session.Project.Id, state, nextRev);
-        draftStore.SaveDraft(Session.Project.Id, draft);
+        draftStore.SaveDraft(Session.Project.Id, draft, expectedBaseRevision);
+        inspection.RememberSavedDraft(draft);
+        expectedBaseRevision = nextRev;
         HasUnsavedChanges = false;
         Status = $"Saved geometry draft revision {nextRev} for {state.Id}";
         Refresh();

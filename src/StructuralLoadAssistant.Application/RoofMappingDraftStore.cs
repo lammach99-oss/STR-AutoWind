@@ -30,19 +30,16 @@
         return 0;
     }
  
-     public void SaveDraft(string projectId, RoofMappingDraft draft)
+     public void SaveDraft(string projectId, RoofMappingDraft draft, int expectedBaseRevision)
      {
          ArgumentNullException.ThrowIfNull(draft);
          ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
         ArgumentException.ThrowIfNullOrWhiteSpace(draft.ModelId);
         ArgumentException.ThrowIfNullOrWhiteSpace(draft.GeometryFingerprint);
 
-        // Optimistic concurrency check: if a newer revision already exists in the store, reject
-        var latest = LoadLatestDraft(projectId, draft.ModelId, draft.WindState.Id);
-        if (latest != null && latest.Revision > draft.Revision)
-        {
-            throw new InvalidOperationException($"Cannot save draft revision {draft.Revision}; a newer revision {latest.Revision} already exists for state {draft.WindState.Id}.");
-        }
+        if (draft.ProjectId != projectId || draft.Revision < 1 ||
+            draft.Id != DraftId(projectId, draft.ModelId, draft.WindState.Id, draft.Revision))
+            throw new InvalidOperationException("Draft identity or revision mismatch.");
  
          var metadata = new SnapshotMetadata(
              draft.Id,
@@ -54,7 +51,8 @@
              IsSimulation: false
          );
  
-         store.Save(metadata, draft);
+         store.AppendRevision(metadata, draft,
+             DraftIdPrefix(projectId, draft.ModelId, draft.WindState.Id) + ":r", expectedBaseRevision);
      }
  
      public RoofMappingDraft? LoadLatestDraft(string projectId, string modelId, string windStateId)

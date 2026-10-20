@@ -59,7 +59,13 @@ public sealed class SqliteSnapshotStore
         transaction.Commit();
     }
 
-    public void Save<T>(SnapshotMetadata metadata, T value)
+    public void Save<T>(SnapshotMetadata metadata, T value) => SaveCore(metadata, value, null, 0);
+
+    // The revision check and insert share an immediate write transaction, including across processes.
+    public void AppendRevision<T>(SnapshotMetadata metadata, T value, string prefix, int expectedBaseRevision)
+        => SaveCore(metadata, value, prefix, expectedBaseRevision);
+
+    private void SaveCore<T>(SnapshotMetadata metadata, T value, string? revisionPrefix, int expectedBaseRevision)
     {
         ArgumentNullException.ThrowIfNull(metadata);
         ArgumentNullException.ThrowIfNull(value);
@@ -73,6 +79,22 @@ public sealed class SqliteSnapshotStore
         var hash = Hash(payload);
         using var connection = Open();
         using var transaction = connection.BeginTransaction();
+        if (revisionPrefix is not null)
+        {
+            using var revisionCheck = connection.CreateCommand();
+            revisionCheck.Transaction = transaction;
+            revisionCheck.CommandText = "SELECT COALESCE(MAX(CAST(substr(id,$offset) AS INTEGER)),0) FROM snapshots WHERE kind=$kind AND project_id=$project AND substr(id,1,$length)=$prefix";
+            Add(revisionCheck, "$offset", revisionPrefix.Length + 1);
+            Add(revisionCheck, "$length", revisionPrefix.Length);
+            Add(revisionCheck, "$prefix", revisionPrefix);
+            Add(revisionCheck, "$kind", metadata.Kind.ToString());
+            Add(revisionCheck, "$project", metadata.ProjectId);
+            var latest = Convert.ToInt32(revisionCheck.ExecuteScalar(), CultureInfo.InvariantCulture);
+            if (latest != expectedBaseRevision)
+                throw new InvalidOperationException($"Draft conflict: expected base revision {expectedBaseRevision}, current revision {latest}. Reopen the draft before saving; edits were retained.");
+            if (metadata.Id != revisionPrefix + (latest + 1).ToString(CultureInfo.InvariantCulture))
+                throw new InvalidOperationException("Draft revision must immediately follow its expected base revision.");
+        }
         using var existing = connection.CreateCommand();
         existing.Transaction = transaction;
         existing.CommandText = $"SELECT {Columns},payload_type,payload,payload_hash FROM snapshots WHERE id=$id";

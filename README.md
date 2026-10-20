@@ -134,6 +134,14 @@ Facade pairs are explicit and editable; automatic physical facade recognition re
 
 ## Future commits
 
+Run the WPF acceptance checks after building on Windows:
+
+```powershell
+./scripts/test-wpf.ps1 -Configuration Release
+```
+
+The script runs demo and labeled mock read-only smoke tests, then closes and reopens separate WPF processes against the same disposable database to verify independent wind-state drafts. It also checks actual zone controls, 2D/3D selection, save-before-switch/refresh/disconnect/close, stale geometry and disabled engineering operations. Evidence is written under `artifacts/wpf/<run-id>`; no installed CSI process is accessed. Physical CSI qualification remains a separate opt-in workflow.
+
 After cloning the verified GitHub destination, work from the repository folder:
 
 ```powershell

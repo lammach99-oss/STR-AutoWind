@@ -24,10 +24,23 @@ jobs:
         run: dotnet build StructuralLoadAssistant.sln --configuration Release --no-restore -m:1 -nr:false
       - name: Run automated tests
         run: dotnet test tests/StructuralLoadAssistant.Tests --configuration Release --no-build --no-restore -m:1 -nr:false --filter "Category!=PhysicalCsi" --logger "trx;LogFileName=windows-tests.trx" --results-directory artifacts/ci
+      - name: WPF dual-mode smoke and two-process roof workflow
+        shell: pwsh
+        run: ./scripts/test-wpf.ps1 -Configuration Release -OutputRoot artifacts/wpf
       - name: Upload test diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: windows-test-results
           path: artifacts/ci/*.trx
+          if-no-files-found: warn
+      - name: Upload synthetic WPF diagnostics (no databases)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wpf-workflow-results
+          path: |
+            artifacts/wpf/**/*.json
+            artifacts/wpf/**/*.txt
+            artifacts/wpf/**/*.png
           if-no-files-found: warn

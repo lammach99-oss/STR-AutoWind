@@ -19,7 +19,8 @@ public static class Program
     [STAThread]
     public static int Main(string[] args)
     {
-        var readOnlySmoke = args.Contains("--smoke-readonly", StringComparer.Ordinal);
+        var workflowSmoke = args.Contains("--smoke-roof-workflow", StringComparer.Ordinal);
+        var readOnlySmoke = workflowSmoke || args.Contains("--smoke-readonly", StringComparer.Ordinal);
         var smoke = readOnlySmoke || args.Contains("--smoke", StringComparer.Ordinal);
         string? Option(string name) { var index = Array.IndexOf(args, name); return index >= 0 && index + 1 < args.Length ? args[index + 1] : null; }
         var output = Path.GetFullPath(Option("--smoke-output") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StructuralLoadAssistant", "smoke"));
@@ -52,7 +53,8 @@ public static class Program
                     var vm = provider.GetRequiredService<MainViewModel>();
                     if (readOnlySmoke)
                     {
-                        await vm.SmokeReadOnlyAsync();
+                        if (workflowSmoke) await window.RunRoofWorkflowSmokeAsync(args.Contains("--reopen"), () => ((MockInspectionAdapter)readAdapter).ChangedGeometry = true);
+                        else await vm.SmokeReadOnlyAsync();
                     }
                     else await vm.SmokeAsync();
                     void Capture(string fileName)
@@ -85,7 +87,7 @@ public static class Program
                 {
                     exitCode = 1; logger.LogError(error, "Smoke failed"); await File.WriteAllTextAsync(Path.Combine(output, "smoke-error.txt"), error.ToString());
                 }
-                finally { app.Shutdown(exitCode); }
+                finally { window.Close(); app.Shutdown(exitCode); }
             };
             logger.LogInformation("Starting desktop in simulation mode"); app.Run(window);
             if (smoke) File.WriteAllText(Path.Combine(output, "shutdown-complete.txt"), "WPF dispatcher shutdown completed.");
@@ -105,6 +107,7 @@ public static class Program
     // deliberately does not use the demo adapter or a real user's model.
     private sealed class MockInspectionAdapter : ICsiSessionReadAdapter
     {
+        public bool ChangedGeometry { get; set; }
         private static readonly CsiCapabilities Capabilities = new(true, true, true, true);
         private static readonly CsiModelSnapshot Model = new("mock-scan", "MOCK LIVE ADAPTER / not actual CSI", "MOCK LIVE ADAPTER", "contract-test 1", "mock-geometry", "mock-loads",
             ["MOCK_EXISTING_PATTERN"], ["MOCK_ANALYSIS_CASE"], ["MOCK_COMBINATION"],
@@ -113,7 +116,7 @@ public static class Program
              new("MOCK-A2", "MOCK-ROOF", [new(5, 0, 6), new(8, 0, 6), new(8, 4, 7), new(5, 4, 7)], new(0, -.242535625, .9701425), default)],
             [new("MOCK-A1", "MOCK_EXISTING_PATTERN", "AreaUniform/Local3", -450, "MOCK existing assignment (not generated)")]);
         public Task<CsiConnectionResult> ConnectAsync(CsiConnectionOptions options, CancellationToken cancellationToken = default) => Task.FromResult(new CsiConnectionResult(true, "MOCK LIVE ADAPTER / NOT actual CSI", "getter contract-test 1", Capabilities, []));
-        public Task<CsiReadScan> RefreshSelectionAsync(CancellationToken cancellationToken = default) => Task.FromResult(new CsiReadScan(Model, new("N_m_C", 1, 1, "MOCK native N, m; geometry converted to SI"), true, Capabilities,
+        public Task<CsiReadScan> RefreshSelectionAsync(CancellationToken cancellationToken = default) => Task.FromResult(new CsiReadScan(ChangedGeometry ? Model with { GeometryFingerprint = "mock-changed-geometry", Shells = Model.Shells.SetItem(0, Model.Shells[0] with { Vertices = Model.Shells[0].Vertices.Select(v => new Vec3(v.X, v.Y, v.Z + 1)).ToImmutableArray() }) } : Model, new("N_m_C", 1, 1, "MOCK native N, m; geometry converted to SI"), true, Capabilities,
             [new("MOCK-L1", 3, 3), new("MOCK-L2", 6, 3)],
             [new("MOCK-A1", "MOCK-ROOF", null, "Unknown / no verified physical outward normal"), new("MOCK-A2", "MOCK-ROOF", null, "Unknown / no verified physical outward normal")],
             [new("MOCK_SOURCE", "Smoke", "Dedicated synthetic getter-contract geometry; never attached to actual CSI.", CsiIssueSeverity.Information)]));

@@ -181,8 +181,8 @@ using StructuralLoadAssistant.Csi.Abstractions;
              1, "proj1", "model1", "geom-hash-1", state2, items2, [], [],
              DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, GeometryReviewStatus.GeometryReviewed);
  
-         draftStore.SaveDraft("proj1", draft1);
-         draftStore.SaveDraft("proj1", draft2);
+         draftStore.SaveDraft("proj1", draft1, 0);
+         draftStore.SaveDraft("proj1", draft2, 0);
  
          // Reload and verify isolation
          var loaded1 = draftStore.LoadLatestDraft("proj1", "model1", state1.Id);
@@ -237,7 +237,7 @@ using StructuralLoadAssistant.Csi.Abstractions;
  
          // Assign zone to R1
          session.SetGeometryZone("R1", "Edge", "Eng1", "Visual edge zone review");
-         Assert.Equal(GeometryReviewStatus.GeometryReviewed, session.ReviewStatus);
+         Assert.Equal(GeometryReviewStatus.GeometryDraft, session.ReviewStatus);
          Assert.Equal("Edge", session.RoofRows.First(r => r.ShellId == "R1").ZoneId);
  
          // Exclude R2
@@ -252,7 +252,7 @@ using StructuralLoadAssistant.Csi.Abstractions;
          Assert.Equal("Edge", draft.Items.First(i => i.ShellId == "R1").ZoneId);
  
          // Restore draft
-         bool restored = session.RestoreDraft(draft);
+         bool restored = session.RestoreDraft(draft, "proj1", state.Id);
          Assert.True(restored);
          Assert.Equal("Edge", session.RoofRows.First(r => r.ShellId == "R1").ZoneId);
      }
@@ -332,7 +332,7 @@ using StructuralLoadAssistant.Csi.Abstractions;
                     r, "proj1", "model1", "hash", state,
                     [new("S1", $"Zone_r{r}", ShellZoneClassification.NotGeometricallyValidated, ManualLocal3Direction.Positive, false, "Eng", "Rev test", DateTimeOffset.UtcNow)],
                     [], [], DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, GeometryReviewStatus.GeometryReviewed);
-                draftStore.SaveDraft("proj1", draft);
+                draftStore.SaveDraft("proj1", draft, r - 1);
             }
 
             var latest = draftStore.LoadLatestDraft("proj1", "model1", state.Id);
@@ -361,7 +361,9 @@ using StructuralLoadAssistant.Csi.Abstractions;
                 RoofMappingDraftStore.DraftId("proj1", "model1", state.Id, 5),
                 5, "proj1", "model1", "hash", state,
                 [], [], [], DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, GeometryReviewStatus.GeometryReviewed);
-            draftStore.SaveDraft("proj1", draft5);
+            for (var revision = 1; revision <= 5; revision++)
+                draftStore.SaveDraft("proj1", draft5 with { Revision = revision,
+                    Id = RoofMappingDraftStore.DraftId("proj1", "model1", state.Id, revision) }, revision - 1);
 
             // Attempting to save revision 3 when revision 5 already exists throws InvalidOperationException
             var draft3 = new RoofMappingDraft(
@@ -369,8 +371,8 @@ using StructuralLoadAssistant.Csi.Abstractions;
                 3, "proj1", "model1", "hash", state,
                 [], [], [], DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, GeometryReviewStatus.GeometryReviewed);
 
-            var ex = Assert.Throws<InvalidOperationException>(() => draftStore.SaveDraft("proj1", draft3));
-            Assert.Contains("newer revision 5 already exists", ex.Message);
+            var ex = Assert.Throws<InvalidOperationException>(() => draftStore.SaveDraft("proj1", draft3, 2));
+            Assert.Contains("current revision 5", ex.Message);
         }
         finally
         {
@@ -396,7 +398,7 @@ using StructuralLoadAssistant.Csi.Abstractions;
                 1, "proj1", "model1", "hash1", stateX,
                 [new("S1", "Edge", ShellZoneClassification.NotGeometricallyValidated, ManualLocal3Direction.Positive, false, "Eng1", "Edge zone", DateTimeOffset.UtcNow)],
                 [], [], DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, GeometryReviewStatus.GeometryReviewed);
-            draftStore.SaveDraft("proj1", draftX);
+            draftStore.SaveDraft("proj1", draftX, 0);
 
             // Save stateY draft with Corner / Negative Local 3
             var draftY = new RoofMappingDraft(
@@ -404,7 +406,7 @@ using StructuralLoadAssistant.Csi.Abstractions;
                 1, "proj1", "model1", "hash1", stateY,
                 [new("S1", "Corner", ShellZoneClassification.NotGeometricallyValidated, ManualLocal3Direction.Negative, false, "Eng2", "Corner zone", DateTimeOffset.UtcNow)],
                 [], [], DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, GeometryReviewStatus.GeometryReviewed);
-            draftStore.SaveDraft("proj1", draftY);
+            draftStore.SaveDraft("proj1", draftY, 0);
 
             // Reload stateX and stateY repeatedly
             for (int cycle = 0; cycle < 3; cycle++)
