@@ -1,4 +1,6 @@
-# CSI read-only compatibility — Sprint 2.6
+# CSI read-only compatibility — Sprint 3.3
+
+Current roof-editor qualification is documented in [SPRINT_3_3_QUALIFICATION.md](SPRINT_3_3_QUALIFICATION.md). ETABS 23.2.0 PID 34456 returned 12 frames and 10 valid roof areas; live WPF containment/crossing/overlap, two-state persistence, process restart and unchanged rescan passed application checks. Independent GUI numeric comparisons, multiple live planes, opposite axes and changed-source physical detection remain pending. This is partial physical evidence, not full qualification. No CSI setters were invoked. The Sprint 2.5/2.6 table below records historical getter qualification and does not establish Sprint 3.3 editor accuracy.
 
 Sprint 3.2 adds a geometry-only UV editor over immutable selected-shell snapshots. Its WPF proof uses a labeled four-shell gable mock; no new physical CSI qualification is claimed. Existing ETABS 23.2.0 getter qualification below is historical; SAP2000 physical qualification remains pending. Polygon operations never call CSI setters, change selection, split areas or assign loads. Selection-scope differences require explicit merge review; changed coordinates/Local 3 on an existing saved shell are stale.
 

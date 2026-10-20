@@ -37,8 +37,14 @@
      bool MismatchAcknowledged = false,
      string? Reviewer = null,
      string? ReviewNotes = null,
-     DateTimeOffset? ReviewedAt = null
- );
+     DateTimeOffset? ReviewedAt = null,
+     int MappingContractVersion = 1,
+     ImmutableArray<ZoneCoverage> ZoneCoverages = default,
+     double? ShellAreaM2 = null
+ )
+ {
+     public ImmutableArray<ZoneCoverage> ZoneCoverages { get; init; }=ZoneCoverages.IsDefault?[]:ZoneCoverages;
+ }
  
  public sealed record SourceShellFingerprint(string ShellId, string Fingerprint);
  public sealed record RoofMappingDraft(

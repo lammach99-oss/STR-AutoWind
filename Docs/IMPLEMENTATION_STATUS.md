@@ -1,5 +1,15 @@
 # Implementation status — 2026-10-20
 
+## Sprint 3.3: Mapping integrity and partial live verification
+
+The active geometry mapping contract now distinguishes zone overlap from shell overlap, invalid geometry and audited exclusion. Labels never infer crossing or containment. Version 2 rows/draft items preserve structured zone IDs, per-zone intersection areas/coverage and shell surface area. Crossing, overlap, invalid, unmapped, excluded and unverified rows conservatively block future pressure mapping; a geometrically complete row does not authorize engineering pressure approval.
+
+Legacy immutable SQLite payloads are interpreted as version 1 without rewriting stored JSON or hashes. Ambiguous old classifications lose geometric validation in the editor; opaque comma-containing IDs remain opaque. Explicit revalidation creates version 2 evidence in a new revision. Existing enum numeric values and database schema remain unchanged. Unsupported versions fail before clearing current edits, and failed intersection batches publish no partial rows.
+
+The editor shows readable coverage and NeedsSplitInCSI blockers, independent geometry-review/pressure-approval status and adjustable viewing space. State changes/reopening clear stale selected-zone metadata. RealReadOnly calculation, proposal, engineering approval and assignment gates remain disabled.
+
+Verification: locked restore; Debug/Release zero-warning builds; **201 automated tests**, no failures/skips (17 new cases); six successful synthetic WPF processes including disk restart. Real ETABS 23.2.0 PID 34456: selected 12 frames/10 valid shells, one roof plane; actual WPF containment/crossing/overlap and WX+/WY− draft restoration in new processes passed. **Independent physical accuracy qualification remains inconclusive** without GUI-reviewed expectations; multi-plane/opposite-axis/changed-source checks remain pending. See [the detailed matrix and local evidence references](SPRINT_3_3_QUALIFICATION.md). Older sections below are historical milestone records, not current capability totals.
+
 ## Sprint 3.2: Interactive roof zone geometry
 
 Geometry-only roof editing now uses plane-local surface meters with a deterministic orthonormal frame and global XYZ inverse transform. Coplanar shells share a plane; separate slopes/elevations remain separate even with overlapping XY projections. Plane normal, CSI Local 3 and physical outward normal remain distinct.

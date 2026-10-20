@@ -35,24 +35,30 @@ public sealed class CsiInspectionSession : IAsyncDisposable
     public void InvalidateGeometryReview()
     {
         ReviewStatus=GeometryReviewStatus.GeometryDraft;
-        RoofRows=RoofRows.Select(r=>Exclusions.Any(e=>e.ShellId==r.ShellId)?r:r with{Classification=ShellZoneClassification.Unmapped,ZoneId=null}).ToImmutableArray();
+        RoofRows=RoofRows.Select(r=>Exclusions.Any(e=>e.ShellId==r.ShellId)?r:r with{Classification=ShellZoneClassification.Unmapped,ZoneId=null,ZoneCoverages=[],ShellAreaM2=null,MappingContractVersion=2}).ToImmutableArray();
         if(retainedDraft is { } old)retainedDraft=old with{ReviewStatus=GeometryReviewStatus.GeometryDraft,
-            Items=old.Items.Select(i=>old.Exclusions.Any(e=>e.ShellId==i.ShellId)?i:i with{Classification=ShellZoneClassification.Unmapped,ZoneId=null}).ToImmutableArray()};
+            Items=old.Items.Select(i=>old.Exclusions.Any(e=>e.ShellId==i.ShellId)?i:i with{Classification=ShellZoneClassification.Unmapped,ZoneId=null,ZoneCoverages=[],ShellAreaM2=null,MappingContractVersion=2}).ToImmutableArray()};
     }
     public void SetIntersectionMappings(IEnumerable<ShellZoneIntersection> classifications,string stateId)
     {
+        ObjectDisposedException.ThrowIf(disposed,this);ArgumentException.ThrowIfNullOrWhiteSpace(stateId);
+        var updated=RoofRows;
         foreach(var result in classifications)
         {
             var row=RoofRows.First(r=>r.ShellId==result.ShellId);
             var classification=result.Classification switch {
                 GeometryClassification.FullyInsideZone=>ShellZoneClassification.FullyInsideZone,
                 GeometryClassification.CrossesZoneBoundary=>ShellZoneClassification.CrossesZoneBoundary,
-                GeometryClassification.OverlappingZones=>ShellZoneClassification.OverlapsAnotherShell,
-                GeometryClassification.InvalidGeometry=>ShellZoneClassification.GeometryInvalid,
-                _=>ShellZoneClassification.Unmapped };
-            RoofRows=RoofRows.SetItem(RoofRows.IndexOf(row),row with{StateId=stateId,
-                ZoneId=result.Classification==GeometryClassification.ExcludedWithReason?"Excluded":string.Join(",",result.Coverages.Select(c=>c.ZoneId)),Classification=classification});
+                GeometryClassification.OverlappingZones=>ShellZoneClassification.OverlappingZones,
+                GeometryClassification.InvalidGeometry=>ShellZoneClassification.InvalidGeometry,
+                GeometryClassification.ExcludedWithReason when Exclusions.Any(e=>e.ShellId==result.ShellId)=>ShellZoneClassification.ExcludedWithReason,
+                GeometryClassification.Unmapped=>ShellZoneClassification.Unmapped,
+                _=>throw new InvalidOperationException("Unknown classification or unaudited exclusion.") };
+            updated=updated.SetItem(updated.IndexOf(row),row with{StateId=stateId,
+                ZoneId=result.Coverages.Length==1?result.Coverages[0].ZoneId:null,Classification=classification,
+                MappingContractVersion=2,ZoneCoverages=result.Coverages,ShellAreaM2=result.ShellAreaM2});
         }
+        RoofRows=updated;
     }
     public void SetGeometryZone(string shellId, string zoneId, string user, string reason)
     {
@@ -63,8 +69,8 @@ public sealed class CsiInspectionSession : IAsyncDisposable
             ?? throw new ArgumentException("Shell is not in the current selection.", nameof(shellId));
         var classification = string.Equals(zoneId, "Unmapped", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(zoneId)
             ? ShellZoneClassification.Unmapped
-            : (zoneId.Contains("Cross", StringComparison.OrdinalIgnoreCase) ? ShellZoneClassification.CrossesZoneBoundary : ShellZoneClassification.NotGeometricallyValidated);
-        RoofRows = RoofRows.SetItem(RoofRows.IndexOf(row), row with { ZoneId = zoneId, Classification = classification });
+            : ShellZoneClassification.NotGeometricallyValidated;
+        RoofRows = RoofRows.SetItem(RoofRows.IndexOf(row), row with { ZoneId = zoneId, Classification = classification,MappingContractVersion=2,ZoneCoverages=[],ShellAreaM2=null });
         Local3Reviews = Local3Reviews.Add(new(shellId, "GeometryZone", row.ZoneId ?? "", zoneId, user, DateTimeOffset.UtcNow, reason));
         ReviewStatus = GeometryReviewStatus.GeometryDraft;
     }
@@ -76,7 +82,7 @@ public sealed class CsiInspectionSession : IAsyncDisposable
         var row = RoofRows.FirstOrDefault(r => r.ShellId == shellId)
             ?? throw new ArgumentException("Shell is not in the current selection.", nameof(shellId));
         Exclusions = Exclusions.RemoveAll(e => e.ShellId == shellId).Add(new(shellId, user, reason, DateTimeOffset.UtcNow));
-        RoofRows = RoofRows.SetItem(RoofRows.IndexOf(row), row with { ZoneId = "Excluded", Classification = ShellZoneClassification.Unmapped });
+        RoofRows = RoofRows.SetItem(RoofRows.IndexOf(row), row with { ZoneId = "Excluded", Classification = ShellZoneClassification.ExcludedWithReason,MappingContractVersion=2,ZoneCoverages=[],ShellAreaM2=null });
         ReviewStatus = GeometryReviewStatus.GeometryDraft;
     }
     public RoofMappingDraft CreateDraft(string projectId, WindState state, int? explicitRevision = null)
@@ -87,7 +93,8 @@ public sealed class CsiInspectionSession : IAsyncDisposable
             r.ShellId, r.ZoneId, r.Classification, r.ManualDirection, r.MismatchAcknowledged,
             Local3Reviews.LastOrDefault(rv => rv.ObjectId == r.ShellId)?.User,
             Local3Reviews.LastOrDefault(rv => rv.ObjectId == r.ShellId)?.Reason,
-            Local3Reviews.LastOrDefault(rv => rv.ObjectId == r.ShellId)?.CreatedAt
+            Local3Reviews.LastOrDefault(rv => rv.ObjectId == r.ShellId)?.CreatedAt,
+            r.MappingContractVersion,r.ZoneCoverages,r.ShellAreaM2
         )).ToImmutableArray();
         int rev = explicitRevision ?? (draftsByState.TryGetValue(state.Id, out var prev) ? prev.Revision + 1 : 1);
         var draftId = RoofMappingDraftStore.DraftId(projectId, Scan?.Model.ModelId ?? "unknown", state.Id, rev);
@@ -109,6 +116,7 @@ public sealed class CsiInspectionSession : IAsyncDisposable
         var currentGeomHash = Scan?.Model.GeometryFingerprint ?? "";
         var reconciledStatus = RoofMappingDraftStore.ValidateAndReconcile(draft, expectedProjectId,
             Scan?.Model.ModelId ?? "", expectedWindStateId, currentGeomHash, Shells3D);
+        var interpretedItems=draft.Items.Select(i=>InterpretDraftItem(i,draft.Exclusions)).ToImmutableArray();
         ResetToCleanUnmappedDraft(expectedWindStateId);
         if (reconciledStatus == GeometryReviewStatus.ScopeReviewRequired)
         {
@@ -120,7 +128,8 @@ public sealed class CsiInspectionSession : IAsyncDisposable
             return false;
         }
         ReviewStatus = draft.ReviewStatus;
-        retainedDraft = draft;
+        retainedDraft = draft with{Items=interpretedItems};
+        if(draft.Items.Any(i=>i.MappingContractVersion<2))ReviewStatus=GeometryReviewStatus.GeometryDraft;
         draftsByState[draft.WindState.Id] = draft;
         Exclusions = draft.Exclusions;
         Local3Reviews = draft.Overrides;
@@ -130,7 +139,9 @@ public sealed class CsiInspectionSession : IAsyncDisposable
             var item = draft.Items.FirstOrDefault(i => i.ShellId == shell.Id);
             if (item != null)
             {
-                rows.Add(new(shell.Id, draft.WindState.Id, item.ZoneId, item.Classification, item.ManualDirection, item.MismatchAcknowledged));
+                var interpreted=InterpretDraftItem(item,draft.Exclusions);
+                rows.Add(new(shell.Id, draft.WindState.Id, interpreted.ZoneId, interpreted.Classification, item.ManualDirection, item.MismatchAcknowledged,
+                    interpreted.MappingContractVersion,interpreted.ZoneCoverages,interpreted.ShellAreaM2));
             }
             else
             {
@@ -139,6 +150,15 @@ public sealed class CsiInspectionSession : IAsyncDisposable
         }
         RoofRows = rows.ToImmutableArray();
         return true;
+    }
+    // v1 merged zone/shell overlaps and inferred crossing from labels. Never reconstruct evidence from comma-delimited labels.
+    private static RoofMappingDraftItem InterpretDraftItem(RoofMappingDraftItem item,ImmutableArray<RoofScopeExclusion> exclusions)
+    {
+        if(item.MappingContractVersion is not (1 or 2))throw new NotSupportedException("Unsupported mapping contract version.");
+        if(item.MappingContractVersion==2)return item;
+        var classification=exclusions.Any(e=>e.ShellId==item.ShellId&&!string.IsNullOrWhiteSpace(e.User)&&!string.IsNullOrWhiteSpace(e.Reason))
+            ?ShellZoneClassification.ExcludedWithReason:item.Classification==ShellZoneClassification.Unmapped?ShellZoneClassification.Unmapped:ShellZoneClassification.NotGeometricallyValidated;
+        return item with{Classification=classification,MappingContractVersion=2,ZoneCoverages=[],ShellAreaM2=null};
     }
     public void AcceptScopeMerge(string user, string reason)
     {

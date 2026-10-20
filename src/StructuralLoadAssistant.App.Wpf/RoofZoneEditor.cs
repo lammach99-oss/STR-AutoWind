@@ -20,6 +20,7 @@ public sealed class RoofZoneEditor : DockPanel
     private readonly ListBox zones=new(){Height=85,DisplayMemberPath="Label"};
     private readonly TextBox label=new(){Text="Engineer zone",Width=150},notes=new(){Width=220};
     private readonly TextBlock detail=new(){TextWrapping=TextWrapping.Wrap},cursor=new();
+    private readonly TextBlock reviewState=new(){TextWrapping=TextWrapping.Wrap,Margin=new Thickness(5),FontWeight=FontWeights.SemiBold};
     private readonly DataGrid results=new(){IsReadOnly=true,AutoGenerateColumns=true,Height=140};
     private readonly List<UvPoint> drawing=[];
     private string? selectedZone;
@@ -40,6 +41,9 @@ public sealed class RoofZoneEditor : DockPanel
         var toolbar=new WrapPanel();DockPanel.SetDock(toolbar,Dock.Top);Children.Add(toolbar);
         void Add(string text,Action action)=>toolbar.Children.Add(ActionButton(text,action));
         toolbar.Children.Add(planes);
+        var heightSlider=new Slider{Minimum=560,Maximum=1200,Value=710,Width=110,ToolTip="Editor height"};
+        heightSlider.ValueChanged+=(_,_)=>{Height=heightSlider.Value;Surface.Height=Math.Max(280,Height-280);};
+        toolbar.Children.Add(new TextBlock{Text="Viewing space",Margin=new Thickness(5)});toolbar.Children.Add(heightSlider);
         Add("Create Zone Polygon",()=>{RequireEditable();creating=true;drawing.Clear();Redraw();});
         Add("Finish Polygon",()=>{vm.ZoneEditor.Create(label.Text,Plane.Id,drawing.ToImmutableArray(),vm.User,vm.Reason);creating=false;drawing.Clear();SelectZone(vm.ZoneEditor.Zones[^1].Id);});
         Add("Cancel drawing",()=>{creating=false;drawing.Clear();Redraw();});
@@ -64,7 +68,8 @@ public sealed class RoofZoneEditor : DockPanel
         side.Children.Add(new TextBlock{Text="Drag handles: vertices. Drag center: whole zone. Shift while dragging snaps within 0.10 m. Middle-drag pans; wheel zooms.",TextWrapping=TextWrapping.Wrap});
         side.Children.Add(detail);side.Children.Add(cursor);
         var bottom=new StackPanel();DockPanel.SetDock(bottom,Dock.Bottom);Children.Add(bottom);
-        bottom.Children.Add(new TextBlock{Text="Surface intersections • NeedsSplitInCSI is advisory only; edit CSI manually. Areas in m², coverage in %."});bottom.Children.Add(results);
+        bottom.Children.Add(reviewState);
+        bottom.Children.Add(new TextBlock{Text="NeedsSplitInCSI / OverlappingZones BLOCK future pressure mapping. No automatic CSI subdivision. Surface areas: m²; coverage: %."});bottom.Children.Add(results);
         Children.Add(Surface);
         planes.SelectionChanged+=(_,_)=>{if(!synchronizing){selectedZone=null;creating=false;drawing.Clear();RefreshLists();ResetView();}};
         zones.SelectionChanged+=(_,_)=>{if(!synchronizing&&zones.SelectedItem is EditableRoofZone z){selectedZone=z.Id;selectedVertex=0;label.Text=z.Label;notes.Text=z.Notes??"";Redraw();SelectionChanged?.Invoke();}};
@@ -102,6 +107,7 @@ public sealed class RoofZoneEditor : DockPanel
     }
     private void RefreshEditor()
     {
+        if(!vm.ZoneEditor.Zones.Any(z=>z.Id==selectedZone)){selectedZone=null;label.Text="Engineer zone";notes.Text="";selectedVertex=0;}
         var id=(planes.SelectedItem as RoofPlaneCoordinateSystem)?.Id;
         synchronizing=true;planes.ItemsSource=vm.ZoneEditor.Planes;planes.SelectedItem=vm.ZoneEditor.Planes.FirstOrDefault(p=>p.Id==id)??vm.ZoneEditor.Planes.FirstOrDefault();synchronizing=false;
         RefreshLists();Redraw();
@@ -114,8 +120,12 @@ public sealed class RoofZoneEditor : DockPanel
         var selected=ShellList.SelectedItems.Cast<string>().ToArray();
         ShellList.ItemsSource=planes.SelectedItem is RoofPlaneCoordinateSystem p?vm.ZoneEditor.ShellIds(p.Id):[];
         foreach(var id in selected.Where(id=>ShellList.Items.Contains(id)))ShellList.SelectedItems.Add(id);
-        results.ItemsSource=vm.ZoneEditor.Classifications.Select(c=>new{c.ShellId,c.Classification,c.ShellAreaM2,c.NeedsSplitInCSI,
-            Coverage=string.Join("; ",c.Coverages.Select(v=>$"{v.ZoneId}: {v.IntersectionAreaM2:F4} m² / {v.CoveragePercent:F2}%")),c.Diagnostic}).ToArray();
+        var classifications=vm.ZoneEditor.Classifications;
+        reviewState.Text=$"Engineer-defined zones (unverified standards) • Intersections: {(classifications.IsEmpty?"NOT CURRENT — validate again":"validated geometry results")} • Geometry review: {vm.SelectedGeometryReviewStatus}\nStandard-derived pressure zones: unavailable • Engineering pressure approval: DISABLED";
+        reviewState.Foreground=classifications.Any(c=>c.NeedsSplitInCSI||c.Classification==GeometryClassification.InvalidGeometry)?Brushes.DarkRed:Brushes.DarkSlateBlue;
+        results.ItemsSource=classifications.SelectMany(c=>c.Coverages.IsEmpty
+            ?new[]{new {Shell=c.ShellId,Status=c.Classification.ToString(),Area=c.ShellAreaM2.ToString("F4",CultureInfo.InvariantCulture),Zone="—",Intersection="—",Coverage="—",Warning=c.NeedsSplitInCSI?"BLOCKED: NeedsSplitInCSI":c.Diagnostic}}
+            :c.Coverages.Select(v=>new {Shell=c.ShellId,Status=c.Classification.ToString(),Area=c.ShellAreaM2.ToString("F4",CultureInfo.InvariantCulture),Zone=vm.ZoneEditor.Zones.FirstOrDefault(z=>z.Id==v.ZoneId)?.Label??v.ZoneId,Intersection=v.IntersectionAreaM2.ToString("F4",CultureInfo.InvariantCulture),Coverage=v.CoveragePercent.ToString("F2",CultureInfo.InvariantCulture)+"%",Warning=c.NeedsSplitInCSI?"BLOCKED: NeedsSplitInCSI • "+c.Diagnostic:c.Diagnostic})).ToArray();
         synchronizing=false;
     }
     private Point ToScreen(UvPoint p)=>new(offsetX+p.U*scale,offsetY-p.V*scale);

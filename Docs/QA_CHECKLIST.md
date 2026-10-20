@@ -74,3 +74,17 @@
 Final WPF dual-mode smoke/results are in IMPLEMENTATION_STATUS.md. Mock screenshots are not actual customer scan proof.
 
 Latest build/test counts and output paths are in IMPLEMENTATION_STATUS.md. A passing fake test does not qualify a live model or wind standard.
+## Sprint 3.3 current qualification
+
+- [x] 201 automated tests pass with physical tests excluded, no silently skipped physical assertions counted.
+- [x] Locked restore, Debug/Release builds; real WPF demo/read-only and disk-restart regressions.
+- [x] Distinct mapping states; structured coverage roundtrip; comma-containing zone IDs stay opaque.
+- [x] Legacy snapshots interpreted conservatively without rewriting; unsupported versions preserve editor state; failed batches are atomic.
+- [x] WPF overlap/coverage blockers, viewing-space controls, state independence and pressure/write safety gates.
+- [x] Real ETABS 23.2.0 PID 34456 read-only selected scan and live editor workflow/persistence exercised.
+- [ ] Independent ETABS GUI coordinate/area/intersection comparisons for this selected model.
+- [ ] Physical multiple-plane/opposite-Local-3 qualification for the roof editor.
+- [ ] Physical stale-source check against an externally prepared disposable changed copy.
+- [ ] SAP2000 physical editor qualification.
+
+See [Sprint 3.3 qualification matrix](SPRINT_3_3_QUALIFICATION.md). Historical checkmarks in earlier sections do not close these current pending checks. No application-generated selection/model/unit/file mutation was used.

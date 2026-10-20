@@ -81,6 +81,17 @@ public sealed partial class MainWindow
             Click("Undo zone edit"); Click("Validate zone intersections");
             Check(vm.ZoneEditor.Classifications.Where(c=>c.ShellId.StartsWith("MOCK-A",StringComparison.Ordinal))
                 .All(c=>c.Classification==GeometryClassification.FullyInsideZone),"corrected containment");
+            var fullRow=vm.RoofReviewRows.OfType<RoofShellMapping>().Single(r=>r.ShellId=="MOCK-A1");
+            Check(fullRow.ZoneCoverages.Length==1&&!fullRow.BlocksPressureMapping,"validated structured containment evidence");
+            zoneEditor.ShellList.SelectedItems.Clear();zoneEditor.ShellList.SelectedItems.Add("MOCK-A1");
+            zoneEditor.ZoneLabelInput.Text="Overlap check";Click("Create Zone from Selected Shells");
+            Click("Validate zone intersections");
+            var overlap=vm.RoofReviewRows.OfType<RoofShellMapping>().Single(r=>r.ShellId=="MOCK-A1");
+            Check(overlap.Classification==ShellZoneClassification.OverlappingZones&&overlap.ZoneId is null&&overlap.ZoneCoverages.Length==2&&overlap.BlocksPressureMapping,"zone overlap remains distinct and blocked");
+            zoneEditor.Capture(Path.Combine(output,"editor-overlap.png"));
+            Click("Undo zone edit");Click("Validate zone intersections");
+            var viewingSpace=Walk(zoneEditor).OfType<Slider>().Single();viewingSpace.Value=850;
+            Check(zoneEditor.Height==850&&zoneEditor.Surface.Height==570,"adjustable viewing space");viewingSpace.Value=710;
             Click("Save Geometry Draft");
             var wx=GeometryHash();
             zoneEditor.Capture(Path.Combine(output,"editor-WX.png"));
