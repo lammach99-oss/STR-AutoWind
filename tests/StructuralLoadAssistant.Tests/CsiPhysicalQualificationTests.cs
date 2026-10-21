@@ -26,15 +26,18 @@ public sealed class CsiPhysicalQualificationTests
             throw new InvalidOperationException("Opt-in physical CSI qualification requires CSI_PHYSICAL_QUALIFICATION=1. Exclude this test using '--filter Category!=PhysicalCsi' or run scripts/qualify-csi.ps1.");
         }
 
-        if (!OperatingSystem.IsWindows() || !File.Exists(EtabsDllPath) || Process.GetProcessesByName("ETABS").Length == 0)
+        var envAssembly = Environment.GetEnvironmentVariable("CSI_ASSEMBLY_PATH");
+        var assemblyPath = !string.IsNullOrWhiteSpace(envAssembly) && File.Exists(envAssembly) ? envAssembly : EtabsDllPath;
+
+        if (!OperatingSystem.IsWindows() || !File.Exists(assemblyPath) || Process.GetProcessesByName("ETABS").Length == 0)
         {
-            throw new InvalidOperationException("ETABS 23 is not running or ETABSv1.dll was not found on this Windows system. Physical qualification cannot proceed.");
+            throw new InvalidOperationException($"ETABS 23 is not running or ETABSv1.dll was not found at '{assemblyPath}'. Physical qualification cannot proceed.");
         }
 
         await using var adapter = new InstalledCsiReadAdapter();
         var envPid = Environment.GetEnvironmentVariable("CSI_PROCESS_ID");
         int? targetPid = int.TryParse(envPid, out var p) && p > 0 ? p : null;
-        var connectResult = await adapter.ConnectAsync(new CsiConnectionOptions(CsiProduct.Etabs, EtabsDllPath, targetPid));
+        var connectResult = await adapter.ConnectAsync(new CsiConnectionOptions(CsiProduct.Etabs, assemblyPath, targetPid));
         
         Assert.True(connectResult.Connected, "Should connect to running ETABS instance.");
         Assert.Equal("Etabs", connectResult.Product);
@@ -221,15 +224,18 @@ public sealed class CsiPhysicalQualificationTests
             throw new InvalidOperationException("Opt-in physical CSI qualification requires CSI_PHYSICAL_QUALIFICATION=1. Exclude this test using '--filter Category!=PhysicalCsi' or run scripts/qualify-csi.ps1.");
         }
 
-        if (!OperatingSystem.IsWindows() || !File.Exists(EtabsDllPath) || Process.GetProcessesByName("ETABS").Length == 0)
+        var envAssembly = Environment.GetEnvironmentVariable("CSI_ASSEMBLY_PATH");
+        var assemblyPath = !string.IsNullOrWhiteSpace(envAssembly) && File.Exists(envAssembly) ? envAssembly : EtabsDllPath;
+
+        if (!OperatingSystem.IsWindows() || !File.Exists(assemblyPath) || Process.GetProcessesByName("ETABS").Length == 0)
         {
-            throw new InvalidOperationException("ETABS 23 is not running or ETABSv1.dll was not found on this Windows system. Physical qualification cannot proceed.");
+            throw new InvalidOperationException($"ETABS 23 is not running or ETABSv1.dll was not found at '{assemblyPath}'. Physical qualification cannot proceed.");
         }
 
         await using var adapter = new InstalledCsiReadAdapter();
         var envPid = Environment.GetEnvironmentVariable("CSI_PROCESS_ID");
         int? targetPid = int.TryParse(envPid, out var p) && p > 0 ? p : null;
-        var connectResult = await adapter.ConnectAsync(new CsiConnectionOptions(CsiProduct.Etabs, EtabsDllPath, targetPid));
+        var connectResult = await adapter.ConnectAsync(new CsiConnectionOptions(CsiProduct.Etabs, assemblyPath, targetPid));
         Assert.True(connectResult.Connected);
 
         var scan = await adapter.RefreshSelectionAsync();
@@ -239,7 +245,30 @@ public sealed class CsiPhysicalQualificationTests
             : Path.Combine(AppContext.BaseDirectory, "../../../../../fixtures/etabs-roof-independent-benchmark.json");
         if (!File.Exists(fixturePath)) fixturePath = Path.Combine(Directory.GetCurrentDirectory(), "fixtures/etabs-roof-independent-benchmark.json");
 
+        var envResultOutput = Environment.GetEnvironmentVariable("CSI_RESULT_OUTPUT_PATH");
+        var resultOutputPath = !string.IsNullOrWhiteSpace(envResultOutput)
+            ? envResultOutput
+            : Path.Combine(Directory.GetCurrentDirectory(), "artifacts/physical-qualification-result.json");
+
         var result = BenchmarkExecutionPipeline.Execute(scan, fixturePath, targetPid);
+
+        try
+        {
+            var dir = Path.GetDirectoryName(resultOutputPath);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+            var jsonOptions = new System.Text.Json.JsonSerializerOptions
+            {
+                WriteIndented = true,
+                Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
+            };
+            var json = System.Text.Json.JsonSerializer.Serialize(result, jsonOptions);
+            File.WriteAllText(resultOutputPath, json);
+        }
+        catch
+        {
+            // Non-fatal if filesystem prevents writing result artifact
+        }
+
         if (result.Outcome != PhysicalQualificationOutcome.Passed)
         {
             throw new InvalidOperationException($"Physical benchmark qualification did not pass. Outcome: {result.Outcome}. Summary: {result.Summary}. Issues: {string.Join("; ", result.Issues)}");

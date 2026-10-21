@@ -243,11 +243,14 @@ Standards: **verified normative data: none**; unverified metadata: both requeste
 ## Sprint 3.4.2 Preflight Hotfix — Physical Runner Hardening
 
 - **Status**: Complete.
-- **Automated Tests**: 226 passed, 0 failed, 0 skipped. All 6 WPF smoke processes verified.
+- **Automated Tests**: 232 passed, 0 failed, 0 skipped. All 6 WPF smoke processes verified.
 - **Key Accomplishments**:
   - Repaired default ETABS interop DLL path in `scripts/qualify-csi.ps1` with safe multi-candidate path discovery and validation.
-  - Enforced strict PID identity throughout the runner, using `GetObjectProcess($ProcessId)` without falling back to `GetObject()`.
+  - Enforced strict PID identity throughout the runner and selection restoration, using `GetObjectProcess($ProcessId)` without falling back to `GetObject()`. Re-verifies PID and process identity before restoration.
   - Guarded against ambiguous multi-instance operations and refused selection mutation unless explicit PID is provided.
-  - Added restoration verification rejecting selection mutation if unrestorable object types are present.
-  - Aligned distinct exit codes: 0 (Passed), 1 (Failed), 2 (Inconclusive), 3 (Pending), 4 (NotExecuted).
+  - Do not swallow selection-setup safety exceptions; if initial selection cannot be safely recorded or restored, refuses selection mutation without modifying selection.
+  - Propagates exact resolved and validated ETABS API assembly path to physical test runner.
+  - Persists structured `PhysicalQualificationResult` to JSON report and derives runner status directly from structured outcome.
+  - Added regression test suite (`PhysicalRunnerRegressionTests.cs`) covering wrong PID, missing API path, disallowed selection mutation, failed restoration, model mismatch, and qualification outcome propagation.
+  - Aligned distinct exit codes: 0 (Passed), 1 (Failed), 2 (Inconclusive), 3 (Pending), 4 (NotExecuted). Selection restoration failures are strictly reported as Failed with non-zero exit.
   - Documented fixture-directed plane grouping scope in `BenchmarkExecutionPipeline`.

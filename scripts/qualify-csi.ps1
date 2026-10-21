@@ -127,6 +127,10 @@ try {
     $initialSelections = @() # array of @{ Type = int; Name = string }
 
     try {
+        if (-not (Test-Path -LiteralPath $AssemblyPath)) {
+            throw "Installed API assembly not found at '$AssemblyPath'."
+        }
+
         $asm = [System.Reflection.Assembly]::LoadFrom($AssemblyPath)
         $helper = [System.Activator]::CreateInstance($asm.GetType("ETABSv1.Helper"))
         $cHelper = $asm.GetType("ETABSv1.cHelper")
@@ -134,6 +138,10 @@ try {
         $etabsObj = $null
 
         if ($ProcessId -gt 0) {
+            $procCheck = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+            if (-not $procCheck -or $procCheck.ProcessName -ne "ETABS") {
+                throw "Target ETABS process PID $ProcessId is not active or is not an ETABS instance."
+            }
             if ($null -eq $getObjProc) {
                 throw "ETABS interop Helper does not expose GetObjectProcess method."
             }
@@ -143,10 +151,16 @@ try {
             }
         } else {
             $etabsObj = $cHelper.GetMethod("GetObject").Invoke($helper, [object[]]@("CSI.ETABS.API.ETABSObject"))
+            if ($null -eq $etabsObj) {
+                throw "Could not attach to running ETABS instance via ambient GetObject."
+            }
         }
 
         if ($null -ne $etabsObj) {
             $sapModel = $asm.GetType("ETABSv1.cOAPI").GetProperty("SapModel").GetValue($etabsObj)
+            if ($null -eq $sapModel) {
+                throw "Failed to obtain SapModel from ETABS object."
+            }
             $selectObj = $asm.GetType("ETABSv1.cSapModel").GetProperty("SelectObj").GetValue($sapModel)
             $frameObj = $asm.GetType("ETABSv1.cSapModel").GetProperty("FrameObj").GetValue($sapModel)
             $areaObj = $asm.GetType("ETABSv1.cSapModel").GetProperty("AreaObj").GetValue($sapModel)
@@ -203,7 +217,19 @@ try {
             }
         }
     } catch {
-        Write-Host "Interop selection query: $_" -ForegroundColor DarkGray
+        if ($SetupSelection) {
+            Write-Host "Selection setup failed: $_" -ForegroundColor Red
+            Save-Report $ReportPath @{
+                Status = "Failed"
+                Reason = "SetupSelection failed to inspect or prepare selection safely: $_"
+                Product = $Product
+                ProcessId = $ProcessId
+                Timestamp = (Get-Date -Format "o")
+            }
+            throw
+        } else {
+            Write-Host "Interop selection query: $_" -ForegroundColor DarkGray
+        }
     }
 
     try {
@@ -211,7 +237,12 @@ try {
         Write-Host "Running strict physical qualification test..." -ForegroundColor Cyan
         $env:CSI_PHYSICAL_QUALIFICATION = "1"
         if ($ProcessId -gt 0) { $env:CSI_PROCESS_ID = "$ProcessId" }
+        $env:CSI_ASSEMBLY_PATH = $AssemblyPath
         $env:CSI_BENCHMARK_FIXTURE_PATH = $fixtureFullPath
+
+        $resultJsonFile = "artifacts/physical-qualification-result.json"
+        if (Test-Path $resultJsonFile) { Remove-Item $resultJsonFile -Force }
+        $env:CSI_RESULT_OUTPUT_PATH = [System.IO.Path]::GetFullPath($resultJsonFile)
 
         $trxFile = "artifacts/physical-qualification.trx"
         if (Test-Path $trxFile) { Remove-Item $trxFile -Force }
@@ -232,6 +263,15 @@ try {
             }
         }
 
+        $structuredResult = $null
+        if (Test-Path $resultJsonFile) {
+            try {
+                $structuredResult = Get-Content -LiteralPath $resultJsonFile -Raw | ConvertFrom-Json
+            } catch {
+                Write-Host "Failed to parse structured qualification result: $_" -ForegroundColor DarkGray
+            }
+        }
+
         if ($testsTotal -eq 0) {
             Write-Host ""
             Write-Host "Strict Physical Qualification: NOT EXECUTED (No matching tests executed)." -ForegroundColor Red
@@ -243,6 +283,83 @@ try {
                 Timestamp = (Get-Date -Format "o")
             }
             exit 4
+        }
+
+        if ($structuredResult -ne $null) {
+            $rawOutcome = $structuredResult.Outcome
+            $outcome = switch ("$rawOutcome") {
+                "0" { "Pending" }
+                "1" { "Inconclusive" }
+                "2" { "Passed" }
+                "3" { "Failed" }
+                default { "$rawOutcome" }
+            }
+            Write-Host ""
+            Write-Host "Structured Qualification Outcome: $outcome" -ForegroundColor Cyan
+            if ($outcome -eq "Passed" -and $testExit -eq 0 -and $testsFailed -eq 0) {
+                Write-Host "Strict Physical Qualification: SUCCEEDED" -ForegroundColor Green
+                Write-Host "All physical geometry coordinates, Local 3 vectors, roof planes, and test zone intersections match analytical benchmark." -ForegroundColor Green
+                Save-Report $ReportPath @{
+                    Status = "Passed"
+                    Summary = $structuredResult.Summary
+                    Product = $Product
+                    ProcessId = $ProcessId
+                    BenchmarkName = $structuredResult.BenchmarkName
+                    ComparisonsCount = $structuredResult.Comparisons.Count
+                    Issues = $structuredResult.Issues
+                    Checklist = $structuredResult.Checklist
+                    TestsExecuted = $testsTotal
+                    TestsPassed = $testsPassed
+                    TestsFailed = $testsFailed
+                    Timestamp = (Get-Date -Format "o")
+                }
+                exit 0
+            } elseif ($outcome -eq "Inconclusive") {
+                Write-Host "Strict Physical Qualification: INCONCLUSIVE" -ForegroundColor Yellow
+                Write-Host "Reason: $($structuredResult.Summary)" -ForegroundColor Yellow
+                Save-Report $ReportPath @{
+                    Status = "Inconclusive"
+                    Summary = $structuredResult.Summary
+                    Product = $Product
+                    ProcessId = $ProcessId
+                    Issues = $structuredResult.Issues
+                    TestsExecuted = $testsTotal
+                    TestsPassed = $testsPassed
+                    TestsFailed = $testsFailed
+                    Timestamp = (Get-Date -Format "o")
+                }
+                exit 2
+            } elseif ($outcome -eq "Pending") {
+                Write-Host "Strict Physical Qualification: PENDING" -ForegroundColor Yellow
+                Save-Report $ReportPath @{
+                    Status = "Pending"
+                    Summary = $structuredResult.Summary
+                    Product = $Product
+                    ProcessId = $ProcessId
+                    Issues = $structuredResult.Issues
+                    TestsExecuted = $testsTotal
+                    TestsPassed = $testsPassed
+                    TestsFailed = $testsFailed
+                    Timestamp = (Get-Date -Format "o")
+                }
+                exit 3
+            } else {
+                Write-Host "Strict Physical Qualification: FAILED" -ForegroundColor Red
+                Write-Host "Summary: $($structuredResult.Summary)" -ForegroundColor Red
+                Save-Report $ReportPath @{
+                    Status = "Failed"
+                    Summary = $structuredResult.Summary
+                    Product = $Product
+                    ProcessId = $ProcessId
+                    Issues = $structuredResult.Issues
+                    Checklist = $structuredResult.Checklist
+                    TestsExecuted = $testsTotal
+                    TestsPassed = $testsPassed
+                    TestsFailed = $testsFailed
+                    Timestamp = (Get-Date -Format "o")
+                }
+                exit 1
+            }
         }
 
         if ($testExit -ne 0 -or $testsFailed -gt 0) {
@@ -262,11 +379,10 @@ try {
             exit 1
         } else {
             Write-Host ""
-            Write-Host "Strict Physical Qualification: SUCCEEDED" -ForegroundColor Green
-            Write-Host "All physical geometry coordinates, Local 3 vectors, roof planes, and test zone intersections match analytical benchmark." -ForegroundColor Green
+            Write-Host "Strict Physical Qualification: INCONCLUSIVE (No structured result generated)." -ForegroundColor Yellow
             Save-Report $ReportPath @{
-                Status = "Passed"
-                Summary = "All independent physical benchmark checks passed."
+                Status = "Inconclusive"
+                Reason = "No structured qualification result generated."
                 Product = $Product
                 ProcessId = $ProcessId
                 TestsExecuted = $testsTotal
@@ -274,25 +390,43 @@ try {
                 TestsFailed = $testsFailed
                 Timestamp = (Get-Date -Format "o")
             }
-            exit 0
+            exit 2
         }
     } finally {
         $env:CSI_PHYSICAL_QUALIFICATION = $null
         $env:CSI_PROCESS_ID = $null
+        $env:CSI_ASSEMBLY_PATH = $null
         $env:CSI_BENCHMARK_FIXTURE_PATH = $null
+        $env:CSI_RESULT_OUTPUT_PATH = $null
 
         if ($selectionModified -and $RestoreSelection) {
             Write-Host "DISCLOSURE: Restoring initial ETABS selection across all object types on PID $ProcessId..." -ForegroundColor Yellow
             try {
+                if ($ProcessId -gt 0) {
+                    $procCheck = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+                    if (-not $procCheck -or $procCheck.ProcessName -ne "ETABS") {
+                        throw "Target ETABS process PID $ProcessId terminated or changed before selection restoration."
+                    }
+                }
+
                 $asm = [System.Reflection.Assembly]::LoadFrom($AssemblyPath)
                 $helper = [System.Activator]::CreateInstance($asm.GetType("ETABSv1.Helper"))
                 $cHelper = $asm.GetType("ETABSv1.cHelper")
                 $getObjProc = $cHelper.GetMethod("GetObjectProcess")
                 $etabsObj = $null
-                if ($ProcessId -gt 0 -and $null -ne $getObjProc) {
+                if ($ProcessId -gt 0) {
+                    if ($null -eq $getObjProc) {
+                        throw "ETABS interop Helper does not expose GetObjectProcess method for restoration."
+                    }
                     $etabsObj = $getObjProc.Invoke($helper, [object[]]@("CSI.ETABS.API.ETABSObject", $ProcessId))
+                    if ($null -eq $etabsObj) {
+                        throw "Could not attach to ETABS process with PID $ProcessId for restoration. Never falling back to GetObject."
+                    }
                 } else {
                     $etabsObj = $cHelper.GetMethod("GetObject").Invoke($helper, [object[]]@("CSI.ETABS.API.ETABSObject"))
+                    if ($null -eq $etabsObj) {
+                        throw "Could not attach to running ETABS instance via GetObject for restoration."
+                    }
                 }
                 if ($null -ne $etabsObj) {
                     $sapModel = $asm.GetType("ETABSv1.cOAPI").GetProperty("SapModel").GetValue($etabsObj)
@@ -317,6 +451,14 @@ try {
                 }
             } catch {
                 Write-Host "Failed to restore selection: $_" -ForegroundColor Red
+                Save-Report $ReportPath @{
+                    Status = "Failed"
+                    Reason = "Selection restoration failed: $_"
+                    Product = $Product
+                    ProcessId = $ProcessId
+                    Timestamp = (Get-Date -Format "o")
+                }
+                exit 1
             }
         }
     }
