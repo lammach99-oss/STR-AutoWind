@@ -108,3 +108,14 @@ Sprint 3.4.1 implements strict fail-closed enforcement across the entire indepen
    - Omitted test-case execution
 4. **Strict Physical Runner**: `scripts/qualify-csi.ps1` accepts `-ProcessId`, sets `CSI_PROCESS_ID`, runs `Physical_ETABS_independent_benchmark_qualification_when_running`, uses PID-aware attachment without arbitrary instance fallback, and enforces fail-closed test exit codes.
 5. **Stale Qualification Invalidation**: `MainViewModel` invalidates earlier qualification on disconnect, mode switch, model identity change, or geometry fingerprint mismatch.
+
+
+## Sprint 3.4.2 Execution Pipeline Closure
+
+Sprint 3.4.2 closes the physical qualification execution pipeline with real geometry engine execution:
+
+1. **Full Geometry Pipeline**: `BenchmarkExecutionPipeline.Execute()` performs end-to-end roof plane reconstruction, UV footprint projection, fixture zone polygon reconstruction, and calls `ZonePolygonEngine.Classify()` for real polygon intersection calculations.
+2. **Explicit Multi-Zone Overlap Scenario**: Fixture defines two independent overlapping polygons on Shell 201 (`Zone-B1-OverlapA` and `Zone-B1-OverlapB`), each covering 75% of the panel, with 6.7082 m² intersection area. `ZonePolygonEngine` classifies Shell 201 as `OverlappingZones` with `NeedsSplitInCSI = true`.
+3. **Strict Physical Runner**: `scripts/qualify-csi.ps1` propagates `-FixturePath` to `CSI_BENCHMARK_FIXTURE_PATH`, ensures PID-specific attachment without `GetObject()` fallback, evaluates TRX counters to reject zero-test runs, and writes machine-readable reports.
+4. **Extended Completeness**: Checks frame start and end XYZ coordinates, roof plane shell membership, native unit parameters, and load definitions.
+5. **Verified Automation**: 226 automated tests pass, including integration tests running the full pipeline from synthetic scans to validator checklists.

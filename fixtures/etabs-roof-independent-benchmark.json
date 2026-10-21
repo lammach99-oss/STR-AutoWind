@@ -1,306 +1,336 @@
 {
-    "$schema":  "https://json-schema.org/draft/2020-12/schema",
-    "benchmarkName":  "ETABS-23-Independent-Roof-Gable-Benchmark",
-    "description":  "Independently verified symmetric dual-pitch gable roof with multiple divided panels per slope, opposite Local 3 orientations, test-zone polygons with exact analytical intersections, and existing loads.",
-    "qualificationDate":  "2026-10-21",
-    "software":  {
-                     "product":  "Etabs",
-                     "version":  "23.2.0",
-                     "major":  23,
-                     "nativeUnits":  {
-                                         "id":  "9",
-                                         "name":  "N_mm_C",
-                                         "lengthToM":  0.001,
-                                         "forceToN":  1.0
-                                     },
-                     "isLocked":  true
-                 },
-    "tolerances":  {
-                       "coordinateAbsM":  0.001,
-                       "coordinateRel":  0.0001,
-                       "local3ComponentAbs":  0.001,
-                       "areaAbsM2":  0.001,
-                       "areaRel":  0.0001,
-                       "coveragePercentAbs":  0.01,
-                       "loadValueAbs":  0.01
-                   },
-    "benchmarkPlanes":  [
-                            {
-                                "planeId":  "Slope-West",
-                                "normal":  {
-                                               "x":  -0.4472135955,
-                                               "y":  0.0,
-                                               "z":  0.8944271910
-                                           },
-                                "slopeDegrees":  26.565051,
-                                "shells":  [
-                                               "101",
-                                               "102"
-                                           ]
-                            },
-                            {
-                                "planeId":  "Slope-East",
-                                "normal":  {
-                                               "x":  0.4472135955,
-                                               "y":  0.0,
-                                               "z":  0.8944271910
-                                           },
-                                "slopeDegrees":  26.565051,
-                                "shells":  [
-                                               "201",
-                                               "202"
-                                           ]
-                            }
-                        ],
-    "benchmarkShells":  [
-                            {
-                                "id":  "101",
-                                "planeId":  "Slope-West",
-                                "description":  "Lower west slope panel; Local 3 pointing outward along surface normal",
-                                "verticesXYZ":  [
-                                                    {
-                                                        "x":  0.0,
-                                                        "y":  0.0,
-                                                        "z":  6.0
-                                                    },
-                                                    {
-                                                        "x":  2.0,
-                                                        "y":  0.0,
-                                                        "z":  7.0
-                                                    },
-                                                    {
-                                                        "x":  2.0,
-                                                        "y":  4.0,
-                                                        "z":  7.0
-                                                    },
-                                                    {
-                                                        "x":  0.0,
-                                                        "y":  4.0,
-                                                        "z":  6.0
-                                                    }
-                                                ],
-                                "local3":  {
-                                               "x":  -0.4472135955,
-                                               "y":  0.0,
-                                               "z":  0.8944271910
-                                           },
-                                "projectedAreaM2":  8.0,
-                                "surfaceAreaM2":  8.94427191
-                            },
-                            {
-                                "id":  "102",
-                                "planeId":  "Slope-West",
-                                "description":  "Upper west slope panel; opposite Local 3 pointing inward (-Local 3)",
-                                "verticesXYZ":  [
-                                                    {
-                                                        "x":  2.0,
-                                                        "y":  0.0,
-                                                        "z":  7.0
-                                                    },
-                                                    {
-                                                        "x":  4.0,
-                                                        "y":  0.0,
-                                                        "z":  8.0
-                                                    },
-                                                    {
-                                                        "x":  4.0,
-                                                        "y":  4.0,
-                                                        "z":  8.0
-                                                    },
-                                                    {
-                                                        "x":  2.0,
-                                                        "y":  4.0,
-                                                        "z":  7.0
-                                                    }
-                                                ],
-                                "local3":  {
-                                               "x":  0.4472135955,
-                                               "y":  0.0,
-                                               "z":  -0.8944271910
-                                           },
-                                "projectedAreaM2":  8.0,
-                                "surfaceAreaM2":  8.94427191
-                            },
-                            {
-                                "id":  "201",
-                                "planeId":  "Slope-East",
-                                "description":  "Upper east slope panel; Local 3 pointing outward along surface normal",
-                                "verticesXYZ":  [
-                                                    {
-                                                        "x":  4.0,
-                                                        "y":  0.0,
-                                                        "z":  8.0
-                                                    },
-                                                    {
-                                                        "x":  6.0,
-                                                        "y":  0.0,
-                                                        "z":  7.0
-                                                    },
-                                                    {
-                                                        "x":  6.0,
-                                                        "y":  4.0,
-                                                        "z":  7.0
-                                                    },
-                                                    {
-                                                        "x":  4.0,
-                                                        "y":  4.0,
-                                                        "z":  8.0
-                                                    }
-                                                ],
-                                "local3":  {
-                                               "x":  0.4472135955,
-                                               "y":  0.0,
-                                               "z":  0.8944271910
-                                           },
-                                "projectedAreaM2":  8.0,
-                                "surfaceAreaM2":  8.94427191
-                            },
-                            {
-                                "id":  "202",
-                                "planeId":  "Slope-East",
-                                "description":  "Lower east slope panel; opposite Local 3 pointing inward (-Local 3)",
-                                "verticesXYZ":  [
-                                                    {
-                                                        "x":  6.0,
-                                                        "y":  0.0,
-                                                        "z":  7.0
-                                                    },
-                                                    {
-                                                        "x":  8.0,
-                                                        "y":  0.0,
-                                                        "z":  6.0
-                                                    },
-                                                    {
-                                                        "x":  8.0,
-                                                        "y":  4.0,
-                                                        "z":  6.0
-                                                    },
-                                                    {
-                                                        "x":  6.0,
-                                                        "y":  4.0,
-                                                        "z":  7.0
-                                                    }
-                                                ],
-                                "local3":  {
-                                               "x":  -0.4472135955,
-                                               "y":  0.0,
-                                               "z":  -0.8944271910
-                                           },
-                                "projectedAreaM2":  8.0,
-                                "surfaceAreaM2":  8.94427191
-                            }
-                        ],
-    "benchmarkTestZones":  [
-                               {
-                                   "scenario":  "full_containment",
-                                   "zoneId":  "Zone-A1-Full",
-                                   "planeId":  "Slope-West",
-                                   "targetShellId":  "101",
-                                   "verticesUV":  [
-                                                      {
-                                                          "u":  0,
-                                                          "v":  0
-                                                      },
-                                                      {
-                                                          "u":  2.2360679775,
-                                                          "v":  0
-                                                      },
-                                                      {
-                                                          "u":  2.2360679775,
-                                                          "v":  4
-                                                      },
-                                                      {
-                                                          "u":  0,
-                                                          "v":  4
-                                                      }
-                                                  ],
-                                   "expectedIntersectionAreaM2":  8.94427191,
-                                   "expectedCoveragePercent":  100,
-                                   "expectedClassification":  "FullyInsideZone",
-                                   "needsSplitInCSI":  false
-                               },
-                               {
-                                   "scenario":  "half_containment",
-                                   "zoneId":  "Zone-A2-Half",
-                                   "planeId":  "Slope-West",
-                                   "targetShellId":  "102",
-                                   "verticesUV":  [
-                                                      {
-                                                          "u":  2.2360679775,
-                                                          "v":  0
-                                                      },
-                                                      {
-                                                          "u":  3.35410196625,
-                                                          "v":  0
-                                                      },
-                                                      {
-                                                          "u":  3.35410196625,
-                                                          "v":  4
-                                                      },
-                                                      {
-                                                          "u":  2.2360679775,
-                                                          "v":  4
-                                                      }
-                                                  ],
-                                   "expectedIntersectionAreaM2":  4.472135955,
-                                   "expectedCoveragePercent":  50,
-                                   "expectedClassification":  "CrossesZoneBoundary",
-                                   "needsSplitInCSI":  true
-                               },
-                               {
-                                   "scenario":  "overlapping_zones",
-                                   "zoneId":  "Zone-B1-Overlap",
-                                   "planeId":  "Slope-East",
-                                   "targetShellId":  "201",
-                                   "verticesUV":  [
-                                                      {
-                                                          "u":  0,
-                                                          "v":  0
-                                                      },
-                                                      {
-                                                          "u":  2.2360679775,
-                                                          "v":  0
-                                                      },
-                                                      {
-                                                          "u":  2.2360679775,
-                                                          "v":  4
-                                                      },
-                                                      {
-                                                          "u":  0,
-                                                          "v":  4
-                                                      }
-                                                  ],
-                                   "expectedIntersectionAreaM2":  8.94427191,
-                                   "expectedCoveragePercent":  100,
-                                   "expectedClassification":  "OverlappingZones",
-                                   "needsSplitInCSI":  true
-                               }
-                           ],
-    "benchmarkFrames":  [
-                            {
-                                "id":  "101",
-                                "description":  "Perimeter eave frame at X=0, Z=6",
-                                "startX":  0.0,
-                                "startY":  0.0,
-                                "startZ":  6.0,
-                                "endX":  0.0,
-                                "endY":  4.0,
-                                "endZ":  6.0,
-                                "lengthM":  4.0
-                            }
-                        ],
-    "benchmarkLoads":  [
-                           {
-                               "objectId":  "101",
-                               "loadType":  "FrameDistributed",
-                               "pattern":  "W_Uniform",
-                               "valueSI":  1500.0
-                           },
-                           {
-                               "objectId":  "101",
-                               "loadType":  "AreaUniform",
-                               "pattern":  "W_Suction",
-                               "valueSI":  -1200.0
-                           }
-                       ]
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "benchmarkName": "ETABS-23-Independent-Roof-Gable-Benchmark",
+  "description": "Independently verified symmetric dual-pitch gable roof with multiple divided panels per slope, opposite Local 3 orientations, test-zone polygons with exact analytical intersections, and existing loads.",
+  "qualificationDate": "2026-10-21",
+  "software": {
+    "product": "Etabs",
+    "version": "23.2.0",
+    "major": 23,
+    "nativeUnits": {
+      "id": "9",
+      "name": "N_mm_C",
+      "lengthToM": 0.001,
+      "forceToN": 1
+    },
+    "isLocked": true
+  },
+  "tolerances": {
+    "coordinateAbsM": 0.001,
+    "coordinateRel": 0.0001,
+    "local3ComponentAbs": 0.001,
+    "areaAbsM2": 0.001,
+    "areaRel": 0.0001,
+    "coveragePercentAbs": 0.01,
+    "loadValueAbs": 0.01
+  },
+  "benchmarkPlanes": [
+    {
+      "planeId": "Slope-West",
+      "normal": {
+        "x": -0.4472135955,
+        "y": 0,
+        "z": 0.894427191
+      },
+      "slopeDegrees": 26.565051,
+      "shells": [
+        "101",
+        "102"
+      ]
+    },
+    {
+      "planeId": "Slope-East",
+      "normal": {
+        "x": 0.4472135955,
+        "y": 0,
+        "z": 0.894427191
+      },
+      "slopeDegrees": 26.565051,
+      "shells": [
+        "201",
+        "202"
+      ]
+    }
+  ],
+  "benchmarkShells": [
+    {
+      "id": "101",
+      "planeId": "Slope-West",
+      "description": "Lower west slope panel; Local 3 pointing outward along surface normal",
+      "verticesXYZ": [
+        {
+          "x": 0,
+          "y": 0,
+          "z": 6
+        },
+        {
+          "x": 2,
+          "y": 0,
+          "z": 7
+        },
+        {
+          "x": 2,
+          "y": 4,
+          "z": 7
+        },
+        {
+          "x": 0,
+          "y": 4,
+          "z": 6
+        }
+      ],
+      "local3": {
+        "x": -0.4472135955,
+        "y": 0,
+        "z": 0.894427191
+      },
+      "projectedAreaM2": 8,
+      "surfaceAreaM2": 8.94427191
+    },
+    {
+      "id": "102",
+      "planeId": "Slope-West",
+      "description": "Upper west slope panel; opposite Local 3 pointing inward (-Local 3)",
+      "verticesXYZ": [
+        {
+          "x": 2,
+          "y": 0,
+          "z": 7
+        },
+        {
+          "x": 4,
+          "y": 0,
+          "z": 8
+        },
+        {
+          "x": 4,
+          "y": 4,
+          "z": 8
+        },
+        {
+          "x": 2,
+          "y": 4,
+          "z": 7
+        }
+      ],
+      "local3": {
+        "x": 0.4472135955,
+        "y": 0,
+        "z": -0.894427191
+      },
+      "projectedAreaM2": 8,
+      "surfaceAreaM2": 8.94427191
+    },
+    {
+      "id": "201",
+      "planeId": "Slope-East",
+      "description": "Upper east slope panel; Local 3 pointing outward along surface normal",
+      "verticesXYZ": [
+        {
+          "x": 4,
+          "y": 0,
+          "z": 8
+        },
+        {
+          "x": 6,
+          "y": 0,
+          "z": 7
+        },
+        {
+          "x": 6,
+          "y": 4,
+          "z": 7
+        },
+        {
+          "x": 4,
+          "y": 4,
+          "z": 8
+        }
+      ],
+      "local3": {
+        "x": 0.4472135955,
+        "y": 0,
+        "z": 0.894427191
+      },
+      "projectedAreaM2": 8,
+      "surfaceAreaM2": 8.94427191
+    },
+    {
+      "id": "202",
+      "planeId": "Slope-East",
+      "description": "Lower east slope panel; opposite Local 3 pointing inward (-Local 3)",
+      "verticesXYZ": [
+        {
+          "x": 6,
+          "y": 0,
+          "z": 7
+        },
+        {
+          "x": 8,
+          "y": 0,
+          "z": 6
+        },
+        {
+          "x": 8,
+          "y": 4,
+          "z": 6
+        },
+        {
+          "x": 6,
+          "y": 4,
+          "z": 7
+        }
+      ],
+      "local3": {
+        "x": -0.4472135955,
+        "y": 0,
+        "z": -0.894427191
+      },
+      "projectedAreaM2": 8,
+      "surfaceAreaM2": 8.94427191
+    }
+  ],
+  "benchmarkTestZones": [
+    {
+      "scenario": "full_containment",
+      "zoneId": "Zone-A1-Full",
+      "planeId": "Slope-West",
+      "targetShellId": "101",
+      "verticesUV": [
+        {
+          "u": 2.683281573,
+          "v": 0
+        },
+        {
+          "u": 4.9193495505,
+          "v": 0
+        },
+        {
+          "u": 4.9193495505,
+          "v": 4
+        },
+        {
+          "u": 2.683281573,
+          "v": 4
+        }
+      ],
+      "expectedIntersectionAreaM2": 8.94427191,
+      "expectedCoveragePercent": 100,
+      "expectedClassification": "FullyInsideZone",
+      "needsSplitInCSI": false
+    },
+    {
+      "scenario": "half_containment",
+      "zoneId": "Zone-A2-Half",
+      "planeId": "Slope-West",
+      "targetShellId": "102",
+      "verticesUV": [
+        {
+          "u": 4.9193495505,
+          "v": 0
+        },
+        {
+          "u": 6.03738353925,
+          "v": 0
+        },
+        {
+          "u": 6.03738353925,
+          "v": 4
+        },
+        {
+          "u": 4.9193495505,
+          "v": 4
+        }
+      ],
+      "expectedIntersectionAreaM2": 4.472135955,
+      "expectedCoveragePercent": 50,
+      "expectedClassification": "CrossesZoneBoundary",
+      "needsSplitInCSI": true
+    },
+    {
+      "scenario": "overlapping_zones",
+      "zoneId": "Zone-B1-OverlapA",
+      "planeId": "Slope-East",
+      "targetShellId": "201",
+      "verticesUV": [
+        {
+          "u": 0,
+          "v": 0
+        },
+        {
+          "u": 1.677050983125,
+          "v": 0
+        },
+        {
+          "u": 1.677050983125,
+          "v": 4
+        },
+        {
+          "u": 0,
+          "v": 4
+        }
+      ],
+      "expectedIntersectionAreaM2": 6.7082039325,
+      "expectedCoveragePercent": 75,
+      "expectedClassification": "OverlappingZones",
+      "needsSplitInCSI": true
+    },
+    {
+      "scenario": "overlapping_zones",
+      "zoneId": "Zone-B1-OverlapB",
+      "planeId": "Slope-East",
+      "targetShellId": "201",
+      "verticesUV": [
+        {
+          "u": 0.559016994375,
+          "v": 0
+        },
+        {
+          "u": 2.2360679775,
+          "v": 0
+        },
+        {
+          "u": 2.2360679775,
+          "v": 4
+        },
+        {
+          "u": 0.559016994375,
+          "v": 4
+        }
+      ],
+      "expectedIntersectionAreaM2": 6.7082039325,
+      "expectedCoveragePercent": 75,
+      "expectedClassification": "OverlappingZones",
+      "needsSplitInCSI": true
+    }
+  ],
+  "benchmarkFrames": [
+    {
+      "id": "101",
+      "description": "Perimeter eave frame at X=0, Z=6",
+      "startX": 0,
+      "startY": 0,
+      "startZ": 6,
+      "endX": 0,
+      "endY": 4,
+      "endZ": 6,
+      "lengthM": 4
+    }
+  ],
+  "benchmarkLoads": [
+    {
+      "objectId": "101",
+      "loadType": "FrameDistributed",
+      "pattern": "W_Uniform",
+      "valueSI": 1500,
+      "direction": "Gravity"
+    },
+    {
+      "objectId": "101",
+      "loadType": "AreaUniform",
+      "pattern": "W_Suction",
+      "valueSI": -1200,
+      "direction": "Local3"
+    }
+  ]
 }

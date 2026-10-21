@@ -17,7 +17,8 @@ public static class IndependentGeometryBenchmarkValidator
         ImmutableArray<RoofShell3D> shells3D,
         IReadOnlyList<RoofPlaneCoordinateSystem> planes,
         string fixturePath,
-        ImmutableArray<ShellZoneIntersection>? intersections = null, int? processId = null)
+        ImmutableArray<ShellZoneIntersection>? intersections = null,
+        int? processId = null)
     {
         ArgumentNullException.ThrowIfNull(scan);
         var timestamp = DateTimeOffset.UtcNow;
@@ -64,6 +65,23 @@ public static class IndependentGeometryBenchmarkValidator
         {
             var root = doc.RootElement;
             var benchmarkName = root.TryGetProperty("benchmarkName", out var bn) ? bn.GetString() ?? "Benchmark" : "Benchmark";
+
+            // Strict check: reject incomplete fixtures missing mandatory sections
+            if (!root.TryGetProperty("benchmarkPlanes", out _) ||
+                !root.TryGetProperty("benchmarkShells", out _) ||
+                !root.TryGetProperty("benchmarkFrames", out _) ||
+                !root.TryGetProperty("benchmarkLoads", out _) ||
+                !root.TryGetProperty("benchmarkTestZones", out _))
+            {
+                var incompleteChecklist = new BenchmarkChecklist(1, 0, 0, 0, ["Benchmark fixture missing one or more mandatory sections."], []);
+                return new PhysicalQualificationResult(
+                    PhysicalQualificationOutcome.Inconclusive,
+                    product, version, processId, modelId, timestamp,
+                    benchmarkName, [],
+                    ["Benchmark fixture is incomplete: missing required specification sections."],
+                    "Physical qualification is Inconclusive: incomplete benchmark fixture.",
+                    incompleteChecklist, scanFingerprint, fixtureHash);
+            }
 
             // Read tolerances
             double coordTol = 0.001;
@@ -114,9 +132,31 @@ public static class IndependentGeometryBenchmarkValidator
                     bool pass = scan.Model.Version.StartsWith($"{em}.", StringComparison.Ordinal);
                     AddCheck("Software", "CSI", "MajorVersion", em, pass ? em : 0, 0, null, pass, $"Expected major {em}, Actual {scan.Model.Version}");
                 }
+                if (sw.TryGetProperty("nativeUnits", out var nu))
+                {
+                    if (nu.TryGetProperty("name", out var nuName))
+                    {
+                        var expNu = nuName.GetString()!;
+                        bool passNu = string.Equals(scan.Units.Description, expNu, StringComparison.OrdinalIgnoreCase) ||
+                                      string.Equals(scan.Units.NativeUnitId, expNu, StringComparison.OrdinalIgnoreCase);
+                        AddCheck("Software", "CSI", "NativeUnits", 1, passNu ? 1 : 0, 0, null, passNu, $"Expected units {expNu}, actual {scan.Units.Description}");
+                    }
+                    if (nu.TryGetProperty("lengthToM", out var l2m))
+                    {
+                        var expL2m = l2m.GetDouble();
+                        bool passL2m = Math.Abs(scan.Units.LengthToM - expL2m) <= 1e-6;
+                        AddCheck("Software", "CSI", "LengthToM", expL2m, scan.Units.LengthToM, 1e-6, null, passL2m, $"Expected LengthToM {expL2m}, actual {scan.Units.LengthToM}");
+                    }
+                    if (nu.TryGetProperty("forceToN", out var f2n))
+                    {
+                        var expF2n = f2n.GetDouble();
+                        bool passF2n = Math.Abs(scan.Units.ForceToN - expF2n) <= 1e-6;
+                        AddCheck("Software", "CSI", "ForceToN", expF2n, scan.Units.ForceToN, 1e-6, null, passF2n, $"Expected ForceToN {expF2n}, actual {scan.Units.ForceToN}");
+                    }
+                }
             }
 
-            // 2. Check required benchmark frames
+            // 2. Check required benchmark frames (coordinates & length)
             if (root.TryGetProperty("benchmarkFrames", out var expectedFrames))
             {
                 foreach (var ef in expectedFrames.EnumerateArray())
@@ -129,6 +169,20 @@ public static class IndependentGeometryBenchmarkValidator
                     }
                     else
                     {
+                        if (ef.TryGetProperty("startX", out var sx) && ef.TryGetProperty("startY", out var sy) && ef.TryGetProperty("startZ", out var sz))
+                        {
+                            var expStartX = sx.GetDouble(); var expStartY = sy.GetDouble(); var expStartZ = sz.GetDouble();
+                            AddCheck("Frames", fId, "Start.X", expStartX, frame.Start.X, coordTol, null, Math.Abs(frame.Start.X - expStartX) <= coordTol, $"Start.X: expected {expStartX:F4}, actual {frame.Start.X:F4}");
+                            AddCheck("Frames", fId, "Start.Y", expStartY, frame.Start.Y, coordTol, null, Math.Abs(frame.Start.Y - expStartY) <= coordTol, $"Start.Y: expected {expStartY:F4}, actual {frame.Start.Y:F4}");
+                            AddCheck("Frames", fId, "Start.Z", expStartZ, frame.Start.Z, coordTol, null, Math.Abs(frame.Start.Z - expStartZ) <= coordTol, $"Start.Z: expected {expStartZ:F4}, actual {frame.Start.Z:F4}");
+                        }
+                        if (ef.TryGetProperty("endX", out var ex) && ef.TryGetProperty("endY", out var ey) && ef.TryGetProperty("endZ", out var ez))
+                        {
+                            var expEndX = ex.GetDouble(); var expEndY = ey.GetDouble(); var expEndZ = ez.GetDouble();
+                            AddCheck("Frames", fId, "End.X", expEndX, frame.End.X, coordTol, null, Math.Abs(frame.End.X - expEndX) <= coordTol, $"End.X: expected {expEndX:F4}, actual {frame.End.X:F4}");
+                            AddCheck("Frames", fId, "End.Y", expEndY, frame.End.Y, coordTol, null, Math.Abs(frame.End.Y - expEndY) <= coordTol, $"End.Y: expected {expEndY:F4}, actual {frame.End.Y:F4}");
+                            AddCheck("Frames", fId, "End.Z", expEndZ, frame.End.Z, coordTol, null, Math.Abs(frame.End.Z - expEndZ) <= coordTol, $"End.Z: expected {expEndZ:F4}, actual {frame.End.Z:F4}");
+                        }
                         if (ef.TryGetProperty("lengthM", out var expLen))
                         {
                             var el = expLen.GetDouble();
@@ -139,7 +193,7 @@ public static class IndependentGeometryBenchmarkValidator
                 }
             }
 
-            // Check required benchmark shells
+            // 3. Check required benchmark shells
             if (root.TryGetProperty("benchmarkShells", out var expectedShells))
             {
                 var shellArray = expectedShells.EnumerateArray().ToArray();
@@ -242,7 +296,7 @@ public static class IndependentGeometryBenchmarkValidator
                 }
             }
 
-            // 4. Roof Planes verification
+            // 4. Roof Planes verification (plane count, normals, slopes, shell membership)
             if (root.TryGetProperty("benchmarkPlanes", out var expectedPlanes))
             {
                 var expPlanesList = expectedPlanes.EnumerateArray().ToArray();
@@ -269,6 +323,25 @@ public static class IndependentGeometryBenchmarkValidator
                         {
                             var planeSlope = Math.Acos(Math.Clamp(Math.Abs(matchedPlane.Normal.Z), -1.0, 1.0)) * 180.0 / Math.PI;
                             AddCheck("Roof Planes", pId, "SlopeDegrees", expSlope, planeSlope, 0.5, null, Math.Abs(planeSlope - expSlope) <= 0.5, $"Plane {pId} slope: expected {expSlope:F2}°, actual {planeSlope:F2}°");
+
+                            // Verify shell membership per plane
+                            if (ep.TryGetProperty("shells", out var epShells))
+                            {
+                                foreach (var shElem in epShells.EnumerateArray())
+                                {
+                                    var shId = shElem.GetString()!;
+                                    var sh = scan.Model.Shells.FirstOrDefault(s => s.Id == shId);
+                                    if (sh == null)
+                                    {
+                                        AddMissing("Roof Planes", pId, $"ShellMember:{shId}", $"Shell {shId} missing from selection");
+                                    }
+                                    else
+                                    {
+                                        bool allCoplanar = sh.Vertices.All(v => Math.Abs(matchedPlane.Normal.Dot(v - matchedPlane.Origin)) <= coordTol);
+                                        AddCheck("Roof Planes", pId, $"ShellMember:{shId}", 1, allCoplanar ? 1 : 0, 0, null, allCoplanar, $"Shell {shId} coplanar with plane {pId}");
+                                    }
+                                }
+                            }
                         }
                     }
                 }

@@ -1,5 +1,13 @@
 # CSI read-only compatibility
 
+## Physical Benchmark Execution Pipeline (Sprint 3.4.2)
+
+Sprint 3.4.2 closes the physical qualification execution pipeline:
+- **BenchmarkExecutionPipeline**: Automatically executes 3D geometry processing, roof plane reconstruction, UV footprint projection, fixture zone polygon reconstruction, and production NetTopologySuite overlay (ZonePolygonEngine.Classify) without manual/fake classification inputs.
+- **Explicit Multi-Zone Overlap**: Fixture defines two independent overlapping polygons on Shell 201 (Zone-B1-OverlapA and Zone-B1-OverlapB, each at 75% coverage and 6.7082 m²), mathematically proving detection of OverlappingZones and NeedsSplitInCSI = true.
+- **Runner Hardening**: scripts/qualify-csi.ps1 avoids fallback to GetObject, propagates CSI_BENCHMARK_FIXTURE_PATH, parses modern fixture schemas, parses TRX counters to reject zero-test executions, and writes machine-readable reports.
+- **Extended Checks**: Frame start/end XYZ coordinates, roof plane shell membership, and native units consistency are checked against tolerances.
+
 ## Fail-Closed Physical Benchmark Qualification (Sprint 3.4.1)
 
 Sprint 3.4.1 hardens the independent benchmark framework to be strictly fail-closed:

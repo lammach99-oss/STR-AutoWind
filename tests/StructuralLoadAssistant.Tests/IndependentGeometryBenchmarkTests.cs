@@ -20,7 +20,8 @@ public sealed class IndependentGeometryBenchmarkTests
         bool invertLocal3 = false,
         bool omitLoad = false,
         string? loadKind = null,
-        bool incompleteVertices = false)
+        bool incompleteVertices = false,
+        bool omitEastPlane = false)
     {
         var l3West = new Vec3(-0.4472135955, 0.0, 0.8944271910);
         var l3WestInverted = new Vec3(0.4472135955, 0.0, -0.8944271910);
@@ -31,41 +32,46 @@ public sealed class IndependentGeometryBenchmarkTests
             ? ImmutableArray.Create(new Vec3(0.0, 0.0, 6.0), new Vec3(2.0, 0.0, 7.0), new Vec3(2.0, 4.0, 7.0))
             : ImmutableArray.Create(new Vec3(0.0 + vertexXOffset, 0.0, 6.0), new Vec3(2.0, 0.0, 7.0), new Vec3(2.0, 4.0, 7.0), new Vec3(0.0, 4.0, 6.0));
 
-        var shells = ImmutableArray.Create(
+        var shellList = new List<ShellGeometry>
+        {
             new ShellGeometry("101", "Slope-West", verts101, invertLocal3 ? l3WestInverted : l3West, default),
             new ShellGeometry("102", "Slope-West", [
                 new(2.0, 0.0, 7.0),
                 new(4.0, 0.0, 8.0),
                 new(4.0, 4.0, 8.0),
                 new(2.0, 4.0, 7.0)
-            ], l3WestInverted, default),
-            new ShellGeometry("201", "Slope-East", [
+            ], l3WestInverted, default)
+        };
+
+        if (!omitEastPlane)
+        {
+            shellList.Add(new ShellGeometry("201", "Slope-East", [
                 new(4.0, 0.0, 8.0),
                 new(6.0, 0.0, 7.0),
                 new(6.0, 4.0, 7.0),
                 new(4.0, 4.0, 8.0)
-            ], l3East, default),
-            new ShellGeometry("202", "Slope-East", [
+            ], l3East, default));
+            shellList.Add(new ShellGeometry("202", "Slope-East", [
                 new(6.0, 0.0, 7.0),
                 new(8.0, 0.0, 6.0),
                 new(8.0, 4.0, 6.0),
                 new(6.0, 4.0, 7.0)
-            ], l3EastInverted, default)
-        );
+            ], l3EastInverted, default));
+        }
 
         var frames = ImmutableArray.Create(
             new FrameGeometry("101", "Eaves", new(0.0, 0.0, 6.0), new(0.0, 4.0, 6.0))
         );
 
         var loads = omitLoad ? ImmutableArray<ExistingLoad>.Empty : ImmutableArray.Create(
-            new ExistingLoad("101", "W_Uniform", loadKind ?? "FrameDistributed:type=1", 1500.0, "Unknown"),
-            new ExistingLoad("101", "W_Suction", "AreaUniform", -1200.0, "Unknown")
+            new ExistingLoad("101", "W_Uniform", loadKind ?? "FrameDistributed", 1500.0, "CSI_READ_ONLY"),
+            new ExistingLoad("101", "W_Suction", "AreaUniform", -1200.0, "CSI_READ_ONLY")
         );
 
         var model = new CsiModelSnapshot(
             "benchmark-hash", "ETABS-BENCHMARK.EDB", "Etabs", "23.2.0",
             "geom-hash", "loads-hash", ["W_Uniform", "W_Suction"], ["DEAD"], ["COMB1"],
-            frames, shells, loads
+            frames, shellList.ToImmutableArray(), loads
         );
 
         return new CsiReadScan(
@@ -104,7 +110,9 @@ public sealed class IndependentGeometryBenchmarkTests
             : ImmutableArray.Create(new ZoneCoverage("Zone-A1-Full", 8.94427191, 100.0));
 
         var cov102 = ImmutableArray.Create(new ZoneCoverage("Zone-A2-Half", 4.472135955, 50.0));
-        var cov201 = ImmutableArray.Create(new ZoneCoverage("Zone-B1-Overlap", 8.94427191, 100.0));
+        var cov201 = ImmutableArray.Create(
+            new ZoneCoverage("Zone-B1-OverlapA", 6.7082039325, 75.0),
+            new ZoneCoverage("Zone-B1-OverlapB", 6.7082039325, 75.0));
 
         return ImmutableArray.Create(
             new ShellZoneIntersection("101",
@@ -165,6 +173,63 @@ public sealed class IndependentGeometryBenchmarkTests
         Assert.Empty(result.Checklist.FailedChecks);
         Assert.True(result.Comparisons.Length >= 20);
         Assert.All(result.Comparisons, c => Assert.True(c.Passed, $"Comparison failed: {c.Category} {c.ElementId} {c.Property}"));
+    }
+
+    [Fact]
+    public void Complete_pipeline_integration_test_reconstructs_planes_intersects_and_passes()
+    {
+        var resolvedFixture = File.Exists(FixturePath) ? FixturePath : "fixtures/etabs-roof-independent-benchmark.json";
+        var scan = CreateBenchmarkScan();
+
+        // Run full pipeline: processes 3D shells, reconstructs planes, creates zones, runs ZonePolygonEngine.Classify, validates
+        var result = BenchmarkExecutionPipeline.Execute(scan, resolvedFixture, processId: 12345);
+
+        Assert.True(result.Outcome == PhysicalQualificationOutcome.Passed, string.Join("; ", result.Issues));
+        Assert.Equal(PhysicalQualificationOutcome.Passed, result.Outcome);
+        Assert.Empty(result.Issues);
+        Assert.Contains("PASSED", result.Summary);
+        Assert.NotNull(result.Checklist);
+        Assert.Equal(result.Checklist.ExpectedCount, result.Checklist.ExecutedCount);
+        Assert.Empty(result.Checklist.MissingChecks);
+        Assert.Empty(result.Checklist.FailedChecks);
+        Assert.Equal(12345, result.ProcessId);
+        Assert.True(result.Comparisons.Length >= 25);
+    }
+
+    [Fact]
+    public void Pipeline_fails_with_modified_source_geometry()
+    {
+        var resolvedFixture = File.Exists(FixturePath) ? FixturePath : "fixtures/etabs-roof-independent-benchmark.json";
+        // Modify vertex coordinates by 10mm
+        var scan = CreateBenchmarkScan(vertexXOffset: 0.010);
+
+        var result = BenchmarkExecutionPipeline.Execute(scan, resolvedFixture);
+
+        Assert.Equal(PhysicalQualificationOutcome.Failed, result.Outcome);
+        Assert.NotEmpty(result.Issues);
+        Assert.Contains(result.Comparisons, c => !c.Passed && c.Category == "Global XYZ Coordinates");
+    }
+
+    [Fact]
+    public void Pipeline_fails_with_missing_fixture()
+    {
+        var scan = CreateBenchmarkScan();
+        var result = BenchmarkExecutionPipeline.Execute(scan, "fixtures/non_existent.json");
+
+        Assert.Equal(PhysicalQualificationOutcome.Inconclusive, result.Outcome);
+    }
+
+    [Fact]
+    public void Pipeline_fails_with_omitted_plane_in_scan()
+    {
+        var resolvedFixture = File.Exists(FixturePath) ? FixturePath : "fixtures/etabs-roof-independent-benchmark.json";
+        // Omit East plane shells from scan
+        var scan = CreateBenchmarkScan(omitEastPlane: true);
+
+        var result = BenchmarkExecutionPipeline.Execute(scan, resolvedFixture);
+
+        Assert.Equal(PhysicalQualificationOutcome.Inconclusive, result.Outcome);
+        Assert.Contains(result.Issues, i => i.Contains("missing from CSI selection"));
     }
 
     [Fact]
@@ -301,7 +366,6 @@ public sealed class IndependentGeometryBenchmarkTests
         var shells3D = CreateBenchmarkShells3D();
         var planes = CreateBenchmarkPlanes();
 
-        // intersections not provided -> missing mandatory checks
         var result = IndependentGeometryBenchmarkValidator.Validate(
             scan, shells3D, planes, resolvedFixture, null);
 
@@ -375,4 +439,64 @@ public sealed class IndependentGeometryBenchmarkTests
         var issuesExcluded = RoofPressurePrerequisites.Validate([validRow, crossingRow], [new("102", "Engineer", "Tested exclusion", DateTimeOffset.UtcNow)], GeometryReviewStatus.GeometryReviewed);
         Assert.Empty(issuesExcluded);
     }
+
+    [Fact]
+    public void Pipeline_fails_with_missing_second_overlap_polygon()
+    {
+        var resolvedFixture = File.Exists(FixturePath) ? FixturePath : "fixtures/etabs-roof-independent-benchmark.json";
+        var jsonText = File.ReadAllText(resolvedFixture);
+        using var doc = System.Text.Json.JsonDocument.Parse(jsonText);
+        
+        // Remove Zone-B1-OverlapB from test zones
+        var tempFixture = Path.Combine(Path.GetTempPath(), "missing-overlap-fixture.json");
+        try
+        {
+            var root = doc.RootElement;
+            var zones = root.GetProperty("benchmarkTestZones").EnumerateArray()
+                .Where(z => z.GetProperty("zoneId").GetString() != "Zone-B1-OverlapB")
+                .ToArray();
+
+            var modified = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                benchmarkName = root.GetProperty("benchmarkName").GetString(),
+                software = root.GetProperty("software"),
+                tolerances = root.GetProperty("tolerances"),
+                benchmarkPlanes = root.GetProperty("benchmarkPlanes"),
+                benchmarkShells = root.GetProperty("benchmarkShells"),
+                benchmarkFrames = root.GetProperty("benchmarkFrames"),
+                benchmarkLoads = root.GetProperty("benchmarkLoads"),
+                benchmarkTestZones = zones
+            });
+            File.WriteAllText(tempFixture, modified);
+
+            var scan = CreateBenchmarkScan();
+            var result = BenchmarkExecutionPipeline.Execute(scan, tempFixture);
+
+            // Shell 201 will only have 1 zone covering 75% -> CrossesZoneBoundary, not OverlappingZones!
+            Assert.Equal(PhysicalQualificationOutcome.Failed, result.Outcome);
+            Assert.Contains(result.Issues, i => i.Contains("Zone-B1-OverlapB") || i.Contains("Classification"));
+        }
+        finally
+        {
+            if (File.Exists(tempFixture)) File.Delete(tempFixture);
+        }
+    }
+
+    [Fact]
+    public void Pipeline_fails_with_deviated_frame_start_coordinates()
+    {
+        var resolvedFixture = File.Exists(FixturePath) ? FixturePath : "fixtures/etabs-roof-independent-benchmark.json";
+        var normalScan = CreateBenchmarkScan();
+
+        // Alter frame start coordinate
+        var badFrame = new FrameGeometry("101", "Eaves", new(0.050, 0.0, 6.0), new(0.0, 4.0, 6.0));
+        var badModel = normalScan.Model with { Frames = [badFrame] };
+        var badScan = normalScan with { Model = badModel };
+
+        var result = BenchmarkExecutionPipeline.Execute(badScan, resolvedFixture);
+
+        Assert.Equal(PhysicalQualificationOutcome.Failed, result.Outcome);
+        Assert.Contains(result.Comparisons, c => !c.Passed && c.Category == "Frames" && c.Property.Contains("Start.X"));
+    }
+
 }

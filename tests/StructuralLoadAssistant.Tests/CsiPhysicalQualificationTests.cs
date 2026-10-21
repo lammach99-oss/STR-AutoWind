@@ -233,12 +233,13 @@ public sealed class CsiPhysicalQualificationTests
         Assert.True(connectResult.Connected);
 
         var scan = await adapter.RefreshSelectionAsync();
-        var shells3D = scan.Model.Shells.Select(s => StructuralLoadAssistant.RoofMapping.Roof3DGeometryProcessor.Process(s, scan.Model.ModelId)).ToImmutableArray();
-
-        var fixturePath = Path.Combine(AppContext.BaseDirectory, "../../../../../fixtures/etabs-roof-independent-benchmark.json");
+        var envFixture = Environment.GetEnvironmentVariable("CSI_BENCHMARK_FIXTURE_PATH");
+        var fixturePath = !string.IsNullOrWhiteSpace(envFixture) && File.Exists(envFixture)
+            ? envFixture
+            : Path.Combine(AppContext.BaseDirectory, "../../../../../fixtures/etabs-roof-independent-benchmark.json");
         if (!File.Exists(fixturePath)) fixturePath = Path.Combine(Directory.GetCurrentDirectory(), "fixtures/etabs-roof-independent-benchmark.json");
 
-        var result = IndependentGeometryBenchmarkValidator.Validate(scan, shells3D, [], fixturePath, processId: targetPid);
+        var result = BenchmarkExecutionPipeline.Execute(scan, fixturePath, targetPid);
         if (result.Outcome != PhysicalQualificationOutcome.Passed)
         {
             throw new InvalidOperationException($"Physical benchmark qualification did not pass. Outcome: {result.Outcome}. Summary: {result.Summary}. Issues: {string.Join("; ", result.Issues)}");

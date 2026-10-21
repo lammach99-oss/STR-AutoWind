@@ -218,7 +218,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         if (IsDemo || inspection.Scan is null) throw new InvalidOperationException("Connect to a running CSI instance and scan selection before physical qualification.");
         var fixture = customFixturePath ?? Path.Combine(AppContext.BaseDirectory, "fixtures/etabs-roof-independent-benchmark.json");
         if (!File.Exists(fixture)) fixture = Path.Combine(Directory.GetCurrentDirectory(), "fixtures/etabs-roof-independent-benchmark.json");
-        PhysicalQualification = IndependentGeometryBenchmarkValidator.Validate(inspection.Scan, inspection.Shells3D, ZoneEditor.Planes, fixture, ZoneEditor.Classifications, inspection.Connection?.ProcessId ?? SelectedProcessId);
+        PhysicalQualification = (ZoneEditor.Planes.Count > 0 && !ZoneEditor.Classifications.IsEmpty) ? IndependentGeometryBenchmarkValidator.Validate(inspection.Scan, inspection.Shells3D, ZoneEditor.Planes, fixture, ZoneEditor.Classifications, inspection.Connection?.ProcessId ?? SelectedProcessId) : BenchmarkExecutionPipeline.Execute(inspection.Scan, fixture, inspection.Connection?.ProcessId ?? SelectedProcessId);
         Refresh();
     }
     public async Task RefreshReal()

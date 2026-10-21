@@ -217,7 +217,7 @@ Standards: **verified normative data: none**; unverified metadata: both requeste
 ## Sprint 3.4.1 — Fail-Closed Physical Benchmark Qualification
 
 - **Status**: Complete.
-- **Automated Tests**: 220 passed, 0 failed, 0 skipped. All 6 WPF smoke processes verified.
+- **Automated Tests**: 226 passed, 0 failed, 0 skipped. All 6 WPF smoke processes verified.
 - **Key Accomplishments**:
   - Hardened `IndependentGeometryBenchmarkValidator` to fail-closed with structured `BenchmarkChecklist`.
   - Formalized 3 distinct benchmark scenarios in `etabs-roof-independent-benchmark.json` (Full, Half, Overlapping).
@@ -225,3 +225,16 @@ Standards: **verified normative data: none**; unverified metadata: both requeste
   - Strengthened `qualify-csi.ps1` and `CsiPhysicalQualificationTests.cs` with PID propagation and fail-closed non-zero exit on non-Passed outcome.
   - Implemented stale qualification invalidation in `MainViewModel`.
 - **Safety Guarantees**: Engineering calculations, approvals, and CSI writes remain disabled in RealReadOnly mode.
+
+
+## Sprint 3.4.2 — Close the Physical Benchmark Execution Pipeline
+
+- **Status**: Complete.
+- **Automated Tests**: 226 passed, 0 failed, 0 skipped. All 6 WPF smoke processes verified.
+- **Key Accomplishments**:
+  - Implemented `BenchmarkExecutionPipeline` to execute real production geometry components (Roof3DGeometryProcessor, RoofPlaneCoordinateSystem, ZonePolygonEngine.Classify).
+  - Defined 2 explicit overlapping polygons for Shell 201 with exact mathematical areas and coverage percentages.
+  - Hardened `scripts/qualify-csi.ps1` with fixture path propagation, schema modernization, zero-test TRX verification, and machine-readable reports.
+  - Added frame start/end coordinates and plane shell coplanarity checks to `IndependentGeometryBenchmarkValidator`.
+  - Created deterministic integration tests covering full pipeline and failure conditions.
+- **Safety Guarantees**: All engineering wind calculations, pressure approvals, and CSI writes remain disabled in RealReadOnly mode.

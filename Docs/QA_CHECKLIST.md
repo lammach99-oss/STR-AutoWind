@@ -1,4 +1,9 @@
 # Executed qualification
+- [x] Sprint 3.4.2: Closed physical benchmark execution pipeline via BenchmarkExecutionPipeline; runs 3D geometry processing, roof plane reconstruction, UV projection, and production NetTopologySuite overlay engine (ZonePolygonEngine.Classify).
+- [x] Sprint 3.4.2: Defined 2 explicit overlapping polygons for Shell 201 (Zone-B1-OverlapA and Zone-B1-OverlapB at 75% coverage each, 6.7082 m² intersection area, OverlappingZones classification, NeedsSplitInCSI = true).
+- [x] Sprint 3.4.2: Strict qualification runner scripts/qualify-csi.ps1 parses benchmarkFrames and benchmarkShells schemas, propagates CSI_BENCHMARK_FIXTURE_PATH and CSI_PROCESS_ID, avoids silent GetObject fallback, checks TRX counters to reject 0-test runs, and writes machine-readable reports.
+- [x] Sprint 3.4.2: Comprehensive benchmark completeness checks added: frame start/end XYZ coordinates, roof plane shell membership, native unit and SI multiplier consistency, and load direction/type validation.
+- [x] Sprint 3.4.2: 226 automated tests passing; end-to-end integration test verifies complete pipeline from scan through plane reconstruction and polygon classification to validator checklist.
 - [x] Sprint 3.4.1: Fail-closed benchmark qualification; 100% of declared checks must execute and pass for Passed status.
 - [x] Sprint 3.4.1: Structured BenchmarkChecklist tracks Expected, Executed, Passed, Failed, MissingChecks, and FailedChecks.
 - [x] Sprint 3.4.1: 3 distinct benchmark scenarios: Full containment (Shell 101), Half containment (Shell 102 CrossesZoneBoundary / NeedsSplitInCSI), Overlapping zones (Shell 201 OverlappingZones).
