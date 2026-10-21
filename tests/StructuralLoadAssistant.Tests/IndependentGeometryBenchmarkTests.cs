@@ -64,8 +64,8 @@ public sealed class IndependentGeometryBenchmarkTests
         );
 
         var loads = omitLoad ? ImmutableArray<ExistingLoad>.Empty : ImmutableArray.Create(
-            new ExistingLoad("101", "W_Uniform", loadKind ?? "FrameDistributed", 1500.0, "CSI_READ_ONLY"),
-            new ExistingLoad("101", "W_Suction", "AreaUniform", -1200.0, "CSI_READ_ONLY")
+            new ExistingLoad("101", "W_Uniform", loadKind ?? "FrameDistributed:dir=Gravity", 1500.0, "CSI_READ_ONLY"),
+            new ExistingLoad("101", "W_Suction", "AreaUniform:dir=Local3", -1200.0, "CSI_READ_ONLY")
         );
 
         var model = new CsiModelSnapshot(

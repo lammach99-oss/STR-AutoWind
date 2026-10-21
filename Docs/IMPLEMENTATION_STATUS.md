@@ -238,3 +238,16 @@ Standards: **verified normative data: none**; unverified metadata: both requeste
   - Added frame start/end coordinates and plane shell coplanarity checks to `IndependentGeometryBenchmarkValidator`.
   - Created deterministic integration tests covering full pipeline and failure conditions.
 - **Safety Guarantees**: All engineering wind calculations, pressure approvals, and CSI writes remain disabled in RealReadOnly mode.
+
+
+## Sprint 3.4.2 Preflight Hotfix — Physical Runner Hardening
+
+- **Status**: Complete.
+- **Automated Tests**: 226 passed, 0 failed, 0 skipped. All 6 WPF smoke processes verified.
+- **Key Accomplishments**:
+  - Repaired default ETABS interop DLL path in `scripts/qualify-csi.ps1` with safe multi-candidate path discovery and validation.
+  - Enforced strict PID identity throughout the runner, using `GetObjectProcess($ProcessId)` without falling back to `GetObject()`.
+  - Guarded against ambiguous multi-instance operations and refused selection mutation unless explicit PID is provided.
+  - Added restoration verification rejecting selection mutation if unrestorable object types are present.
+  - Aligned distinct exit codes: 0 (Passed), 1 (Failed), 2 (Inconclusive), 3 (Pending), 4 (NotExecuted).
+  - Documented fixture-directed plane grouping scope in `BenchmarkExecutionPipeline`.

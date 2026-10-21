@@ -34,11 +34,20 @@ try {
             Product = "Sap2000"
             Timestamp = (Get-Date -Format "o")
         }
-        return
+        exit 3
     }
 
+    # Safe API assembly path discovery and validation
     if ([string]::IsNullOrWhiteSpace($AssemblyPath)) {
-        $AssemblyPath = "C:Program FilesComputers and StructuresETABS 23ETABSv1.dll"
+        $candidatePaths = @(
+            "C:\Program Files\Computers and Structures\ETABS 23\ETABSv1.dll",
+            "C:\Program Files\Computers and Structures\ETABS 22\ETABSv1.dll",
+            "C:\Program Files (x86)\Computers and Structures\ETABS 23\ETABSv1.dll"
+        )
+        $AssemblyPath = $candidatePaths | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+        if ([string]::IsNullOrWhiteSpace($AssemblyPath)) {
+            $AssemblyPath = "C:\Program Files\Computers and Structures\ETABS 23\ETABSv1.dll"
+        }
     }
 
     Write-Host "Target Product:  $Product"
@@ -68,7 +77,23 @@ try {
             Product = $Product
             Timestamp = (Get-Date -Format "o")
         }
-        return
+        exit 2
+    }
+
+    # Refuse ambiguous multi-instance operations
+    if ($procs.Length -gt 1 -and $ProcessId -le 0) {
+        Write-Host "[ETABS] Multiple instances running (PIDs: $($procs.Id -join ', ')). Specific PID required to prevent ambiguity." -ForegroundColor Red
+        Save-Report $ReportPath @{
+            Status = "Failed"
+            Reason = "Multiple ETABS instances running (PIDs: $($procs.Id -join ', ')). Pass -ProcessId <pid> to explicitly target an authorized instance."
+            Product = $Product
+            Timestamp = (Get-Date -Format "o")
+        }
+        throw "Multiple ETABS instances are running (PIDs: $($procs.Id -join ', ')). Pass -ProcessId <pid> to explicitly target an authorized instance."
+    }
+
+    if ($SetupSelection -and $ProcessId -le 0) {
+        throw "-SetupSelection requires an explicit -ProcessId to prevent modifying an unintended instance."
     }
 
     if ($ProcessId -gt 0) {
@@ -114,7 +139,7 @@ try {
             }
             $etabsObj = $getObjProc.Invoke($helper, [object[]]@("CSI.ETABS.API.ETABSObject", $ProcessId))
             if ($null -eq $etabsObj) {
-                throw "Could not attach to ETABS process with PID $ProcessId."
+                throw "Could not attach to ETABS process with PID $ProcessId via GetObjectProcess. Never falling back to GetObject."
             }
         } else {
             $etabsObj = $cHelper.GetMethod("GetObject").Invoke($helper, [object[]]@("CSI.ETABS.API.ETABSObject"))
@@ -144,9 +169,24 @@ try {
             $missingFrames = $reqFrames | Where-Object { $selFrames -notcontains $_ }
             $missingAreas = $reqAreas | Where-Object { $selAreas -notcontains $_ }
 
+            # Safe restoration verification (Refuse mutation if unsupported types present)
+            $restorableTypes = @(1, 2, 5, 6) # Point=1, Frame=2, Area=5, Link=6
+            $unsupported = $initialSelections | Where-Object { $_.Type -notin $restorableTypes }
+            if ($unsupported.Count -gt 0 -and $SetupSelection) {
+                Write-Host "Initial selection contains object types ($($unsupported.Type -join ', ')) that cannot be safely restored. Selection mutation refused." -ForegroundColor Red
+                Save-Report $ReportPath @{
+                    Status = "Failed"
+                    Reason = "Selection mutation refused: unsupported object types present that cannot be safely restored."
+                    Product = $Product
+                    ProcessId = $ProcessId
+                    Timestamp = (Get-Date -Format "o")
+                }
+                throw "Initial selection contains object types that cannot be safely restored. Please preselect benchmark elements manually."
+            }
+
             if ($missingFrames.Count -gt 0 -or $missingAreas.Count -gt 0) {
                 if ($SetupSelection) {
-                    Write-Host "DISCLOSURE: -SetupSelection requested. Modifying selection for authorized benchmark setup." -ForegroundColor Yellow
+                    Write-Host "DISCLOSURE: -SetupSelection requested on PID $ProcessId. Modifying selection for authorized benchmark setup." -ForegroundColor Yellow
                     Write-Host "Previous selection recorded ($($initialSelections.Count) objects). Will restore upon completion." -ForegroundColor Yellow
                     $selectionModified = $true
 
@@ -194,15 +234,15 @@ try {
 
         if ($testsTotal -eq 0) {
             Write-Host ""
-            Write-Host "Strict Physical Qualification: FAILED (No matching tests executed)." -ForegroundColor Red
+            Write-Host "Strict Physical Qualification: NOT EXECUTED (No matching tests executed)." -ForegroundColor Red
             Save-Report $ReportPath @{
-                Status = "Failed"
+                Status = "NotExecuted"
                 Reason = "Zero tests executed matching filter."
                 Product = $Product
                 ProcessId = $ProcessId
                 Timestamp = (Get-Date -Format "o")
             }
-            exit 1
+            exit 4
         }
 
         if ($testExit -ne 0 -or $testsFailed -gt 0) {
@@ -234,6 +274,7 @@ try {
                 TestsFailed = $testsFailed
                 Timestamp = (Get-Date -Format "o")
             }
+            exit 0
         }
     } finally {
         $env:CSI_PHYSICAL_QUALIFICATION = $null
@@ -241,7 +282,7 @@ try {
         $env:CSI_BENCHMARK_FIXTURE_PATH = $null
 
         if ($selectionModified -and $RestoreSelection) {
-            Write-Host "DISCLOSURE: Restoring initial ETABS selection across all object types..." -ForegroundColor Yellow
+            Write-Host "DISCLOSURE: Restoring initial ETABS selection across all object types on PID $ProcessId..." -ForegroundColor Yellow
             try {
                 $asm = [System.Reflection.Assembly]::LoadFrom($AssemblyPath)
                 $helper = [System.Activator]::CreateInstance($asm.GetType("ETABSv1.Helper"))

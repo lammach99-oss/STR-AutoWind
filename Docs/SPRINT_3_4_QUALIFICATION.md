@@ -119,3 +119,13 @@ Sprint 3.4.2 closes the physical qualification execution pipeline with real geom
 3. **Strict Physical Runner**: `scripts/qualify-csi.ps1` propagates `-FixturePath` to `CSI_BENCHMARK_FIXTURE_PATH`, ensures PID-specific attachment without `GetObject()` fallback, evaluates TRX counters to reject zero-test runs, and writes machine-readable reports.
 4. **Extended Completeness**: Checks frame start and end XYZ coordinates, roof plane shell membership, native unit parameters, and load definitions.
 5. **Verified Automation**: 226 automated tests pass, including integration tests running the full pipeline from synthetic scans to validator checklists.
+
+
+## Sprint 3.4.2 Preflight Hotfix
+
+1. **ETABS API Path Discovery**: Repaired the default interop DLL path in `scripts/qualify-csi.ps1` to probe valid candidate locations (`C:\Program Files\Computers and Structures\ETABS 23\ETABSv1.dll`, etc.) and verify `Test-Path` before use.
+2. **Strict PID Identity & No Fallback**: When `-ProcessId` is passed, the runner connects and restores selections strictly via `GetObjectProcess($ProcessId)` and never falls back to `GetObject()`.
+3. **Ambiguity & Selection Guard**: If multiple ETABS instances are detected without `-ProcessId`, execution is aborted. Selection mutation (`-SetupSelection`) is refused unless `-ProcessId` is explicitly provided.
+4. **Restoration Verification**: Initial selections are verified; if unsupported object types are present that cannot be cleanly restored, selection mutation is refused.
+5. **Explicit Distinct Exit Codes**: scripts/qualify-csi.ps1 returns 0 for Passed, 1 for Failed, 2 for Inconclusive, 3 for Pending, and 4 for NotExecuted.
+6. **Fixture-Directed Grouping Scope**: Reconstructed planes for the benchmark are explicitly documented as fixture-directed groupings for analytical coordinate verification, not unguided automatic roof-plane clustering.

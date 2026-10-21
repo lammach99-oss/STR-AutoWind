@@ -8,6 +8,15 @@ using StructuralLoadAssistant.RoofMapping;
 
 namespace StructuralLoadAssistant.Application;
 
+/// <summary>
+/// Executes the physical qualification pipeline against an independently defined analytical benchmark.
+/// </summary>
+/// <remarks>
+/// IMPORTANT: Reconstructed planes for benchmark qualification are fixture-directed groupings
+/// based on the declared benchmark plane shell memberships. This deterministic grouping qualifies
+/// coordinate transformations, local basis calculations, and polygon overlay classifications.
+/// It does NOT claim to qualify automated unguided roof-plane discovery across arbitrary models.
+/// </remarks>
 public static class BenchmarkExecutionPipeline
 {
     public static PhysicalQualificationResult Execute(
@@ -43,7 +52,7 @@ public static class BenchmarkExecutionPipeline
                 .Select(s => Roof3DGeometryProcessor.Process(s, scan.Model.ModelId))
                 .ToImmutableArray();
 
-            // 2. Reconstruct roof planes from coplanar shells
+            // 2. Reconstruct roof planes from fixture-directed shell groupings
             var reconstructedPlanes = new List<RoofPlaneCoordinateSystem>();
             if (root.TryGetProperty("benchmarkPlanes", out var expPlanes))
             {

@@ -117,6 +117,16 @@ public static class IndependentGeometryBenchmarkValidator
                 missingChecks.Add($"{category} on {elementId} {property}: {reason}");
             }
 
+            // Verify tolerances section declared
+            if (!root.TryGetProperty("tolerances", out _))
+            {
+                AddMissing("Tolerances", "Global", "TolerancesDeclared", "Fixture missing explicit tolerances section");
+            }
+            else
+            {
+                AddCheck("Tolerances", "Global", "TolerancesDeclared", 1, 1, 0, null, true, "Explicit tolerances declared in fixture");
+            }
+
             // 1. Software / Platform checks
             if (root.TryGetProperty("software", out var sw))
             {
@@ -126,14 +136,32 @@ public static class IndependentGeometryBenchmarkValidator
                     bool pass = string.Equals(scan.Model.Product, ep, StringComparison.OrdinalIgnoreCase);
                     AddCheck("Software", "CSI", "Product", 1, pass ? 1 : 0, 0, null, pass, $"Expected {ep}, Actual {scan.Model.Product}");
                 }
+                if (sw.TryGetProperty("version", out var expVer))
+                {
+                    var ev = expVer.GetString()!;
+                    bool pass = string.Equals(scan.Model.Version, ev, StringComparison.OrdinalIgnoreCase);
+                    AddCheck("Software", "CSI", "Version", 1, pass ? 1 : 0, 0, null, pass, $"Expected version '{ev}', Actual '{scan.Model.Version}'");
+                }
                 if (sw.TryGetProperty("major", out var expMajor))
                 {
                     var em = expMajor.GetInt32();
                     bool pass = scan.Model.Version.StartsWith($"{em}.", StringComparison.Ordinal);
                     AddCheck("Software", "CSI", "MajorVersion", em, pass ? em : 0, 0, null, pass, $"Expected major {em}, Actual {scan.Model.Version}");
                 }
+                if (sw.TryGetProperty("isLocked", out var expLocked))
+                {
+                    bool el = expLocked.GetBoolean();
+                    bool pass = scan.IsLocked == el;
+                    AddCheck("Software", "CSI", "IsLocked", el ? 1 : 0, scan.IsLocked ? 1 : 0, 0, null, pass, $"Expected IsLocked {el}, Actual {scan.IsLocked}");
+                }
                 if (sw.TryGetProperty("nativeUnits", out var nu))
                 {
+                    if (nu.TryGetProperty("id", out var nuId))
+                    {
+                        var expId = nuId.GetString()!;
+                        bool passId = string.Equals(scan.Units.NativeUnitId, expId, StringComparison.OrdinalIgnoreCase);
+                        AddCheck("Software", "CSI", "NativeUnitId", 1, passId ? 1 : 0, 0, null, passId, $"Expected NativeUnitId '{expId}', Actual '{scan.Units.NativeUnitId}'");
+                    }
                     if (nu.TryGetProperty("name", out var nuName))
                     {
                         var expNu = nuName.GetString()!;
@@ -430,6 +458,14 @@ public static class IndependentGeometryBenchmarkValidator
                             var et = expType.GetString()!;
                             bool passType = matchedLoad.Kind.Contains(et, StringComparison.OrdinalIgnoreCase);
                             AddCheck("Existing Loads", objId, $"LoadKind:{pattern}", 1, passType ? 1 : 0, 0, null, passType, $"Expected load kind containing '{et}', actual '{matchedLoad.Kind}'");
+                        }
+                        if (el.TryGetProperty("direction", out var expDir))
+                        {
+                            var ed = expDir.GetString()!;
+                            bool passDir = matchedLoad.Kind.Contains(ed, StringComparison.OrdinalIgnoreCase) ||
+                                           (ed == "Gravity" && matchedLoad.Kind.Contains("dir=10")) ||
+                                           (ed == "Local3" && (matchedLoad.Kind.Contains("dir=3") || matchedLoad.Kind.Contains("Local")));
+                            AddCheck("Existing Loads", objId, $"LoadDirection:{pattern}", 1, passDir ? 1 : 0, 0, null, passDir, $"Expected direction '{ed}', actual '{matchedLoad.Kind}'");
                         }
                         bool passVal = Math.Abs(matchedLoad.ValueSI - expVal) <= loadTol;
                         AddCheck("Existing Loads", objId, $"LoadSI:{pattern}", expVal, matchedLoad.ValueSI, loadTol, null, passVal, $"Expected {expVal:F3}, actual {matchedLoad.ValueSI:F3}");
