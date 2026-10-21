@@ -134,7 +134,8 @@
          Write-Host ""
          Write-Host "Running strict physical qualification test..." -ForegroundColor Cyan
          $env:CSI_PHYSICAL_QUALIFICATION = "1"
-         dotnet test tests/StructuralLoadAssistant.Tests --no-restore -m:1 -nr:false --filter "FullyQualifiedName~Physical_ETABS_read_only_qualification_when_running" --logger "trx;LogFileName=physical-qualification.trx" --results-directory artifacts
+        if ($ProcessId -gt 0) { $env:CSI_PROCESS_ID = "$ProcessId" }
+         dotnet test tests/StructuralLoadAssistant.Tests --no-restore -m:1 -nr:false --filter "FullyQualifiedName~Physical_ETABS_independent_benchmark_qualification_when_running" --logger "trx;LogFileName=physical-qualification.trx" --results-directory artifacts
          $testExit = $LASTEXITCODE
  
          if ($testExit -ne 0) {
@@ -149,6 +150,7 @@
          }
      } finally {
          $env:CSI_PHYSICAL_QUALIFICATION = $null
+        $env:CSI_PROCESS_ID = $null
  
          if ($selectionModified -and $RestoreSelection) {
              Write-Host "DISCLOSURE: Restoring initial ETABS selection across all object types..." -ForegroundColor Yellow
@@ -156,7 +158,13 @@
                  $asm = [System.Reflection.Assembly]::LoadFrom($AssemblyPath)
                  $helper = [System.Activator]::CreateInstance($asm.GetType("ETABSv1.Helper"))
                  $cHelper = $asm.GetType("ETABSv1.cHelper")
-                 $etabsObj = $cHelper.GetMethod("GetObject").Invoke($helper, [object[]]@("CSI.ETABS.API.ETABSObject"))
+                 $getObjProc = $cHelper.GetMethod("GetObjectProcess")
+                $etabsObj = $null
+                if ($ProcessId -gt 0 -and $null -ne $getObjProc) {
+                    $etabsObj = $getObjProc.Invoke($helper, [object[]]@("CSI.ETABS.API.ETABSObject", $ProcessId))
+                } else {
+                    $etabsObj = $cHelper.GetMethod("GetObject").Invoke($helper, [object[]]@("CSI.ETABS.API.ETABSObject"))
+                }
                  if ($null -ne $etabsObj) {
                      $sapModel = $asm.GetType("ETABSv1.cOAPI").GetProperty("SapModel").GetValue($etabsObj)
                      $selectObj = $asm.GetType("ETABSv1.cSapModel").GetProperty("SelectObj").GetValue($sapModel)

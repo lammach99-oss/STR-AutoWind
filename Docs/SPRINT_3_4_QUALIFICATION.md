@@ -85,3 +85,26 @@ Furthermore, RoofPressurePrerequisites and BlocksPressureMapping ensure that fut
 | Live ETABS Instance Selection | Exercised | Safe PID selection implemented and tested in WPF UI |
 | Live ETABS Independent Benchmark | Inconclusive | Live instance does not currently have the benchmark gable model open; reported as Inconclusive per specification |
 | SAP2000 Physical Qualification | Pending | SAP2000 physical qualification harness is pending qualified reference model |
+
+
+## Sprint 3.4.1 Fail-Closed Hardening
+
+Sprint 3.4.1 implements strict fail-closed enforcement across the entire independent geometry benchmark pipeline:
+
+1. **Fail-Closed Checklist Validator**: `IndependentGeometryBenchmarkValidator` guarantees that `PhysicalQualificationOutcome.Passed` is reachable if and only if all declared benchmark checks are fully executed and pass within tolerances. Missing fixture data or partial execution produces `Inconclusive` or `Failed`.
+2. **Analytical Scenarios**: Three distinct benchmark scenarios are formalized in `fixtures/etabs-roof-independent-benchmark.json`:
+   - Scenario 1 (Full containment): Shell 101, 100% coverage by Zone-A1-Full, `FullyInsideZone`, `NeedsSplitInCSI = false`.
+   - Scenario 2 (Half containment): Shell 102, 50% coverage by Zone-A2-Half, `CrossesZoneBoundary`, `NeedsSplitInCSI = true`.
+   - Scenario 3 (Overlapping zones): Shell 201, `OverlappingZones`, `NeedsSplitInCSI = true`.
+3. **Comprehensive Negative Mutation Suite**: 9 deterministic negative mutation tests verify that validation fails closed on:
+   - Empty roof planes
+   - Missing shell 3D data
+   - Missing required loads
+   - Incorrect load kind
+   - Missing zone coverage records
+   - Wrong classification outcome
+   - Incomplete vertex coordinate arrays
+   - Roof plane slope deviation
+   - Omitted test-case execution
+4. **Strict Physical Runner**: `scripts/qualify-csi.ps1` accepts `-ProcessId`, sets `CSI_PROCESS_ID`, runs `Physical_ETABS_independent_benchmark_qualification_when_running`, uses PID-aware attachment without arbitrary instance fallback, and enforces fail-closed test exit codes.
+5. **Stale Qualification Invalidation**: `MainViewModel` invalidates earlier qualification on disconnect, mode switch, model identity change, or geometry fingerprint mismatch.

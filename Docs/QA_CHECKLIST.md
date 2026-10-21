@@ -1,4 +1,10 @@
 # Executed qualification
+- [x] Sprint 3.4.1: Fail-closed benchmark qualification; 100% of declared checks must execute and pass for Passed status.
+- [x] Sprint 3.4.1: Structured BenchmarkChecklist tracks Expected, Executed, Passed, Failed, MissingChecks, and FailedChecks.
+- [x] Sprint 3.4.1: 3 distinct benchmark scenarios: Full containment (Shell 101), Half containment (Shell 102 CrossesZoneBoundary / NeedsSplitInCSI), Overlapping zones (Shell 201 OverlappingZones).
+- [x] Sprint 3.4.1: 9 negative mutation tests prove no false Passed results (empty planes, missing 3D data, missing loads, wrong load kind, missing coverage, wrong classification, incomplete vertices, wrong slope, missing test execution).
+- [x] Sprint 3.4.1: Strict physical runner qualify-csi.ps1 propagates ProcessId, runs independent benchmark, and fails on non-Passed outcome.
+- [x] Sprint 3.4.1: Stale qualification invalidation in MainViewModel across disconnect, mode switch, model change, or geometry fingerprint change.
 - [x] Sprint 3.2: XYZ/UV round trips; sloped/rotated/flat frames; stable coordinates across coplanar selection changes.
 - [x] Concave/convex intersections; full/crossing/overlapping/unmapped classifications; tolerances, invalid/degenerate polygons.
 - [x] Footprint union and explicit disconnected/holed rejection; edge snapping; undo/redo with audit and monotonic revisions.

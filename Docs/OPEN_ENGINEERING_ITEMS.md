@@ -5,7 +5,7 @@ No normative dataset is verified. Demo pressures and wall materials are syntheti
 ## Sprint 3.4 status and remaining engineering tasks
 
 - Licensed applicable normative datasets for ASCE/SEI 7-22 and AS/NZS 1170.2:2021 must be installed before engineering calculation and approval can be enabled.
-- Independent engineering benchmark qualification against a live ETABS instance with the dedicated dual-pitch benchmark model open remains to be completed (currently Inconclusive when the benchmark model is not loaded).
+- Independent engineering benchmark qualification against a live ETABS instance with the dedicated dual-pitch benchmark model open remains to be completed (Sprint 3.4.1 ensures this is strictly fail-closed: missing benchmark elements produce Inconclusive, never Passed).
 - SAP2000 physical qualification remains pending.
 
 ## Standards review

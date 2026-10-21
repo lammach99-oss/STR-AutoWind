@@ -21,7 +21,8 @@ public sealed record CsiConnectionResult(bool Connected, string Product, string 
 public sealed record CsiAreaReadInfo(string AreaId, string RoofPlaneId, Vec3? VerifiedOutwardNormal, string NormalStatus);
 public enum PhysicalQualificationOutcome { Pending, Inconclusive, Passed, Failed }
 public sealed record BenchmarkComparison(string Category, string ElementId, string Property, double Expected, double Actual, double AbsoluteTolerance, double? RelativeTolerance, bool Passed, string Details);
-public sealed record PhysicalQualificationResult(PhysicalQualificationOutcome Outcome, string SoftwareProduct, string SoftwareVersion, int? ProcessId, string ModelId, DateTimeOffset Timestamp, string BenchmarkName, ImmutableArray<BenchmarkComparison> Comparisons, ImmutableArray<string> Issues, string Summary);
+public sealed record BenchmarkChecklist(int ExpectedCount, int ExecutedCount, int PassedCount, int FailedCount, ImmutableArray<string> MissingChecks, ImmutableArray<string> FailedChecks);
+public sealed record PhysicalQualificationResult(PhysicalQualificationOutcome Outcome, string SoftwareProduct, string SoftwareVersion, int? ProcessId, string ModelId, DateTimeOffset Timestamp, string BenchmarkName, ImmutableArray<BenchmarkComparison> Comparisons, ImmutableArray<string> Issues, string Summary, BenchmarkChecklist? Checklist = null, string? ScanFingerprint = null, string? FixtureHash = null);
 public sealed record CsiReadScan(CsiModelSnapshot Model, CsiUnits Units, bool IsLocked, CsiCapabilities Capabilities,
     ImmutableArray<CsiStory> Stories, ImmutableArray<CsiAreaReadInfo> AreaMetadata, ImmutableArray<CsiReadIssue> Issues,
     CsiScanOutcome Outcome = CsiScanOutcome.Succeeded);

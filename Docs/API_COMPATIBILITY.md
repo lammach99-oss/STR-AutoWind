@@ -1,4 +1,14 @@
-# CSI read-only compatibility — Sprint 3.4
+# CSI read-only compatibility
+
+## Fail-Closed Physical Benchmark Qualification (Sprint 3.4.1)
+
+Sprint 3.4.1 hardens the independent benchmark framework to be strictly fail-closed:
+- **Completeness & Checklist**: PhysicalQualificationOutcome.Passed is strictly permitted only when 100% of declared benchmark checks have executed and passed. Missing elements, unexecuted checks, or fixture issues produce Inconclusive or Failed.
+- **BenchmarkChecklist**: Structured checklist records ExpectedCount, ExecutedCount, PassedCount, FailedCount, MissingChecks, and FailedChecks.
+- **Distinct Scenarios**: Evaluates full containment (Shell 101, 100% coverage, FullyInsideZone), half containment (Shell 102, 50% coverage, CrossesZoneBoundary, NeedsSplitInCSI = true), and overlapping zones (Shell 201, OverlappingZones, NeedsSplitInCSI = true).
+- **Negative Mutation Suite**: 9 mutation tests prove that validation fails closed on empty planes, missing 3D data, missing loads, incorrect load kind, missing coverage, wrong classification, incomplete vertices, wrong slope, and missing test execution.
+- **Strict Runner & PID Propagation**: `scripts/qualify-csi.ps1` propagates ProcessId through environment variable CSI_PROCESS_ID, runs the independent benchmark qualification, uses GetObjectProcess consistently (including during selection restoration), and fails closed if the outcome is not Passed.
+- **Stale Qualification Invalidation**: MainViewModel binds qualification to the originating model ID, geometry fingerprint, software product/version, and process ID. Any model change, rescan with altered geometry, disconnect, or mode switch immediately clears stale qualification. — Sprint 3.4
 
 Current qualification and independent benchmarks are documented in [SPRINT_3_4_QUALIFICATION.md](SPRINT_3_4_QUALIFICATION.md). Sprint 3.4 adds product-validated read-only PID selection (CsiProcessDiscovery, GetObjectProcess), guards against ambiguous multi-instance attachment, detects process termination and PID reuse, and establishes the independent geometry benchmark framework (IndependentGeometryBenchmarkValidator).
 

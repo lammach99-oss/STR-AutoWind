@@ -1,5 +1,8 @@
 using System.Collections.Immutable;
+using System.Globalization;
 using System.IO;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using StructuralLoadAssistant.Csi.Abstractions;
 using StructuralLoadAssistant.Domain;
@@ -14,37 +17,47 @@ public static class IndependentGeometryBenchmarkValidator
         ImmutableArray<RoofShell3D> shells3D,
         IReadOnlyList<RoofPlaneCoordinateSystem> planes,
         string fixturePath,
-        ImmutableArray<ShellZoneIntersection>? intersections = null)
+        ImmutableArray<ShellZoneIntersection>? intersections = null, int? processId = null)
     {
         ArgumentNullException.ThrowIfNull(scan);
         var timestamp = DateTimeOffset.UtcNow;
         var product = scan.Model.Product;
         var version = scan.Model.Version;
         var modelId = scan.Model.ModelId;
+        var scanFingerprint = scan.Model.GeometryFingerprint;
 
         if (string.IsNullOrWhiteSpace(fixturePath) || !File.Exists(fixturePath))
         {
+            var missingChecklist = new BenchmarkChecklist(1, 0, 0, 0, ["Benchmark fixture file not found."], []);
             return new PhysicalQualificationResult(
                 PhysicalQualificationOutcome.Inconclusive,
-                product, version, null, modelId, timestamp,
+                product, version, processId, modelId, timestamp,
                 "Independent Benchmark", [],
                 [$"Independent benchmark fixture file not found at '{fixturePath}'."],
-                "Physical qualification is Inconclusive: missing independent reference fixture.");
+                "Physical qualification is Inconclusive: missing independent reference fixture.",
+                missingChecklist, scanFingerprint, null);
         }
 
+        string fixtureText;
+        string fixtureHash;
         JsonDocument doc;
         try
         {
-            doc = JsonDocument.Parse(File.ReadAllText(fixturePath));
+            fixtureText = File.ReadAllText(fixturePath);
+            using var sha = SHA256.Create();
+            fixtureHash = Convert.ToHexString(sha.ComputeHash(Encoding.UTF8.GetBytes(fixtureText)));
+            doc = JsonDocument.Parse(fixtureText);
         }
         catch (Exception ex)
         {
+            var parseChecklist = new BenchmarkChecklist(1, 0, 0, 0, [$"Failed to parse benchmark fixture: {ex.Message}"], []);
             return new PhysicalQualificationResult(
                 PhysicalQualificationOutcome.Inconclusive,
-                product, version, null, modelId, timestamp,
+                product, version, processId, modelId, timestamp,
                 "Independent Benchmark", [],
                 [$"Failed to parse benchmark fixture: {ex.Message}"],
-                "Physical qualification is Inconclusive: invalid benchmark fixture JSON.");
+                "Physical qualification is Inconclusive: invalid benchmark fixture JSON.",
+                parseChecklist, scanFingerprint, null);
         }
 
         using (doc)
@@ -68,7 +81,63 @@ public static class IndependentGeometryBenchmarkValidator
             }
 
             var comparisons = new List<BenchmarkComparison>();
-            var issues = new List<string>();
+            var missingChecks = new List<string>();
+            var failedChecks = new List<string>();
+            int expectedChecksCount = 0;
+
+            void AddCheck(string category, string elementId, string property, double expected, double actual, double absTol, double? relTol, bool passed, string details)
+            {
+                expectedChecksCount++;
+                var comp = new BenchmarkComparison(category, elementId, property, expected, actual, absTol, relTol, passed, details);
+                comparisons.Add(comp);
+                if (!passed) failedChecks.Add($"{category} on {elementId} {property}: {details}");
+            }
+
+            void AddMissing(string category, string elementId, string property, string reason)
+            {
+                expectedChecksCount++;
+                missingChecks.Add($"{category} on {elementId} {property}: {reason}");
+            }
+
+            // 1. Software / Platform checks
+            if (root.TryGetProperty("software", out var sw))
+            {
+                if (sw.TryGetProperty("product", out var expProd))
+                {
+                    var ep = expProd.GetString()!;
+                    bool pass = string.Equals(scan.Model.Product, ep, StringComparison.OrdinalIgnoreCase);
+                    AddCheck("Software", "CSI", "Product", 1, pass ? 1 : 0, 0, null, pass, $"Expected {ep}, Actual {scan.Model.Product}");
+                }
+                if (sw.TryGetProperty("major", out var expMajor))
+                {
+                    var em = expMajor.GetInt32();
+                    bool pass = scan.Model.Version.StartsWith($"{em}.", StringComparison.Ordinal);
+                    AddCheck("Software", "CSI", "MajorVersion", em, pass ? em : 0, 0, null, pass, $"Expected major {em}, Actual {scan.Model.Version}");
+                }
+            }
+
+            // 2. Check required benchmark frames
+            if (root.TryGetProperty("benchmarkFrames", out var expectedFrames))
+            {
+                foreach (var ef in expectedFrames.EnumerateArray())
+                {
+                    var fId = ef.GetProperty("id").GetString()!;
+                    var frame = scan.Model.Frames.FirstOrDefault(f => f.Id == fId);
+                    if (frame == null)
+                    {
+                        AddMissing("Frames", fId, "Existence", "Frame not present in CSI selection");
+                    }
+                    else
+                    {
+                        if (ef.TryGetProperty("lengthM", out var expLen))
+                        {
+                            var el = expLen.GetDouble();
+                            var actLen = (frame.End - frame.Start).Length;
+                            AddCheck("Frames", fId, "LengthM", el, actLen, coordTol, null, Math.Abs(actLen - el) <= coordTol, $"Length expected {el:F4} m, actual {actLen:F4} m");
+                        }
+                    }
+                }
+            }
 
             // Check required benchmark shells
             if (root.TryGetProperty("benchmarkShells", out var expectedShells))
@@ -81,55 +150,78 @@ public static class IndependentGeometryBenchmarkValidator
 
                 if (missingShells.Length > 0)
                 {
+                    var incChecklist = new BenchmarkChecklist(shellArray.Length, 0, 0, 0, missingShells.Select(s => $"Shell {s} missing from selection").ToImmutableArray(), []);
                     return new PhysicalQualificationResult(
                         PhysicalQualificationOutcome.Inconclusive,
-                        product, version, null, modelId, timestamp,
+                        product, version, processId, modelId, timestamp,
                         benchmarkName, [],
                         [$"Required benchmark shells missing from CSI selection: {string.Join(", ", missingShells)}."],
-                        $"Physical qualification is Inconclusive: CSI selection does not contain required benchmark elements ({string.Join(", ", missingShells)}).");
+                        $"Physical qualification is Inconclusive: CSI selection does not contain required benchmark elements ({string.Join(", ", missingShells)}).",
+                        incChecklist, scanFingerprint, fixtureHash);
                 }
 
                 foreach (var expected in shellArray)
                 {
                     var id = expected.GetProperty("id").GetString()!;
-                    var actualShell = scan.Model.Shells.Single(s => s.Id == id);
-                    var actual3D = shells3D.FirstOrDefault(s => s.ShellId == id);
+                    var actualShell = scan.Model.Shells.FirstOrDefault(s => s.Id == id);
+                    if (actualShell == null)
+                    {
+                        AddMissing("Shells", id, "Existence", "Shell not present in CSI selection");
+                        continue;
+                    }
 
-                    // 1. Verify Local 3
+                    var actual3D = shells3D.IsDefault ? null : shells3D.FirstOrDefault(s => s.ShellId == id);
+
+                    // Verify Local 3
                     if (expected.TryGetProperty("local3", out var expL3))
                     {
                         var ex = expL3.GetProperty("x").GetDouble();
                         var ey = expL3.GetProperty("y").GetDouble();
                         var ez = expL3.GetProperty("z").GetDouble();
 
-                        comparisons.Add(new("Local 3 Vectors", id, "Local3.X", ex, actualShell.Local3.X, l3Tol, null, Math.Abs(actualShell.Local3.X - ex) <= l3Tol, $"Expected {ex:F6}, Actual {actualShell.Local3.X:F6}"));
-                        comparisons.Add(new("Local 3 Vectors", id, "Local3.Y", ey, actualShell.Local3.Y, l3Tol, null, Math.Abs(actualShell.Local3.Y - ey) <= l3Tol, $"Expected {ey:F6}, Actual {actualShell.Local3.Y:F6}"));
-                        comparisons.Add(new("Local 3 Vectors", id, "Local3.Z", ez, actualShell.Local3.Z, l3Tol, null, Math.Abs(actualShell.Local3.Z - ez) <= l3Tol, $"Expected {ez:F6}, Actual {actualShell.Local3.Z:F6}"));
-                        comparisons.Add(new("Local 3 Vectors", id, "Local3.UnitLength", 1.0, actualShell.Local3.Length, 1e-4, null, Math.Abs(actualShell.Local3.Length - 1.0) <= 1e-4, $"Unit length {actualShell.Local3.Length:F6}"));
+                        AddCheck("Local 3 Vectors", id, "Local3.X", ex, actualShell.Local3.X, l3Tol, null, Math.Abs(actualShell.Local3.X - ex) <= l3Tol, $"Expected {ex:F6}, Actual {actualShell.Local3.X:F6}");
+                        AddCheck("Local 3 Vectors", id, "Local3.Y", ey, actualShell.Local3.Y, l3Tol, null, Math.Abs(actualShell.Local3.Y - ey) <= l3Tol, $"Expected {ey:F6}, Actual {actualShell.Local3.Y:F6}");
+                        AddCheck("Local 3 Vectors", id, "Local3.Z", ez, actualShell.Local3.Z, l3Tol, null, Math.Abs(actualShell.Local3.Z - ez) <= l3Tol, $"Expected {ez:F6}, Actual {actualShell.Local3.Z:F6}");
+                        AddCheck("Local 3 Vectors", id, "Local3.UnitLength", 1.0, actualShell.Local3.Length, 1e-4, null, Math.Abs(actualShell.Local3.Length - 1.0) <= 1e-4, $"Unit length {actualShell.Local3.Length:F6}");
                     }
 
-                    // 2. Verify 3D Surface Area
-                    if (expected.TryGetProperty("surfaceAreaM2", out var expArea) && actual3D != null)
+                    // Verify 3D Surface Area
+                    if (expected.TryGetProperty("surfaceAreaM2", out var expArea))
                     {
                         var ea = expArea.GetDouble();
-                        var diff = Math.Abs(actual3D.SurfaceAreaM2 - ea);
-                        bool pass = diff <= areaTol || (ea > 0 && diff / ea <= 1e-4);
-                        comparisons.Add(new("3D Surface Areas", id, "SurfaceAreaM2", ea, actual3D.SurfaceAreaM2, areaTol, 1e-4, pass, $"Expected {ea:F4} m², Actual {actual3D.SurfaceAreaM2:F4} m²"));
+                        if (actual3D == null)
+                        {
+                            AddMissing("3D Surface Areas", id, "SurfaceAreaM2", "Shell 3D geometry not processed");
+                        }
+                        else
+                        {
+                            var diff = Math.Abs(actual3D.SurfaceAreaM2 - ea);
+                            bool pass = diff <= areaTol || (ea > 0 && diff / ea <= 1e-4);
+                            AddCheck("3D Surface Areas", id, "SurfaceAreaM2", ea, actual3D.SurfaceAreaM2, areaTol, 1e-4, pass, $"Expected {ea:F4} m², Actual {actual3D.SurfaceAreaM2:F4} m²");
+                        }
                     }
 
-                    // 3. Verify Projected Area
-                    if (expected.TryGetProperty("projectedAreaM2", out var expProj) && actual3D != null)
+                    // Verify Projected Area
+                    if (expected.TryGetProperty("projectedAreaM2", out var expProj))
                     {
                         var ep = expProj.GetDouble();
-                        var diff = Math.Abs(actual3D.ProjectedAreaM2 - ep);
-                        bool pass = diff <= areaTol || (ep > 0 && diff / ep <= 1e-4);
-                        comparisons.Add(new("Projected Areas", id, "ProjectedAreaM2", ep, actual3D.ProjectedAreaM2, areaTol, 1e-4, pass, $"Expected {ep:F4} m², Actual {actual3D.ProjectedAreaM2:F4} m²"));
+                        if (actual3D == null)
+                        {
+                            AddMissing("Projected Areas", id, "ProjectedAreaM2", "Shell 3D geometry not processed");
+                        }
+                        else
+                        {
+                            var diff = Math.Abs(actual3D.ProjectedAreaM2 - ep);
+                            bool pass = diff <= areaTol || (ep > 0 && diff / ep <= 1e-4);
+                            AddCheck("Projected Areas", id, "ProjectedAreaM2", ep, actual3D.ProjectedAreaM2, areaTol, 1e-4, pass, $"Expected {ep:F4} m², Actual {actual3D.ProjectedAreaM2:F4} m²");
+                        }
                     }
 
-                    // 4. Verify Global Vertices
+                    // Verify Global Vertices
                     if (expected.TryGetProperty("verticesXYZ", out var expVerts))
                     {
                         var evList = expVerts.EnumerateArray().ToArray();
+                        AddCheck("Global XYZ Coordinates", id, "VertexCount", evList.Length, actualShell.Vertices.Length, 0, null, actualShell.Vertices.Length == evList.Length, $"Vertex count: expected {evList.Length}, actual {actualShell.Vertices.Length}");
                         for (int i = 0; i < Math.Min(evList.Length, actualShell.Vertices.Length); i++)
                         {
                             var vx = evList[i].GetProperty("x").GetDouble();
@@ -137,46 +229,115 @@ public static class IndependentGeometryBenchmarkValidator
                             var vz = evList[i].GetProperty("z").GetDouble();
                             var act = actualShell.Vertices[i];
 
-                            comparisons.Add(new("Global XYZ Coordinates", id, $"V[{i}].X", vx, act.X, coordTol, null, Math.Abs(act.X - vx) <= coordTol, $"Vertex {i} X"));
-                            comparisons.Add(new("Global XYZ Coordinates", id, $"V[{i}].Y", vy, act.Y, coordTol, null, Math.Abs(act.Y - vy) <= coordTol, $"Vertex {i} Y"));
-                            comparisons.Add(new("Global XYZ Coordinates", id, $"V[{i}].Z", vz, act.Z, coordTol, null, Math.Abs(act.Z - vz) <= coordTol, $"Vertex {i} Z"));
+                            AddCheck("Global XYZ Coordinates", id, $"V[{i}].X", vx, act.X, coordTol, null, Math.Abs(act.X - vx) <= coordTol, $"Vertex {i} X");
+                            AddCheck("Global XYZ Coordinates", id, $"V[{i}].Y", vy, act.Y, coordTol, null, Math.Abs(act.Y - vy) <= coordTol, $"Vertex {i} Y");
+                            AddCheck("Global XYZ Coordinates", id, $"V[{i}].Z", vz, act.Z, coordTol, null, Math.Abs(act.Z - vz) <= coordTol, $"Vertex {i} Z");
+                        }
+                        if (actualShell.Vertices.Length < evList.Length)
+                        {
+                            for (int i = actualShell.Vertices.Length; i < evList.Length; i++)
+                                AddMissing("Global XYZ Coordinates", id, $"V[{i}]", "Vertex missing from actual shell");
                         }
                     }
                 }
             }
 
-            // Check test zones & intersections
-            if (intersections.HasValue && root.TryGetProperty("benchmarkTestZones", out var testZones))
+            // 4. Roof Planes verification
+            if (root.TryGetProperty("benchmarkPlanes", out var expectedPlanes))
+            {
+                var expPlanesList = expectedPlanes.EnumerateArray().ToArray();
+                if (planes == null || planes.Count == 0)
+                {
+                    AddMissing("Roof Planes", "All", "PlaneCount", $"Expected {expPlanesList.Length} reconstructed roof planes; input was empty.");
+                }
+                else
+                {
+                    AddCheck("Roof Planes", "All", "PlaneCount", expPlanesList.Length, planes.Count, 0, null, planes.Count >= expPlanesList.Length, $"Plane count: expected {expPlanesList.Length}, actual {planes.Count}");
+                    foreach (var ep in expPlanesList)
+                    {
+                        var pId = ep.GetProperty("planeId").GetString()!;
+                        var normObj = ep.GetProperty("normal");
+                        var expNorm = new Vec3(normObj.GetProperty("x").GetDouble(), normObj.GetProperty("y").GetDouble(), normObj.GetProperty("z").GetDouble());
+                        var expSlope = ep.TryGetProperty("slopeDegrees", out var sd) ? sd.GetDouble() : 0.0;
+
+                        var matchedPlane = planes.FirstOrDefault(p => Math.Abs(Math.Abs(p.Normal.Dot(expNorm)) - 1.0) < 0.05);
+                        if (matchedPlane == null)
+                        {
+                            AddMissing("Roof Planes", pId, "Reconstruction", $"Reconstructed plane for {pId} with normal {expNorm} not found");
+                        }
+                        else
+                        {
+                            var planeSlope = Math.Acos(Math.Clamp(Math.Abs(matchedPlane.Normal.Z), -1.0, 1.0)) * 180.0 / Math.PI;
+                            AddCheck("Roof Planes", pId, "SlopeDegrees", expSlope, planeSlope, 0.5, null, Math.Abs(planeSlope - expSlope) <= 0.5, $"Plane {pId} slope: expected {expSlope:F2}°, actual {planeSlope:F2}°");
+                        }
+                    }
+                }
+            }
+
+            // 5. Test Zones & Intersections verification
+            if (root.TryGetProperty("benchmarkTestZones", out var testZones))
             {
                 foreach (var tz in testZones.EnumerateArray())
                 {
                     var targetShellId = tz.GetProperty("targetShellId").GetString()!;
                     var zoneId = tz.GetProperty("zoneId").GetString()!;
-                    var match = intersections.Value.FirstOrDefault(i => i.ShellId == targetShellId);
-                    if (match != null)
-                    {
-                        var actualCov = match.Coverages.FirstOrDefault(c => c.ZoneId == zoneId);
-                        if (actualCov == null) continue;
 
-                        if (tz.TryGetProperty("expectedIntersectionAreaM2", out var expIa))
+                    if (!intersections.HasValue || intersections.Value.IsDefaultOrEmpty)
+                    {
+                        AddMissing("Zone Intersections", $"{targetShellId}:{zoneId}", "Coverage", "Intersection results not provided");
+                        continue;
+                    }
+
+                    var match = intersections.Value.FirstOrDefault(i => i.ShellId == targetShellId);
+                    if (match == null)
+                    {
+                        AddMissing("Zone Intersections", $"{targetShellId}:{zoneId}", "Classification", $"No intersection record for shell {targetShellId}");
+                        continue;
+                    }
+
+                    if (tz.TryGetProperty("expectedClassification", out var expClass))
+                    {
+                        var ec = expClass.GetString()!;
+                        bool pass = string.Equals(match.Classification.ToString(), ec, StringComparison.Ordinal);
+                        AddCheck("Zone Intersections", targetShellId, "Classification", 1, pass ? 1 : 0, 0, null, pass, $"Expected classification {ec}, actual {match.Classification}");
+                    }
+
+                    if (tz.TryGetProperty("needsSplitInCSI", out var expSplit))
+                    {
+                        var es = expSplit.GetBoolean();
+                        bool pass = match.NeedsSplitInCSI == es;
+                        AddCheck("Zone Intersections", targetShellId, "NeedsSplitInCSI", es ? 1 : 0, match.NeedsSplitInCSI ? 1 : 0, 0, null, pass, $"Expected NeedsSplitInCSI {es}, actual {match.NeedsSplitInCSI}");
+                    }
+
+                    if (tz.TryGetProperty("expectedIntersectionAreaM2", out var expIa))
+                    {
+                        var expectedArea = expIa.GetDouble();
+                        var actualCov = match.Coverages.FirstOrDefault(c => c.ZoneId == zoneId);
+                        if (actualCov == null)
                         {
-                            var expectedArea = expIa.GetDouble();
-                            var actualArea = actualCov?.IntersectionAreaM2 ?? 0.0;
-                            bool pass = Math.Abs(actualArea - expectedArea) <= areaTol;
-                            comparisons.Add(new("Zone Intersections", $"{targetShellId}:{zoneId}", "IntersectionAreaM2", expectedArea, actualArea, areaTol, null, pass, $"Coverage area m²"));
+                            AddMissing("Zone Intersections", $"{targetShellId}:{zoneId}", "IntersectionAreaM2", $"No coverage recorded for zone {zoneId}");
                         }
-                        if (tz.TryGetProperty("expectedCoveragePercent", out var expCp))
+                        else
                         {
-                            var expectedPct = expCp.GetDouble();
-                            var actualPct = actualCov?.CoveragePercent ?? 0.0;
-                            bool pass = Math.Abs(actualPct - expectedPct) <= covTol;
-                            comparisons.Add(new("Coverage Percentages", $"{targetShellId}:{zoneId}", "CoveragePercent", expectedPct, actualPct, covTol, null, pass, $"Coverage %"));
+                            bool pass = Math.Abs(actualCov.IntersectionAreaM2 - expectedArea) <= areaTol;
+                            AddCheck("Zone Intersections", $"{targetShellId}:{zoneId}", "IntersectionAreaM2", expectedArea, actualCov.IntersectionAreaM2, areaTol, null, pass, $"Coverage area: expected {expectedArea:F4} m², actual {actualCov.IntersectionAreaM2:F4} m²");
+                        }
+                    }
+
+                    if (tz.TryGetProperty("expectedCoveragePercent", out var expCp))
+                    {
+                        var expectedPct = expCp.GetDouble();
+                        var actualCov = match.Coverages.FirstOrDefault(c => c.ZoneId == zoneId);
+                        if (actualCov != null)
+                        {
+                            bool pass = Math.Abs(actualCov.CoveragePercent - expectedPct) <= covTol;
+                            AddCheck("Coverage Percentages", $"{targetShellId}:{zoneId}", "CoveragePercent", expectedPct, actualCov.CoveragePercent, covTol, null, pass, $"Coverage %: expected {expectedPct:F2}%, actual {actualCov.CoveragePercent:F2}%");
                         }
                     }
                 }
             }
 
-            // Check existing loads
+            // 6. Existing Loads verification
             if (root.TryGetProperty("benchmarkLoads", out var expectedLoads))
             {
                 foreach (var el in expectedLoads.EnumerateArray())
@@ -185,35 +346,63 @@ public static class IndependentGeometryBenchmarkValidator
                     var pattern = el.GetProperty("pattern").GetString()!;
                     var expVal = el.GetProperty("valueSI").GetDouble();
                     var matchedLoad = scan.Model.ExistingLoads.FirstOrDefault(l => l.ObjectId == objId && l.Pattern == pattern);
-                    if (matchedLoad != null)
+                    if (matchedLoad == null)
                     {
-                        bool pass = Math.Abs(matchedLoad.ValueSI - expVal) <= loadTol;
-                        comparisons.Add(new("Existing Loads", objId, $"LoadSI:{pattern}", expVal, matchedLoad.ValueSI, loadTol, null, pass, $"Pattern {pattern}"));
+                        AddMissing("Existing Loads", objId, $"LoadSI:{pattern}", $"Expected load for pattern '{pattern}' on object '{objId}' missing from scan");
+                    }
+                    else
+                    {
+                        if (el.TryGetProperty("loadType", out var expType))
+                        {
+                            var et = expType.GetString()!;
+                            bool passType = matchedLoad.Kind.Contains(et, StringComparison.OrdinalIgnoreCase);
+                            AddCheck("Existing Loads", objId, $"LoadKind:{pattern}", 1, passType ? 1 : 0, 0, null, passType, $"Expected load kind containing '{et}', actual '{matchedLoad.Kind}'");
+                        }
+                        bool passVal = Math.Abs(matchedLoad.ValueSI - expVal) <= loadTol;
+                        AddCheck("Existing Loads", objId, $"LoadSI:{pattern}", expVal, matchedLoad.ValueSI, loadTol, null, passVal, $"Expected {expVal:F3}, actual {matchedLoad.ValueSI:F3}");
                     }
                 }
             }
 
-            if (comparisons.Count == 0)
+            int passedChecksCount = comparisons.Count(c => c.Passed);
+            int executedChecksCount = comparisons.Count;
+            var checklist = new BenchmarkChecklist(
+                expectedChecksCount, executedChecksCount, passedChecksCount, failedChecks.Count,
+                missingChecks.ToImmutableArray(), failedChecks.ToImmutableArray());
+
+            // Strict fail-closed decision:
+            // Missing mandatory checks or failed comparisons MUST prevent Passed status!
+            PhysicalQualificationOutcome outcome;
+            string summary;
+            if (executedChecksCount == 0)
             {
-                return new PhysicalQualificationResult(
-                    PhysicalQualificationOutcome.Inconclusive,
-                    product, version, null, modelId, timestamp,
-                    benchmarkName, [],
-                    ["No benchmark comparisons could be evaluated."],
-                    "Physical qualification is Inconclusive: no matching benchmark objects found.");
+                outcome = PhysicalQualificationOutcome.Inconclusive;
+                summary = "Physical qualification is Inconclusive: no benchmark comparisons could be executed.";
+            }
+            else if (missingChecks.Count > 0)
+            {
+                outcome = PhysicalQualificationOutcome.Failed;
+                summary = $"Physical Qualification FAILED • {missingChecks.Count} mandatory benchmark checks were missing or incomplete.";
+            }
+            else if (failedChecks.Count > 0)
+            {
+                outcome = PhysicalQualificationOutcome.Failed;
+                summary = $"Physical Qualification FAILED • {failedChecks.Count} of {executedChecksCount} benchmark checks exceeded tolerance.";
+            }
+            else
+            {
+                outcome = PhysicalQualificationOutcome.Passed;
+                summary = $"Physical Qualification PASSED • All {executedChecksCount} independent benchmark checks confirmed within tolerances.";
             }
 
-            var failed = comparisons.Where(c => !c.Passed).ToArray();
-            var outcome = failed.Length > 0 ? PhysicalQualificationOutcome.Failed : PhysicalQualificationOutcome.Passed;
-            var summary = outcome == PhysicalQualificationOutcome.Passed
-                ? $"Physical Qualification PASSED • {comparisons.Count} independent benchmark checks confirmed within tolerances."
-                : $"Physical Qualification FAILED • {failed.Length} of {comparisons.Count} benchmark checks exceeded tolerance.";
-
             return new PhysicalQualificationResult(
-                outcome, product, version, null, modelId, timestamp,
+                outcome, product, version, processId, modelId, timestamp,
                 benchmarkName, comparisons.ToImmutableArray(),
-                failed.Select(f => $"{f.Category} on {f.ElementId} {f.Property}: {f.Details}").ToImmutableArray(),
-                summary);
+                failedChecks.Concat(missingChecks).ToImmutableArray(),
+                summary,
+                checklist,
+                scanFingerprint,
+                fixtureHash);
         }
     }
 }

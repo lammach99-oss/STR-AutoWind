@@ -36,7 +36,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             if (mode == value) return;
             ProtectUnsavedDraft();
             mode = value; modeRevision++; inspection.Clear(); ClearZoneEditor(); Session.LoadDemoFixture(Edition); SelectedShell = IsDemo ? "R1" : "";
-            expectedBaseRevision = 0; HasUnsavedChanges = false;
+            expectedBaseRevision = 0; HasUnsavedChanges = false; PhysicalQualification = null;
             SelectedZone = IsDemo ? "Edge" : "Unmapped"; SelectedPattern = IsDemo ? "WX_POS_IP_POS" : "";
             ReportText = IsDemo ? "Preview the current synthetic calculation." : EngineeringBlock; SelectedReport = null;
             Issues = []; ProposedLoads = []; FacadePairRows = []; LowerFrame = ""; UpperFrame = "";
@@ -192,12 +192,15 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         : inspection.RoofRows.ToDictionary(r => r.ShellId, r => r.ZoneId ?? "Unmapped", StringComparer.Ordinal);
     public async Task ConnectReal()
     {
+        PhysicalQualification = null;
         if (IsDemo) throw new InvalidOperationException("Choose Real Read-Only mode first.");
         ProtectUnsavedDraft();
         ZoneEditor.Editable=false;
         var revision = modeRevision;
         await inspection.ConnectAsync(new(Product, AssemblyPath, SelectedProcessId));
         if (revision != modeRevision) return;
+
+        if (PhysicalQualification != null && (inspection.Scan is null || inspection.Outcome != CsiScanOutcome.Succeeded || PhysicalQualification.ScanFingerprint != inspection.Scan.Model.GeometryFingerprint || PhysicalQualification.ModelId != inspection.Scan.Model.ModelId || PhysicalQualification.SoftwareProduct != inspection.Scan.Model.Product || PhysicalQualification.SoftwareVersion != inspection.Scan.Model.Version || (PhysicalQualification.ProcessId.HasValue && inspection.Connection?.ProcessId.HasValue == true && PhysicalQualification.ProcessId != inspection.Connection.ProcessId))) { PhysicalQualification = null; }
         if (inspection.Connection?.Connected != true) throw new InvalidOperationException("CSI attach failed. " + string.Join("; ", inspection.Issues.Select(i => i.Message)));
         if (inspection.Connection.ProcessId.HasValue) SelectedProcessId = inspection.Connection.ProcessId.Value;
         await RefreshReal();
@@ -215,7 +218,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         if (IsDemo || inspection.Scan is null) throw new InvalidOperationException("Connect to a running CSI instance and scan selection before physical qualification.");
         var fixture = customFixturePath ?? Path.Combine(AppContext.BaseDirectory, "fixtures/etabs-roof-independent-benchmark.json");
         if (!File.Exists(fixture)) fixture = Path.Combine(Directory.GetCurrentDirectory(), "fixtures/etabs-roof-independent-benchmark.json");
-        PhysicalQualification = IndependentGeometryBenchmarkValidator.Validate(inspection.Scan, inspection.Shells3D, ZoneEditor.Planes, fixture, ZoneEditor.Classifications);
+        PhysicalQualification = IndependentGeometryBenchmarkValidator.Validate(inspection.Scan, inspection.Shells3D, ZoneEditor.Planes, fixture, ZoneEditor.Classifications, inspection.Connection?.ProcessId ?? SelectedProcessId);
         Refresh();
     }
     public async Task RefreshReal()
@@ -226,6 +229,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         var revision = modeRevision;
         await inspection.RefreshAsync();
         if (revision != modeRevision) return;
+
+        if (PhysicalQualification != null && (inspection.Scan is null || inspection.Outcome != CsiScanOutcome.Succeeded || PhysicalQualification.ScanFingerprint != inspection.Scan.Model.GeometryFingerprint || PhysicalQualification.ModelId != inspection.Scan.Model.ModelId || PhysicalQualification.SoftwareProduct != inspection.Scan.Model.Product || PhysicalQualification.SoftwareVersion != inspection.Scan.Model.Version || (PhysicalQualification.ProcessId.HasValue && inspection.Connection?.ProcessId.HasValue == true && PhysicalQualification.ProcessId != inspection.Connection.ProcessId))) { PhysicalQualification = null; }
 
         // Attempt to restore existing draft for the active state
         if(inspection.Scan is null)ClearZoneEditor();

@@ -212,3 +212,16 @@ Headless evidence: artifacts/final-demo/project.db, report.md, report.html, sess
 9. Before live writes: backup/SaveAs, conflict resolution, partial failure/rollback, ownership and physical ETABS/SAP readback gates.
 
 Standards: **verified normative data: none**; unverified metadata: both requested editions; synthetic demo: all demonstrated pressures/materials. CSI: fake only; genuine versions supported/tested: none. Proprietary dependencies do not block this demo.
+
+
+## Sprint 3.4.1 — Fail-Closed Physical Benchmark Qualification
+
+- **Status**: Complete.
+- **Automated Tests**: 220 passed, 0 failed, 0 skipped. All 6 WPF smoke processes verified.
+- **Key Accomplishments**:
+  - Hardened `IndependentGeometryBenchmarkValidator` to fail-closed with structured `BenchmarkChecklist`.
+  - Formalized 3 distinct benchmark scenarios in `etabs-roof-independent-benchmark.json` (Full, Half, Overlapping).
+  - Added 9 negative mutation tests proving no false Passed results.
+  - Strengthened `qualify-csi.ps1` and `CsiPhysicalQualificationTests.cs` with PID propagation and fail-closed non-zero exit on non-Passed outcome.
+  - Implemented stale qualification invalidation in `MainViewModel`.
+- **Safety Guarantees**: Engineering calculations, approvals, and CSI writes remain disabled in RealReadOnly mode.

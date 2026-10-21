@@ -32,7 +32,9 @@ public sealed class CsiPhysicalQualificationTests
         }
 
         await using var adapter = new InstalledCsiReadAdapter();
-        var connectResult = await adapter.ConnectAsync(new CsiConnectionOptions(CsiProduct.Etabs, EtabsDllPath));
+        var envPid = Environment.GetEnvironmentVariable("CSI_PROCESS_ID");
+        int? targetPid = int.TryParse(envPid, out var p) && p > 0 ? p : null;
+        var connectResult = await adapter.ConnectAsync(new CsiConnectionOptions(CsiProduct.Etabs, EtabsDllPath, targetPid));
         
         Assert.True(connectResult.Connected, "Should connect to running ETABS instance.");
         Assert.Equal("Etabs", connectResult.Product);
@@ -225,7 +227,9 @@ public sealed class CsiPhysicalQualificationTests
         }
 
         await using var adapter = new InstalledCsiReadAdapter();
-        var connectResult = await adapter.ConnectAsync(new CsiConnectionOptions(CsiProduct.Etabs, EtabsDllPath));
+        var envPid = Environment.GetEnvironmentVariable("CSI_PROCESS_ID");
+        int? targetPid = int.TryParse(envPid, out var p) && p > 0 ? p : null;
+        var connectResult = await adapter.ConnectAsync(new CsiConnectionOptions(CsiProduct.Etabs, EtabsDllPath, targetPid));
         Assert.True(connectResult.Connected);
 
         var scan = await adapter.RefreshSelectionAsync();
@@ -234,11 +238,10 @@ public sealed class CsiPhysicalQualificationTests
         var fixturePath = Path.Combine(AppContext.BaseDirectory, "../../../../../fixtures/etabs-roof-independent-benchmark.json");
         if (!File.Exists(fixturePath)) fixturePath = Path.Combine(Directory.GetCurrentDirectory(), "fixtures/etabs-roof-independent-benchmark.json");
 
-        var result = IndependentGeometryBenchmarkValidator.Validate(scan, shells3D, [], fixturePath);
-        if (result.Outcome == PhysicalQualificationOutcome.Inconclusive)
+        var result = IndependentGeometryBenchmarkValidator.Validate(scan, shells3D, [], fixturePath, processId: targetPid);
+        if (result.Outcome != PhysicalQualificationOutcome.Passed)
         {
-            // Disclose inconclusive status when required benchmark elements are not loaded in the running model
-            return;
+            throw new InvalidOperationException($"Physical benchmark qualification did not pass. Outcome: {result.Outcome}. Summary: {result.Summary}. Issues: {string.Join("; ", result.Issues)}");
         }
 
         Assert.Equal(PhysicalQualificationOutcome.Passed, result.Outcome);
