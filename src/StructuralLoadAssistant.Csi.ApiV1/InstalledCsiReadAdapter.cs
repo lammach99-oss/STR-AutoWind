@@ -21,22 +21,25 @@ public sealed class InstalledCsiReadAdapter : ICsiSessionReadAdapter
  private readonly CsiDispatcher dispatcher=new();
  private ICsiApiSession? session;
  private CsiProduct product;
- private string version="",modelId=""; private string unsavedIdentity=Guid.NewGuid().ToString("N");
+ private string version="",modelId=""; private int? processId; private string unsavedIdentity=Guid.NewGuid().ToString("N");
  private CsiCapabilities capabilities=new(false,false,false,false);
  private int disposed;
  public InstalledCsiReadAdapter(Func<CsiConnectionOptions,ICsiApiSession>? factory=null)=>this.factory=factory ?? (o=>new InstalledSession(o));
  private object? Get(string component,string method,params object?[] args){try{return session!.Read(component,method,args);}catch(NotSupportedException){capabilities=method switch{"GetStories"=>capabilities with{Stories=false},"GetLoadDistributed"=>capabilities with{FrameDistributedLoads=false},"GetLoadUniform"=>capabilities with{AreaUniformLoads=false},"GetTransformationMatrix"=>capabilities with{LocalAxes=false},_=>capabilities};throw;}}
  private void Check(string component,string method,object?[] args){var code=Convert.ToInt32(Get(component,method,args),CultureInfo.InvariantCulture);if(code!=0)throw new ReadFailure("CSI_RETURN_CODE",component+"."+method,"CSI getter returned nonzero status.",code);}
  public Task<CsiConnectionResult> ConnectAsync(CsiConnectionOptions options,CancellationToken cancellationToken=default)=>dispatcher.Invoke(()=>{
-  session?.Dispose();session=null;version="";modelId="";product=options.Product; capabilities=new(false,false,false,false);
+  session?.Dispose();session=null;version="";modelId="";processId=null;product=options.Product; capabilities=new(false,false,false,false);
   try {if(!Enum.IsDefined(options.Product))throw new ArgumentOutOfRangeException(nameof(options.Product)); unsavedIdentity=Guid.NewGuid().ToString("N");session=factory(options);object?[] args={"",0d};Check("","GetVersion",args);version=(string)args[0]!;
    var expected=product==CsiProduct.Etabs?23:27;
    if(!int.TryParse(version.Split('.')[0],out var major)||major!=expected)throw new ReadFailure("UNSUPPORTED_VERSION","GetVersion",$"Only inspected {product} {expected} signatures are supported; physical qualification remains pending.");
    modelId=(string)Get("","GetModelFilename",true)!;
+   processId=(session as ICsiApiProcessSession)?.ProcessId ?? options.ProcessId;
    _=CsiUnitConverter.FromId(Convert.ToInt32(Get("","GetPresentUnits"),CultureInfo.InvariantCulture));
    capabilities=new(product==CsiProduct.Etabs,true,true,true);
-   return new CsiConnectionResult(true,product.ToString(),version,capabilities,[new("PHYSICAL_QUALIFICATION_PENDING","Connect","Installed signatures inspected; live model read qualification is not established.",CsiIssueSeverity.Information)]);
-  }catch(OperationCanceledException){session?.Dispose();session=null;throw;}catch(Exception e){session?.Dispose();session=null;return new CsiConnectionResult(false,product.ToString(),version,capabilities,[Issue(e,"Connect")]);}
+   var issues=new List<CsiReadIssue>{new("PHYSICAL_QUALIFICATION_PENDING","Connect","Installed signatures inspected; live model read qualification is not established.",CsiIssueSeverity.Information)};
+   if(string.IsNullOrWhiteSpace(modelId)) issues.Add(new("MODEL_DISCONNECTED","Connect","No model is currently open in the connected CSI instance.",CsiIssueSeverity.Warning));
+   return new CsiConnectionResult(true,product.ToString(),version,capabilities,issues.ToImmutableArray(),processId,modelId);
+  }catch(OperationCanceledException){session?.Dispose();session=null;throw;}catch(Exception e){session?.Dispose();session=null;return new CsiConnectionResult(false,product.ToString(),version,capabilities,[Issue(e,"Connect")],processId,modelId);}
  },cancellationToken);
  public Task<CsiReadScan> RefreshSelectionAsync(CancellationToken cancellationToken=default)=>dispatcher.Invoke(()=>Scan(cancellationToken),cancellationToken);
  public async Task<CsiModelSnapshot> ScanModelAsync(CancellationToken cancellationToken=default)=>(await RefreshSelectionAsync(cancellationToken)).Model;
@@ -47,8 +50,11 @@ public sealed class InstalledCsiReadAdapter : ICsiSessionReadAdapter
   var units=new CsiUnits("unknown",0,0,"Not read");bool locked=false;ImmutableArray<string> patterns=[],cases=[],combos=[];
   try {
    if(session==null)throw new ReadFailure("DISCONNECTED","RefreshSelection","Attach a running supported CSI instance first.");
-   token.ThrowIfCancellationRequested();units=CsiUnitConverter.FromId(Convert.ToInt32(Get("","GetPresentUnits"),CultureInfo.InvariantCulture));locked=(bool)Get("","GetModelIsLocked")!;
    var beforeModel=(string)Get("","GetModelFilename",true)!;
+   if(string.IsNullOrWhiteSpace(beforeModel))throw new ReadFailure("MODEL_DISCONNECTED","RefreshSelection","No model is currently open in the connected CSI instance.");
+   if(!string.IsNullOrWhiteSpace(modelId)&&!modelId.StartsWith("unsaved:",StringComparison.OrdinalIgnoreCase)&&!string.Equals(beforeModel,modelId,StringComparison.OrdinalIgnoreCase))
+       throw new ReadFailure("MODEL_MISMATCH","RefreshSelection",$"Model identity changed from '{modelId}' to '{beforeModel}'. Disconnect and reconnect to switch models.");
+   token.ThrowIfCancellationRequested();units=CsiUnitConverter.FromId(Convert.ToInt32(Get("","GetPresentUnits"),CultureInfo.InvariantCulture));locked=(bool)Get("","GetModelIsLocked")!;
    patterns=Names("LoadPatterns",issues);cases=Names("LoadCases",issues,true);combos=Names("RespCombo",issues);
    if(capabilities.Stories)Try(()=>{object?[] a={0,null,null,null,null,null,null,null};Check("Story","GetStories",a);int n=checked((int)a[0]!+1);var names=ArrayOf<string>(a[1],n);var elev=ArrayOf<double>(a[2],n);var h=ArrayOf<double>(a[3],n);for(int i=0;i<n;i++)stories.Add(new(names[i],Finite(elev[i])*units.LengthToM,Finite(h[i])*units.LengthToM));},issues);
    object?[] selected={0,null,null};Check("SelectObj","GetSelected",selected);int count=(int)selected[0]!;var types=ArrayOf<int>(selected[1],count);var names=ArrayOf<string>(selected[2],count);
@@ -81,7 +87,7 @@ public sealed class InstalledCsiReadAdapter : ICsiSessionReadAdapter
  private static T[] ArrayOf<T>(object? value,int n){if(n<0||n>1_000_000)throw new InvalidDataException("Invalid CSI item count.");if(n==0)return Array.Empty<T>();if(value is not T[] values || values.Length<n)throw new InvalidDataException("CSI getter returned inconsistent array lengths.");return values.Take(n).ToArray();}
  private static double Finite(double x)=>double.IsFinite(x)?x:throw new InvalidDataException("CSI returned a nonfinite number.");
  private static void Try(Action action,List<CsiReadIssue> issues){try{action();}catch(OperationCanceledException){throw;}catch(Exception e){issues.Add(Issue(e,"ReadObject"));}}
- private static CsiReadIssue Issue(Exception e,string operation)=>e is ReadFailure f?new(f.Code,f.Operation,f.Message,CsiIssueSeverity.Error,f.ReturnCode):new(e is CsiNotRunningException?"DISCONNECTED":e is ArgumentOutOfRangeException?"UNSUPPORTED_UNITS":e is InvalidDataException?"INVALID_DATA":e is PlatformNotSupportedException?"UNSUPPORTED_PLATFORM":e is NotSupportedException?"UNSUPPORTED_GETTER":"CSI_READ_FAILURE",operation,e.Message);
+ private static CsiReadIssue Issue(Exception e,string operation)=>e is ReadFailure f?new(f.Code,f.Operation,f.Message,CsiIssueSeverity.Error,f.ReturnCode):new(e is CsiNotRunningException?"DISCONNECTED":e.Message.Contains("terminated")||e.Message.Contains("exited")?"PROCESS_TERMINATED":e.Message.Contains("reused")?"PID_REUSED":e.Message.Contains("Multiple")?"MULTIPLE_INSTANCES":e is ArgumentOutOfRangeException?"UNSUPPORTED_UNITS":e is InvalidDataException?"INVALID_DATA":e is PlatformNotSupportedException?"UNSUPPORTED_PLATFORM":e is NotSupportedException?"UNSUPPORTED_GETTER":"CSI_READ_FAILURE",operation,e.Message);
  public async ValueTask DisposeAsync(){if(Interlocked.Exchange(ref disposed,1)!=0)return;await dispatcher.Invoke(()=>{session?.Dispose();session=null;return true;});await dispatcher.DisposeAsync();}
  private sealed class ReadFailure(string code,string operation,string message,int? returnCode=null):Exception(message){public string Code=>code;public string Operation=>operation;public int? ReturnCode=>returnCode;}
 }

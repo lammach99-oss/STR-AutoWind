@@ -33,3 +33,21 @@ public sealed record RoofMappingApproval(string Id, int Revision, WindCalculatio
     ImmutableArray<AreaLoadProposal> Proposals, ImmutableArray<EngineeringOverride> Overrides,
     ImmutableArray<RoofScopeExclusion> Exclusions, string User, DateTimeOffset ApprovedAt,
     bool Simulation, string ContentHash);
+
+public static class RoofPressurePrerequisites
+{
+    public static ImmutableArray<string> Validate(IEnumerable<RoofShellMapping> mappings, IEnumerable<RoofScopeExclusion> exclusions, GeometryReviewStatus reviewStatus)
+    {
+        var issues = new List<string>();
+        if (reviewStatus != GeometryReviewStatus.GeometryReviewed)
+            issues.Add($"Geometry review status is '{reviewStatus}'; explicit engineer geometry review (GeometryReviewed) is required before pressure application.");
+        var exclSet = exclusions.Select(e => e.ShellId).ToHashSet(StringComparer.Ordinal);
+        foreach (var m in mappings)
+        {
+            if (exclSet.Contains(m.ShellId)) continue;
+            if (m.BlocksPressureMapping)
+                issues.Add($"Shell '{m.ShellId}' blocks pressure mapping: classification={m.Classification}, version={m.MappingContractVersion}, coverages={m.ZoneCoverages.Length}.");
+        }
+        return issues.ToImmutableArray();
+    }
+}

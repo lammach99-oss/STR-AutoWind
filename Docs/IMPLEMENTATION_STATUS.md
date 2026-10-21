@@ -1,5 +1,13 @@
 # Implementation status — 2026-10-20
 
+## Sprint 3.4: Independent ETABS geometry qualification & safe instance selection
+
+- **Safe PID-Aware Attachment**: Added CsiProcessDiscovery to enumerate running ETABS and SAP2000 instances. The WPF CSI tab now provides PID targeting, process scanning, and validation. If multiple instances are active without a selected PID, the application refuses to silently attach to an arbitrary process. Process termination, PID reuse, model disconnects, and model identity mismatches are detected and handled safely.
+- **Independent Benchmark Framework**: Created fixtures/etabs-roof-independent-benchmark.json containing independently calculated reference values for a dual-pitch gable roof with 4 divided panels on 2 sloped planes, opposite Local 3 orientations, test-zone intersections, and existing loads.
+- **Accuracy Validator**: Implemented IndependentGeometryBenchmarkValidator comparing coordinates, Local 3 vectors, roof plane transforms, 3D surface areas, projected areas, test zone intersections, and existing loads against strict absolute and relative tolerances. Missing fixtures or non-matching selections produce Inconclusive, not Passed.
+- **Roof Mapping Accuracy Gate**: Added RoofPressurePrerequisites to ensure future pressure calculation engines cannot consume legacy, incomplete, crossing, overlapping, or unverified zone mappings.
+- **Verification**: 211 automated unit and integration tests pass with zero failures and zero skips. All 6 WPF smoke processes pass in Release mode with clean shutdown markers.
+
 ## Sprint 3.3: Mapping integrity and partial live verification
 
 The active geometry mapping contract now distinguishes zone overlap from shell overlap, invalid geometry and audited exclusion. Labels never infer crossing or containment. Version 2 rows/draft items preserve structured zone IDs, per-zone intersection areas/coverage and shell surface area. Crossing, overlap, invalid, unmapped, excluded and unverified rows conservatively block future pressure mapping; a geometrically complete row does not authorize engineering pressure approval.

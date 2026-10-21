@@ -1,8 +1,10 @@
 using System.ComponentModel;
 using System.Globalization;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using StructuralLoadAssistant.Csi.Abstractions;
+using StructuralLoadAssistant.Csi.ApiV1;
 using Microsoft.Extensions.Logging;
 using StructuralLoadAssistant.Application;
 using StructuralLoadAssistant.Domain;
@@ -53,6 +55,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     public string ModeBanner => IsDemo ? "DEMO / FAKE CSI • SYNTHETIC PRESSURES • NOT FOR ENGINEERING DESIGN" : (IsMockAdapter ? "MOCK LIVE ADAPTER / NOT ACTUAL CSI • READ-ONLY • APPROVAL / APPLY DISABLED" : "REAL CSI READ-ONLY • NO PRESSURE DATASET • APPROVAL / APPLY DISABLED");
     public CsiProduct Product { get; set; } = CsiProduct.Etabs;
     public string AssemblyPath { get; set; } = "";
+    public int? SelectedProcessId { get; set; }
+    public IReadOnlyList<CsiProcessInfo> AvailableProcesses { get; private set; } = [];
+    public PhysicalQualificationResult? PhysicalQualification { get; private set; }
+    public string PhysicalQualificationSummary => PhysicalQualification is null
+        ? "Physical Qualification: PENDING (Run independent benchmark against verified model)"
+        : $"{PhysicalQualification.Summary} [{PhysicalQualification.Outcome}]";
     public string LowerFrame { get; set; } = "";
     public string UpperFrame { get; set; } = "";
     public string FacadeGroup { get; set; } = "Reviewed facade group";
@@ -108,7 +116,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     public object[] ProposedLoads { get; private set; } = [];
     public string ProjectSummary => IsDemo ? $"{Session.Project.Name}\nID: {Session.Project.Id}  |  Units: {Session.Project.UnitSystem}\nSQLite: {DatabasePath}\nData: SyntheticDemoFixture" : "Real CSI inspection — read-only session; no engineering run created.";
     public string ManifestSummary => IsDemo ? $"{Session.Manifest.Edition} | Status: {Session.Manifest.Status}\n{string.Join("\n", Session.Manifest.Revisions)}\nMissing: normative velocity / terrain tables, aerodynamic coefficients, reference heights, reviewed regression fixtures.\n{Session.Calculation.State.Id}" : EngineeringBlock;
-    public string CsiSummary => IsDemo ? $"{Session.Model.Product} | {Session.Model.Version}\nModel: {Session.Model.ModelId}\nFrames: {Session.Model.Frames.Length} | Roof shells: {Session.Model.Shells.Length}\nDemo fixture; fake adapter." : inspection.Connection is null ? "Disconnected. Attach only to an existing ETABS / SAP2000 process. No application start or model open." : $"{(IsMockAdapter ? "[MOCK CONTRACT FIXTURE - NOT ACTUAL CSI DATA]\n" : "")}{inspection.Connection.Product} | {inspection.Connection.Version} | Connected: {inspection.Connection.Connected}\nModel: {inspection.Scan?.Model.ModelId ?? "not refreshed"}\nNative units: {inspection.Scan?.Units.Description ?? "unknown"}; SI length multiplier: {inspection.Scan?.Units.LengthToM}; SI force multiplier: {inspection.Scan?.Units.ForceToN}\nLocked: {inspection.Scan?.IsLocked.ToString() ?? "unknown"}\nCapabilities: {inspection.Scan?.Capabilities ?? inspection.Connection.Capabilities}\nSelected frames: {inspection.Scan?.Model.Frames.Length ?? 0}; selected shells: {inspection.Scan?.Model.Shells.Length ?? 0}; issues: {inspection.Issues.Length}";
+    public string CsiSummary => IsDemo ? $"{Session.Model.Product} | {Session.Model.Version}\nModel: {Session.Model.ModelId}\nFrames: {Session.Model.Frames.Length} | Roof shells: {Session.Model.Shells.Length}\nDemo fixture; fake adapter." : inspection.Connection is null ? "Disconnected. Attach only to an existing ETABS / SAP2000 process. No application start or model open." : $"{(IsMockAdapter ? "[MOCK CONTRACT FIXTURE - NOT ACTUAL CSI DATA]\n" : "")}Process ID: {inspection.Connection.ProcessId?.ToString() ?? SelectedProcessId?.ToString() ?? "unspecified"} | {inspection.Connection.Product} | {inspection.Connection.Version} | Connected: {inspection.Connection.Connected}\nModel: {inspection.Scan?.Model.ModelId ?? inspection.Connection.ModelId ?? "not refreshed"}\nNative units: {inspection.Scan?.Units.Description ?? "unknown"}; SI length multiplier: {inspection.Scan?.Units.LengthToM}; SI force multiplier: {inspection.Scan?.Units.ForceToN}\nLocked: {inspection.Scan?.IsLocked.ToString() ?? "unknown"}\nCapabilities: {inspection.Scan?.Capabilities ?? inspection.Connection.Capabilities}\nSelected frames: {inspection.Scan?.Model.Frames.Length ?? 0}; selected shells: {inspection.Scan?.Model.Shells.Length ?? 0}; issues: {inspection.Issues.Length}\n{PhysicalQualificationSummary}";
     public string RoofSummary => IsDemo ? $"Workflow: {Session.Roof.State} | Approval: {Session.Roof.Approval?.Id ?? "none"}\nAssignment: {Session.Assignment?.Id ?? "none"} | Readback: {Session.Readback?.Matches.ToString() ?? "not performed"}" : $"Read-only selected shell geometry. Pressure mapping: Unmapped. Approval: unavailable.\n{EngineeringBlock}";
     public string FacadeSummary => IsDemo ? $"Preview: {(Session.FacadePreview is null ? "not prepared" : "prepared")} | Approval: {(Session.FacadeApproval is null ? "none" : Session.FacadeApproval.User)}\nSimulated assignment: {Session.FacadeAssignment?.Id ?? "none"} | Readback: {Session.FacadeReadback?.Matches.ToString() ?? "not performed"}" : $"Explicit selected frame pair geometry only. Method: {Method}.\n{EngineeringBlock}";
     public string ShellSummary
@@ -188,10 +196,26 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         ProtectUnsavedDraft();
         ZoneEditor.Editable=false;
         var revision = modeRevision;
-        await inspection.ConnectAsync(new(Product, AssemblyPath));
+        await inspection.ConnectAsync(new(Product, AssemblyPath, SelectedProcessId));
         if (revision != modeRevision) return;
         if (inspection.Connection?.Connected != true) throw new InvalidOperationException("CSI attach failed. " + string.Join("; ", inspection.Issues.Select(i => i.Message)));
+        if (inspection.Connection.ProcessId.HasValue) SelectedProcessId = inspection.Connection.ProcessId.Value;
         await RefreshReal();
+        Refresh();
+    }
+    public void RefreshAvailableProcesses()
+    {
+        AvailableProcesses = CsiProcessDiscovery.GetRunningProcesses(Product);
+        if (AvailableProcesses.Count == 1) SelectedProcessId = AvailableProcesses[0].ProcessId;
+        else if (AvailableProcesses.All(p => p.ProcessId != SelectedProcessId)) SelectedProcessId = null;
+        Refresh();
+    }
+    public void RunBenchmarkQualification(string? customFixturePath = null)
+    {
+        if (IsDemo || inspection.Scan is null) throw new InvalidOperationException("Connect to a running CSI instance and scan selection before physical qualification.");
+        var fixture = customFixturePath ?? Path.Combine(AppContext.BaseDirectory, "fixtures/etabs-roof-independent-benchmark.json");
+        if (!File.Exists(fixture)) fixture = Path.Combine(Directory.GetCurrentDirectory(), "fixtures/etabs-roof-independent-benchmark.json");
+        PhysicalQualification = IndependentGeometryBenchmarkValidator.Validate(inspection.Scan, inspection.Shells3D, ZoneEditor.Planes, fixture, ZoneEditor.Classifications);
         Refresh();
     }
     public async Task RefreshReal()
@@ -463,7 +487,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     }
     public void DisconnectReal()
     {
-        ProtectUnsavedDraft(); inspection.Clear(); ClearZoneEditor(); expectedBaseRevision = 0; Refresh();
+        ProtectUnsavedDraft(); inspection.Clear(); ClearZoneEditor(); expectedBaseRevision = 0; PhysicalQualification = null; Refresh();
     }
     public void ValidateGeometryDraft()
     {

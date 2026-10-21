@@ -44,6 +44,12 @@
  )
  {
      public ImmutableArray<ZoneCoverage> ZoneCoverages { get; init; }=ZoneCoverages.IsDefault?[]:ZoneCoverages;
+     [System.Text.Json.Serialization.JsonIgnore]
+     public bool BlocksPressureMapping => Classification!=ShellZoneClassification.FullyInsideZone || MappingContractVersion!=2 ||
+         ZoneCoverages.Length!=1 || ShellAreaM2 is not >0 || !double.IsFinite(ShellAreaM2.Value) ||
+         string.IsNullOrWhiteSpace(ZoneCoverages[0].ZoneId) || !double.IsFinite(ZoneCoverages[0].IntersectionAreaM2) ||
+         Math.Abs(ZoneCoverages[0].IntersectionAreaM2-ShellAreaM2.Value)>Math.Max(1e-6,1e-7*ShellAreaM2.Value) ||
+         !double.IsFinite(ZoneCoverages[0].CoveragePercent) || Math.Abs(ZoneCoverages[0].CoveragePercent-100)>1e-5;
  }
  
  public sealed record SourceShellFingerprint(string ShellId, string Fingerprint);

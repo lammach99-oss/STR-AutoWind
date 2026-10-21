@@ -6,17 +6,22 @@ namespace StructuralLoadAssistant.Csi.ApiV1;
 
 /// <summary>Read-only boundary. Implementations update only by-reference getter outputs.</summary>
 public interface ICsiApiSession : IDisposable { object? Read(string component, string getter, object?[] args); }
+public interface ICsiApiProcessSession : ICsiApiSession { int? ProcessId { get; } }
 
-internal sealed class InstalledSession : ICsiApiSession
+internal sealed class InstalledSession : ICsiApiProcessSession
 {
     private readonly Dictionary<string,(object Instance,Type Contract)> objects=new();
     private readonly List<object> releases=new();
     private readonly Assembly assembly;
     private readonly string ns;
+    private readonly DateTimeOffset? processStartTime;
+    private readonly CsiProduct product;
+    public int? ProcessId { get; }
     private static readonly HashSet<string> Allowed=new(StringComparer.Ordinal) {"GetVersion","GetModelFilename","GetPresentUnits","GetModelIsLocked","GetNameList","GetStories","GetSelected","GetPoints","GetCoordCartesian","GetTransformationMatrix","GetLoadDistributed","GetLoadUniform"};
     public InstalledSession(CsiConnectionOptions options)
     {
         if(!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("CSI running-instance attachment requires Windows.");
+        product=options.Product;
         var path=Path.GetFullPath(options.AssemblyPath);
         ns=options.Product==CsiProduct.Etabs?"ETABSv1":"SAP2000v1";
         // A CSiAPIv1 installation path is accepted, but the inspected product-specific interop
@@ -26,7 +31,34 @@ internal sealed class InstalledSession : ICsiApiSession
         if(assembly.GetName().Name!=ns)throw new NotSupportedException("Assembly does not match the selected CSI product.");
         try {
             var helper=Activator.CreateInstance(assembly.GetType(ns+".Helper",true)!)!; releases.Add(helper);
-            var api=assembly.GetType(ns+".cHelper",true)!.GetMethod("GetObject")!.Invoke(helper,new object[]{options.Product==CsiProduct.Etabs?"CSI.ETABS.API.ETABSObject":"CSI.SAP2000.API.SapObject"}) ?? throw new CsiNotRunningException();
+            var progId=options.Product==CsiProduct.Etabs?"CSI.ETABS.API.ETABSObject":"CSI.SAP2000.API.SapObject";
+            object? api=null;
+            if(options.ProcessId.HasValue)
+            {
+                CsiProcessDiscovery.ValidateProcessActive(options.Product, options.ProcessId.Value);
+                var getObjProc=assembly.GetType(ns+".cHelper",true)!.GetMethod("GetObjectProcess");
+                if(getObjProc!=null) api=getObjProc.Invoke(helper, new object[]{progId, options.ProcessId.Value});
+                else throw new NotSupportedException("GetObjectProcess is not available in installed helper.");
+                if(api==null) throw new CsiNotRunningException();
+                ProcessId=options.ProcessId.Value;
+            }
+            else
+            {
+                var running=CsiProcessDiscovery.GetRunningProcesses(options.Product);
+                if(running.Length==0) throw new CsiNotRunningException();
+                if(running.Length>1) throw new InvalidOperationException($"Multiple {options.Product} instances are running (PIDs: {string.Join(", ", running.Select(p=>p.ProcessId))}). Explicitly select a process ID to attach safely.");
+                var targetPid=running[0].ProcessId;
+                var getObjProc=assembly.GetType(ns+".cHelper",true)!.GetMethod("GetObjectProcess");
+                if(getObjProc!=null) api=getObjProc.Invoke(helper, new object[]{progId, targetPid});
+                if(api==null) api=assembly.GetType(ns+".cHelper",true)!.GetMethod("GetObject")!.Invoke(helper,new object[]{progId});
+                if(api==null) throw new CsiNotRunningException();
+                ProcessId=targetPid;
+            }
+            if(ProcessId.HasValue)
+            {
+                try { using var p=System.Diagnostics.Process.GetProcessById(ProcessId.Value); processStartTime=(DateTimeOffset)p.StartTime; }
+                catch { /* process info cache best effort */ }
+            }
             releases.Add(api);
             var model=assembly.GetType(ns+".cOAPI",true)!.GetProperty("SapModel")!.GetValue(api)!; releases.Add(model);
             objects.Add("",(model,assembly.GetType(ns+".cSapModel",true)!));
@@ -35,6 +67,7 @@ internal sealed class InstalledSession : ICsiApiSession
     public object? Read(string component,string getter,object?[] args)
     {
         if(!Allowed.Contains(getter)) throw new InvalidOperationException("Only inspected read getters are permitted.");
+        if(ProcessId.HasValue) CsiProcessDiscovery.ValidateProcessActive(product, ProcessId.Value, processStartTime);
         if(!objects.TryGetValue(component,out var target)) {
             var model=objects[""]; var p=model.Contract.GetProperty(component) ?? throw new NotSupportedException(component);
             var instance=p.GetValue(model.Instance)!; releases.Add(instance); target=(instance,p.PropertyType); objects.Add(component,target);

@@ -146,6 +146,7 @@ public sealed partial class MainWindow : Window
             if (System.IO.Directory.Exists(installed)) dialog.InitialDirectory = installed;
             if (dialog.ShowDialog(this) == true) { vm.AssemblyPath = dialog.FileName; vm.Refresh(); }
         }, false)));
+        p.Children.Add(Row(Text("Target PID:"), Input("SelectedProcessId", 110), Button("Scan running instances", vm.RefreshAvailableProcesses, false), Button("Verify independent benchmark", () => vm.RunBenchmarkQualification(), false)));
         p.Children.Add(Row(Button("Attach existing process (read-only)", () => _ = vm.RunAsync(vm.ConnectReal), false), Button("Refresh current CSI selection", () => _ = vm.RunAsync(vm.RefreshReal), false), Button("Disconnect read-only", vm.DisconnectReal, false), Button("Rescan demo fixture", () => vm.LoadFixture())));
         p.Children.Add(BoundText("CsiSummary"));
         p.Children.Add(Text("Issues / unsupported reads / return codes")); p.Children.Add(Table("ReadIssues", 95));

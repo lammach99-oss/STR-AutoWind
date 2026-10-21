@@ -2,7 +2,8 @@
      [ValidateSet("Etabs", "Sap2000")]
      [string]$Product = "Etabs",
      [string]$AssemblyPath = "",
-     [string]$FixturePath = "fixtures/physical-csi-reviewed-baseline.json",
+    [int]$ProcessId = 0,
+    [string]$FixturePath = "fixtures/etabs-roof-independent-benchmark.json",
      [switch]$SetupSelection,
      [switch]$RestoreSelection = $true,
      [string]$ReportPath = "artifacts/csi-physical-qualification-report.json"
@@ -38,6 +39,7 @@
      }
  
      Write-Host "Target Product:  $Product"
+    if ($ProcessId -gt 0) { Write-Host "Process ID:      $ProcessId" }
      Write-Host "Assembly Path:   $AssemblyPath"
      Write-Host "Fixture Path:    $FixturePath"
  
@@ -75,7 +77,13 @@
          $asm = [System.Reflection.Assembly]::LoadFrom($AssemblyPath)
          $helper = [System.Activator]::CreateInstance($asm.GetType("ETABSv1.Helper"))
          $cHelper = $asm.GetType("ETABSv1.cHelper")
-         $etabsObj = $cHelper.GetMethod("GetObject").Invoke($helper, [object[]]@("CSI.ETABS.API.ETABSObject"))
+        $getObjProc = $cHelper.GetMethod("GetObjectProcess")
+        $etabsObj = $null
+        if ($ProcessId -gt 0 -and $null -ne $getObjProc) {
+            $etabsObj = $getObjProc.Invoke($helper, [object[]]@("CSI.ETABS.API.ETABSObject", $ProcessId))
+        } else {
+            $etabsObj = $cHelper.GetMethod("GetObject").Invoke($helper, [object[]]@("CSI.ETABS.API.ETABSObject"))
+        }
          if ($null -ne $etabsObj) {
              $sapModel = $asm.GetType("ETABSv1.cOAPI").GetProperty("SapModel").GetValue($etabsObj)
              $selectObj = $asm.GetType("ETABSv1.cSapModel").GetProperty("SelectObj").GetValue($sapModel)

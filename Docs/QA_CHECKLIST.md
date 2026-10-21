@@ -74,6 +74,19 @@
 Final WPF dual-mode smoke/results are in IMPLEMENTATION_STATUS.md. Mock screenshots are not actual customer scan proof.
 
 Latest build/test counts and output paths are in IMPLEMENTATION_STATUS.md. A passing fake test does not qualify a live model or wind standard.
+## Sprint 3.4 current qualification
+
+- [x] 211 automated tests pass with physical tests excluded, zero failures and zero skips.
+- [x] Safe PID-aware read-only attachment implemented and tested (CsiProcessDiscovery, GetObjectProcess).
+- [x] Multi-instance disambiguation guard: refuses silent arbitrary attachment when multiple instances run.
+- [x] Process termination, PID reuse, model disconnect, and model mismatch detection.
+- [x] Independent geometry benchmark framework (etabs-roof-independent-benchmark.json, IndependentGeometryBenchmarkValidator).
+- [x] Accuracy gate decoupled from connection, scan, and review statuses (PhysicalQualificationOutcome).
+- [x] Roof mapping prerequisites enforce complete and valid geometry input for future pressure engines (RoofPressurePrerequisites).
+- [x] All 6 WPF smoke processes pass cleanly with visual and process-result artifacts.
+- [ ] Independent physical benchmark verification against live ETABS with the dedicated benchmark model open (reported as Inconclusive when model not loaded).
+- [ ] SAP2000 physical qualification (reported as Pending).
+
 ## Sprint 3.3 current qualification
 
 - [x] 201 automated tests pass with physical tests excluded, no silently skipped physical assertions counted.

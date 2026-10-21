@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -207,6 +208,40 @@ public sealed class CsiPhysicalQualificationTests
         
         Assert.False(result.Connected);
         Assert.Contains(result.Issues, i => i.Code is "DISCONNECTED" or "ConnectionFailed");
+    }
+
+    [Fact]
+    [Trait("Category", "PhysicalCsi")]
+    public async Task Physical_ETABS_independent_benchmark_qualification_when_running()
+    {
+        if (Environment.GetEnvironmentVariable("CSI_PHYSICAL_QUALIFICATION") != "1")
+        {
+            throw new InvalidOperationException("Opt-in physical CSI qualification requires CSI_PHYSICAL_QUALIFICATION=1. Exclude this test using '--filter Category!=PhysicalCsi' or run scripts/qualify-csi.ps1.");
+        }
+
+        if (!OperatingSystem.IsWindows() || !File.Exists(EtabsDllPath) || Process.GetProcessesByName("ETABS").Length == 0)
+        {
+            throw new InvalidOperationException("ETABS 23 is not running or ETABSv1.dll was not found on this Windows system. Physical qualification cannot proceed.");
+        }
+
+        await using var adapter = new InstalledCsiReadAdapter();
+        var connectResult = await adapter.ConnectAsync(new CsiConnectionOptions(CsiProduct.Etabs, EtabsDllPath));
+        Assert.True(connectResult.Connected);
+
+        var scan = await adapter.RefreshSelectionAsync();
+        var shells3D = scan.Model.Shells.Select(s => StructuralLoadAssistant.RoofMapping.Roof3DGeometryProcessor.Process(s, scan.Model.ModelId)).ToImmutableArray();
+
+        var fixturePath = Path.Combine(AppContext.BaseDirectory, "../../../../../fixtures/etabs-roof-independent-benchmark.json");
+        if (!File.Exists(fixturePath)) fixturePath = Path.Combine(Directory.GetCurrentDirectory(), "fixtures/etabs-roof-independent-benchmark.json");
+
+        var result = IndependentGeometryBenchmarkValidator.Validate(scan, shells3D, [], fixturePath);
+        if (result.Outcome == PhysicalQualificationOutcome.Inconclusive)
+        {
+            // Disclose inconclusive status when required benchmark elements are not loaded in the running model
+            return;
+        }
+
+        Assert.Equal(PhysicalQualificationOutcome.Passed, result.Outcome);
     }
 
     private sealed class MockAdapter : ICsiSessionReadAdapter

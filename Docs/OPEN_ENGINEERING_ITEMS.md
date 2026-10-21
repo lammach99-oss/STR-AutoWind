@@ -2,6 +2,12 @@
 
 No normative dataset is verified. Demo pressures and wall materials are synthetic/illustrative. Both standard calculation engines and real engineering approval/assignment remain blocked.
 
+## Sprint 3.4 status and remaining engineering tasks
+
+- Licensed applicable normative datasets for ASCE/SEI 7-22 and AS/NZS 1170.2:2021 must be installed before engineering calculation and approval can be enabled.
+- Independent engineering benchmark qualification against a live ETABS instance with the dedicated dual-pitch benchmark model open remains to be completed (currently Inconclusive when the benchmark model is not loaded).
+- SAP2000 physical qualification remains pending.
+
 ## Standards review
 
 - ASCE/SEI 7-22: licensed applicable amendments/supplements/errata manifest; risk/design speed source and strength/service distinction; exposure/height and ground-elevation factors; directionality/topography; reference-height rules; gust/dynamic effects; external wall/roof zones and coefficients; enclosure/internal-pressure states; combination algebra; interpolation and out-of-range policy; independently signed regression examples. Use exact governing clauses from licensed sources before implementation. Do not reuse mixed 7-16/7-22 workbook constants.
