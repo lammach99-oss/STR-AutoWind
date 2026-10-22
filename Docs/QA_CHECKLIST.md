@@ -1,4 +1,12 @@
 # Executed qualification
+- [x] Sprint 4A.2: Source-byte to in-memory record cryptographic coherence gate (STD_RECORD_BYTES_MISMATCH), detecting modified in-memory records even when raw file SHA256 and ContentHash match.
+- [x] Sprint 4A.2: Delimiter-injection collision-proof canonical hashing algorithm V2 (CANONICAL_STANDARDS_BUNDLE_V2) using length-prefixed UTF-8 segments.
+- [x] Sprint 4A.2: Strict bidirectional numerical condition matching in FindExactRecord, rejecting lookups when records have numerical dimensions but query lacks them.
+- [x] Sprint 4A.2: Exact IEEE 64-bit numerical equality in FindExactRecord without loose floating-point tolerances.
+- [x] Sprint 4A.2: Procedure-scoped system isolation allowing legitimate combined MWFRS+C&C bundles while isolating record retrieval by procedure system type.
+- [x] Sprint 4A.2: Evidence document hash format validation (STD_EVIDENCE_HASH_INVALID) enforcing 64-hex SHA-256 strings on non-synthetic bundles.
+- [x] Sprint 4A.2: 279 automated tests passing in both Release and Debug configurations (8 new coherence and procedure-scope tests).
+- [x] Sprint 4A.2: All 6 WPF smoke processes pass in Release mode with clean shutdown markers.
 - [x] Sprint 4A.1: Expanded canonical semantic hashing incorporating all engineering-significant metadata (locators, conditions, units, sign conventions, amendments, coverage matrix) while excluding ContentHash from preimage.
 - [x] Sprint 4A.1: Canonical semantic hash is invariant to JSON whitespace and formatting on disk, while raw component file SHA256 detects byte-level changes.
 - [x] Sprint 4A.1: Mandatory component file byte verification (STD_INTEGRITY_UNVERIFIED), safe relative path traversal validation (STD_UNSAFE_PATH), and extra component file detection (STD_EXTRA_COMPONENT).

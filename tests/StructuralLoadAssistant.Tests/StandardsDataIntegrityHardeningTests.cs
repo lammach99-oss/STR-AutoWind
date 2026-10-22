@@ -383,8 +383,15 @@ public sealed class StandardsDataIntegrityHardeningTests
         var ambiguous = bundle.FindExactRecord("Roof", new Dictionary<string, string> { { "Zone", "1" } });
         Assert.Null(ambiguous);
 
-        // Querying with exact full categorical conditions matches uniquely
-        var exact = bundle.FindExactRecord("Roof", new Dictionary<string, string> { { "Zone", "1" }, { "Surface", "Windward" } });
+        // Querying without required numerical conditions fails closed (returns null)
+        var missingNum = bundle.FindExactRecord("Roof", new Dictionary<string, string> { { "Zone", "1" }, { "Surface", "Windward" } });
+        Assert.Null(missingNum);
+
+        // Querying with exact full categorical AND numerical conditions matches uniquely
+        var exact = bundle.FindExactRecord(
+            "Roof",
+            new Dictionary<string, string> { { "Zone", "1" }, { "Surface", "Windward" } },
+            new Dictionary<string, double> { { "Pitch", 10.0 } });
         Assert.NotNull(exact);
         Assert.Equal("REC1", exact.RecordKey);
 

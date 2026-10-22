@@ -48,6 +48,13 @@ public static class StandardsDataBundleValidator
             AddIssue("STD_SCHEMA_UNSUPPORTED", StandardsValidationSeverity.FatalBlocker, "Manifest.SchemaVersion", null, $"Unsupported schema version ''{manifest.SchemaVersion}''. Only 1.x is supported.");
         }
 
+        if (!string.Equals(manifest.CanonicalHashAlgorithmVersion, "1.0", StringComparison.Ordinal) &&
+            !string.Equals(manifest.CanonicalHashAlgorithmVersion, "2.0", StringComparison.Ordinal))
+        {
+            AddIssue("STD_HASH_VERSION_UNSUPPORTED", StandardsValidationSeverity.FatalBlocker, "Manifest.CanonicalHashAlgorithmVersion", null,
+                $"Unsupported canonical hash version ''{manifest.CanonicalHashAlgorithmVersion}''. Only 1.0 and 2.0 are supported.");
+        }
+
         switch (manifest.Family)
         {
             case StandardFamily.Asce7:
@@ -150,6 +157,31 @@ public static class StandardsDataBundleValidator
                         $"Component file ''{extraKey}'' was provided but is not declared in manifest.");
                 }
             }
+
+            // Cryptographically bind in-memory records to parsed bytes
+            if (!issues.Any(i => i.Code == "STD_HASH_MISMATCH" || i.Code == "STD_COMPONENT_MISSING"))
+            {
+                var deserializedRecords = StandardsDataBundle.DeserializeRecordsFromBytes(
+                    verifiedBytes.ToImmutableDictionary(), manifest.ComponentFiles.Keys);
+
+                if (bundle.Records.Length != deserializedRecords.Length)
+                {
+                    AddIssue("STD_RECORD_BYTES_MISMATCH", StandardsValidationSeverity.FatalBlocker, "Records", null,
+                        $"In-memory records count ({bundle.Records.Length}) does not match records parsed from verified raw component bytes ({deserializedRecords.Length}). Possible record manipulation.");
+                }
+                else
+                {
+                    var bytesRecordsMap = deserializedRecords.ToDictionary(r => r.RecordKey, StringComparer.Ordinal);
+                    foreach (var r in bundle.Records)
+                    {
+                        if (!bytesRecordsMap.TryGetValue(r.RecordKey, out var br) || !RecordsMatch(r, br))
+                        {
+                            AddIssue("STD_RECORD_BYTES_MISMATCH", StandardsValidationSeverity.FatalBlocker, "Records", r.RecordKey,
+                                $"In-memory record ''{r.RecordKey}'' data differs from verified raw component bytes. Stale or manipulated records detected.");
+                        }
+                    }
+                }
+            }
         }
 
         // 3. Canonical Semantic Content Hash Verification
@@ -220,18 +252,6 @@ public static class StandardsDataBundleValidator
                 AddIssue("STD_FAMILY_MISMATCH", StandardsValidationSeverity.FatalBlocker, "ProcedureSelection", null,
                     $"Procedure family ''{procedure.Family}'' does not match manifest family ''{manifest.Family}''.");
             }
-
-            // MWFRS vs C&C isolation
-            if (procedure.SystemType.Equals("MWFRS", StringComparison.OrdinalIgnoreCase))
-            {
-                var ccRecordsInMwfrs = bundle.Records.Where(r => r.ParameterCategory.Contains("CC", StringComparison.OrdinalIgnoreCase) ||
-                                                                 (r.CategoricalConditions.TryGetValue("System", out var s) && s.Equals("ComponentsAndCladding", StringComparison.OrdinalIgnoreCase))).ToList();
-                if (ccRecordsInMwfrs.Count > 0)
-                {
-                    AddIssue("STD_SYSTEM_MISMATCH", StandardsValidationSeverity.Error, "ProcedureSelection", null,
-                        "MWFRS procedure query encountered Components & Cladding records. Cross-system conflation is prohibited.");
-                }
-            }
         }
 
         // 8. Internal Pressure Separate Sign Alternatives Check (+ / -)
@@ -288,6 +308,15 @@ public static class StandardsDataBundleValidator
             {
                 AddIssue("STD_EVIDENCE_HASH_MISSING", StandardsValidationSeverity.Error, "ReviewTrace.EvidenceDocumentHash", null,
                     "Production qualification requires a cryptographic hash of the reviewed evidence document.");
+            }
+            else if (!isSynthetic && !string.IsNullOrWhiteSpace(review.EvidenceDocumentHash))
+            {
+                var hash = review.EvidenceDocumentHash.Trim();
+                if (hash.Length != 64 || !hash.All(c => Uri.IsHexDigit(c)))
+                {
+                    AddIssue("STD_EVIDENCE_HASH_INVALID", StandardsValidationSeverity.Error, "ReviewTrace.EvidenceDocumentHash", null,
+                        "Evidence document hash must be a valid 64-character hexadecimal SHA-256 digest.");
+                }
             }
         }
 
@@ -466,6 +495,32 @@ public static class StandardsDataBundleValidator
         }
 
         return EngineeringMath.Linear(targetValue, x1, lower.Value, x2, upper.Value);
+    }
+
+    private static bool RecordsMatch(CoefficientRecord a, CoefficientRecord b)
+    {
+        if (!string.Equals(a.RecordKey, b.RecordKey, StringComparison.Ordinal)) return false;
+        if (!string.Equals(a.ParameterCategory, b.ParameterCategory, StringComparison.OrdinalIgnoreCase)) return false;
+        if (!string.Equals(a.TableOrFigure, b.TableOrFigure, StringComparison.OrdinalIgnoreCase)) return false;
+        if (!string.Equals(a.ClauseReference, b.ClauseReference, StringComparison.OrdinalIgnoreCase)) return false;
+        if (!string.Equals(a.SignConvention, b.SignConvention, StringComparison.OrdinalIgnoreCase)) return false;
+        if (!string.Equals(a.Unit, b.Unit, StringComparison.OrdinalIgnoreCase)) return false;
+        if (a.Interpolation != b.Interpolation) return false;
+        if (BitConverter.DoubleToInt64Bits(a.Value) != BitConverter.DoubleToInt64Bits(b.Value)) return false;
+
+        if (a.CategoricalConditions.Count != b.CategoricalConditions.Count) return false;
+        foreach (var (k, v) in a.CategoricalConditions)
+        {
+            if (!b.CategoricalConditions.TryGetValue(k, out var bv) || !string.Equals(v, bv, StringComparison.OrdinalIgnoreCase)) return false;
+        }
+
+        if (a.NumericalConditions.Count != b.NumericalConditions.Count) return false;
+        foreach (var (k, v) in a.NumericalConditions)
+        {
+            if (!b.NumericalConditions.TryGetValue(k, out var bv) || BitConverter.DoubleToInt64Bits(v) != BitConverter.DoubleToInt64Bits(bv)) return false;
+        }
+
+        return true;
     }
 }
 

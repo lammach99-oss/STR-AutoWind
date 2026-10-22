@@ -91,11 +91,29 @@ public sealed class StandardsDataBundle
         IReadOnlyDictionary<string, double> recordConditions,
         IDictionary<string, double>? queryConditions)
     {
-        if (queryConditions == null || queryConditions.Count == 0) return true;
+        // Bidirectional exact matching:
+        // If record has no numerical conditions, query must also have no numerical conditions.
+        if (recordConditions.Count == 0)
+        {
+            return queryConditions == null || queryConditions.Count == 0;
+        }
+
+        // If record has numerical conditions, query must supply exact same count
+        if (queryConditions == null || recordConditions.Count != queryConditions.Count)
+        {
+            return false;
+        }
+
         foreach (var (k, v) in queryConditions)
         {
-            if (!recordConditions.TryGetValue(k, out var val) ||
-                Math.Abs(val - v) > 1e-6)
+            if (!double.IsFinite(v)) return false;
+            if (!recordConditions.TryGetValue(k, out var val) || !double.IsFinite(val))
+            {
+                return false;
+            }
+
+            // Strict exact equality
+            if (BitConverter.DoubleToInt64Bits(val) != BitConverter.DoubleToInt64Bits(v))
             {
                 return false;
             }
@@ -127,6 +145,48 @@ public sealed class StandardsDataBundle
     public string ComputeCanonicalHash()
     {
         var sorted = Records.OrderBy(r => r.RecordKey, StringComparer.Ordinal).ToList();
+
+        if (string.Equals(Manifest.CanonicalHashAlgorithmVersion, "2.0", StringComparison.Ordinal))
+        {
+            using var ms = new MemoryStream();
+            void WritePrefixed(string val)
+            {
+                var utf8 = Encoding.UTF8.GetBytes(val ?? string.Empty);
+                var header = Encoding.UTF8.GetBytes($"{utf8.Length}:");
+                ms.Write(header);
+                ms.Write(utf8);
+                ms.WriteByte((byte)';');
+            }
+
+            WritePrefixed("CANONICAL_STANDARDS_BUNDLE_V2");
+            WritePrefixed(Manifest.BundleId);
+            WritePrefixed(Manifest.Family.ToString());
+            WritePrefixed(Manifest.Edition);
+            WritePrefixed(Manifest.Rights.ToString());
+            WritePrefixed(string.Join(",", Manifest.Amendments.OrderBy(a => a, StringComparer.Ordinal)));
+            WritePrefixed(string.Join(",", Manifest.CoverageMatrix.OrderBy(c => c.CategoryKey, StringComparer.Ordinal).Select(c => $"{c.CategoryKey}:{c.AvailableRecordCount}:{(c.IsRequired ? "R" : "O")}")));
+
+            foreach (var r in sorted)
+            {
+                var sortedCat = string.Join(",", r.CategoricalConditions.OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => $"{kv.Key}={kv.Value}"));
+                var sortedNum = string.Join(",", r.NumericalConditions.OrderBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => $"{kv.Key}={kv.Value.ToString("R", System.Globalization.CultureInfo.InvariantCulture)}"));
+
+                WritePrefixed(r.RecordKey);
+                WritePrefixed(r.ParameterCategory);
+                WritePrefixed(r.TableOrFigure);
+                WritePrefixed(r.ClauseReference);
+                WritePrefixed(r.SignConvention);
+                WritePrefixed(r.Unit);
+                WritePrefixed(r.Interpolation.ToString());
+                WritePrefixed(r.Value.ToString("R", System.Globalization.CultureInfo.InvariantCulture));
+                WritePrefixed(sortedCat);
+                WritePrefixed(sortedNum);
+                WritePrefixed(r.ApplicabilityNotes ?? string.Empty);
+            }
+
+            return Convert.ToHexString(SHA256.HashData(ms.ToArray()));
+        }
+
         var sb = new StringBuilder();
         sb.Append("CANONICAL_STANDARDS_BUNDLE_V1|")
           .Append(Manifest.BundleId).Append('|')
@@ -271,6 +331,29 @@ public sealed class StandardsDataBundle
             string.Empty,
             bytesBuilder.ToImmutable(),
             isBytesVerified: bytesBuilder.Count == manifest.ComponentFiles.Count);
+    }
+
+    /// <summary>Deserializes coefficient records from declared raw component bytes map.</summary>
+    public static ImmutableArray<CoefficientRecord> DeserializeRecordsFromBytes(
+        ImmutableDictionary<string, ImmutableArray<byte>> componentBytes,
+        IEnumerable<string>? orderedComponentKeys = null)
+    {
+        var recordsBuilder = ImmutableArray.CreateBuilder<CoefficientRecord>();
+        var keys = orderedComponentKeys ?? componentBytes.Keys;
+
+        foreach (var key in keys)
+        {
+            if (componentBytes.TryGetValue(key, out var bytes) && !bytes.IsDefaultOrEmpty)
+            {
+                var json = Encoding.UTF8.GetString(bytes.ToArray()).TrimStart('\uFEFF');
+                var records = JsonSerializer.Deserialize<CoefficientRecord[]>(json, JsonOptions);
+                if (records != null)
+                {
+                    recordsBuilder.AddRange(records);
+                }
+            }
+        }
+        return recordsBuilder.ToImmutable();
     }
 }
 
