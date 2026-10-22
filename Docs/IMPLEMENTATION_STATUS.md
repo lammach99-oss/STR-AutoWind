@@ -254,3 +254,13 @@ Standards: **verified normative data: none**; unverified metadata: both requeste
   - Added regression test suite (`PhysicalRunnerRegressionTests.cs`) covering wrong PID, missing API path, disallowed selection mutation, failed restoration, model mismatch, and qualification outcome propagation.
   - Aligned distinct exit codes: 0 (Passed), 1 (Failed), 2 (Inconclusive), 3 (Pending), 4 (NotExecuted). Selection restoration failures are strictly reported as Failed with non-zero exit.
   - Documented fixture-directed plane grouping scope in `BenchmarkExecutionPipeline`.
+
+
+## ETABS Physical Qualification — Independent Benchmark Verification
+
+- **Status**: Complete — Physical Benchmark PASSED.
+- **Physical Model Verification**: Created dedicated disposable model `artifacts/physical-benchmark-private/ETABS-BENCHMARK.EDB` in new ETABS 23.2.0 instance (PID 30520). Protected client model (PID 24084) was left completely untouched.
+- **Benchmark Checks**: 125 of 125 independent comparisons passed within tolerances (0 missing, 0 failed).
+- **Automated Tests**: 233 passed, 0 failed, 0 skipped. All 6 WPF smoke processes verified.
+- **Winding & Local 3 Investigation**: Verified that in ETABS, shell Local 3 is mathematically coupled to vertex winding order. Distinguished geometric polygon equivalence from vertex-list ordering in `IndependentGeometryBenchmarkValidator` while preserving strict independent Local 3 vector comparisons.
+- **Safety Guarantees**: Engineering calculations, approvals, and live CSI write operations remain strictly disabled in RealReadOnly mode.

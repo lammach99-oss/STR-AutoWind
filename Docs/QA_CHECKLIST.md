@@ -95,7 +95,7 @@ Latest build/test counts and output paths are in IMPLEMENTATION_STATUS.md. A pas
 - [x] Accuracy gate decoupled from connection, scan, and review statuses (PhysicalQualificationOutcome).
 - [x] Roof mapping prerequisites enforce complete and valid geometry input for future pressure engines (RoofPressurePrerequisites).
 - [x] All 6 WPF smoke processes pass cleanly with visual and process-result artifacts.
-- [ ] Independent physical benchmark verification against live ETABS with the dedicated benchmark model open (reported as Inconclusive when model not loaded).
+- [x] Independent physical benchmark verification against live ETABS 23.2.0 with dedicated benchmark model ETABS-BENCHMARK.EDB (125/125 checks passed, exit code 0).
 - [ ] SAP2000 physical qualification (reported as Pending).
 
 ## Sprint 3.3 current qualification

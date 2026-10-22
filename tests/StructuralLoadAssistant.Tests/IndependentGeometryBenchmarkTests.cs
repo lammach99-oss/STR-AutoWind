@@ -197,6 +197,30 @@ public sealed class IndependentGeometryBenchmarkTests
     }
 
     [Fact]
+    public void Pipeline_passes_with_geometric_polygon_equivalence_on_reversed_winding_shells()
+    {
+        var resolvedFixture = File.Exists(FixturePath) ? FixturePath : "fixtures/etabs-roof-independent-benchmark.json";
+        var normalScan = CreateBenchmarkScan();
+
+        // Shell 102 with reversed winding representing real ETABS opposite Local 3 connectivity: (2,0,7) -> (2,4,7) -> (4,4,8) -> (4,0,8)
+        var reversedShell102 = new ShellGeometry("102", "Slope-West", [
+            new(2.0, 0.0, 7.0),
+            new(2.0, 4.0, 7.0),
+            new(4.0, 4.0, 8.0),
+            new(4.0, 0.0, 8.0)
+        ], new Vec3(0.4472135955, 0.0, -0.8944271910), default);
+
+        var updatedShells = normalScan.Model.Shells.Select(s => s.Id == "102" ? reversedShell102 : s).ToImmutableArray();
+        var scan = normalScan with { Model = normalScan.Model with { Shells = updatedShells } };
+
+        var result = BenchmarkExecutionPipeline.Execute(scan, resolvedFixture, processId: 999);
+
+        Assert.Equal(PhysicalQualificationOutcome.Passed, result.Outcome);
+        Assert.Empty(result.Issues);
+        Assert.Contains(result.Comparisons, c => c.Category == "Global XYZ Coordinates" && c.ElementId == "102" && c.Property == "PolygonEquivalence" && c.Passed);
+    }
+
+    [Fact]
     public void Pipeline_fails_with_modified_source_geometry()
     {
         var resolvedFixture = File.Exists(FixturePath) ? FixturePath : "fixtures/etabs-roof-independent-benchmark.json";

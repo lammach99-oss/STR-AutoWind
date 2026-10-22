@@ -302,23 +302,73 @@ public static class IndependentGeometryBenchmarkValidator
                     // Verify Global Vertices
                     if (expected.TryGetProperty("verticesXYZ", out var expVerts))
                     {
-                        var evList = expVerts.EnumerateArray().ToArray();
-                        AddCheck("Global XYZ Coordinates", id, "VertexCount", evList.Length, actualShell.Vertices.Length, 0, null, actualShell.Vertices.Length == evList.Length, $"Vertex count: expected {evList.Length}, actual {actualShell.Vertices.Length}");
-                        for (int i = 0; i < Math.Min(evList.Length, actualShell.Vertices.Length); i++)
-                        {
-                            var vx = evList[i].GetProperty("x").GetDouble();
-                            var vy = evList[i].GetProperty("y").GetDouble();
-                            var vz = evList[i].GetProperty("z").GetDouble();
-                            var act = actualShell.Vertices[i];
+                        var evList = expVerts.EnumerateArray().Select(v => new Vec3(
+                            v.GetProperty("x").GetDouble(),
+                            v.GetProperty("y").GetDouble(),
+                            v.GetProperty("z").GetDouble())).ToArray();
 
-                            AddCheck("Global XYZ Coordinates", id, $"V[{i}].X", vx, act.X, coordTol, null, Math.Abs(act.X - vx) <= coordTol, $"Vertex {i} X");
-                            AddCheck("Global XYZ Coordinates", id, $"V[{i}].Y", vy, act.Y, coordTol, null, Math.Abs(act.Y - vy) <= coordTol, $"Vertex {i} Y");
-                            AddCheck("Global XYZ Coordinates", id, $"V[{i}].Z", vz, act.Z, coordTol, null, Math.Abs(act.Z - vz) <= coordTol, $"Vertex {i} Z");
-                        }
-                        if (actualShell.Vertices.Length < evList.Length)
+                        AddCheck("Global XYZ Coordinates", id, "VertexCount", evList.Length, actualShell.Vertices.Length, 0, null, actualShell.Vertices.Length == evList.Length, $"Vertex count: expected {evList.Length}, actual {actualShell.Vertices.Length}");
+
+                        if (actualShell.Vertices.Length == evList.Length && evList.Length > 0)
                         {
-                            for (int i = actualShell.Vertices.Length; i < evList.Length; i++)
-                                AddMissing("Global XYZ Coordinates", id, $"V[{i}]", "Vertex missing from actual shell");
+                            // Distinguish geometric polygon equivalence from vertex-list ordering (support forward or reverse winding for opposite Local 3)
+                            int n = evList.Length;
+                            int bestStart = 0;
+                            int bestDir = 1;
+                            double minMaxDist = double.MaxValue;
+
+                            for (int dir = 1; dir >= -1; dir -= 2)
+                            {
+                                for (int start = 0; start < n; start++)
+                                {
+                                    double maxDist = 0.0;
+                                    for (int i = 0; i < n; i++)
+                                    {
+                                        int expIdx = (start + dir * i + n * 10) % n;
+                                        var d = (actualShell.Vertices[i] - evList[expIdx]).Length;
+                                        if (d > maxDist) maxDist = d;
+                                    }
+                                    if (maxDist < minMaxDist)
+                                    {
+                                        minMaxDist = maxDist;
+                                        bestStart = start;
+                                        bestDir = dir;
+                                    }
+                                }
+                            }
+
+                            bool polygonMatch = minMaxDist <= coordTol;
+                            string windingLabel = bestDir == 1 ? "Forward" : "Reverse (Opposite Normal)";
+                            AddCheck("Global XYZ Coordinates", id, "PolygonEquivalence", 1, polygonMatch ? 1 : 0, 0, null, polygonMatch, $"Polygon equivalence: winding={windingLabel}, max deviation={minMaxDist:F6}m");
+
+                            for (int i = 0; i < n; i++)
+                            {
+                                int expIdx = (bestStart + bestDir * i + n * 10) % n;
+                                var expV = evList[expIdx];
+                                var act = actualShell.Vertices[i];
+
+                                AddCheck("Global XYZ Coordinates", id, $"V[{i}].X", expV.X, act.X, coordTol, null, Math.Abs(act.X - expV.X) <= coordTol, $"Vertex {i} X (matched to expected {expIdx})");
+                                AddCheck("Global XYZ Coordinates", id, $"V[{i}].Y", expV.Y, act.Y, coordTol, null, Math.Abs(act.Y - expV.Y) <= coordTol, $"Vertex {i} Y (matched to expected {expIdx})");
+                                AddCheck("Global XYZ Coordinates", id, $"V[{i}].Z", expV.Z, act.Z, coordTol, null, Math.Abs(act.Z - expV.Z) <= coordTol, $"Vertex {i} Z (matched to expected {expIdx})");
+                            }
+                        }
+                        else
+                        {
+                            for (int i = 0; i < Math.Min(evList.Length, actualShell.Vertices.Length); i++)
+                            {
+                                var vx = evList[i].X;
+                                var vy = evList[i].Y;
+                                var vz = evList[i].Z;
+                                var act = actualShell.Vertices[i];
+                                AddCheck("Global XYZ Coordinates", id, $"V[{i}].X", vx, act.X, coordTol, null, Math.Abs(act.X - vx) <= coordTol, $"Vertex {i} X");
+                                AddCheck("Global XYZ Coordinates", id, $"V[{i}].Y", vy, act.Y, coordTol, null, Math.Abs(act.Y - vy) <= coordTol, $"Vertex {i} Y");
+                                AddCheck("Global XYZ Coordinates", id, $"V[{i}].Z", vz, act.Z, coordTol, null, Math.Abs(act.Z - vz) <= coordTol, $"Vertex {i} Z");
+                            }
+                            if (actualShell.Vertices.Length < evList.Length)
+                            {
+                                for (int i = actualShell.Vertices.Length; i < evList.Length; i++)
+                                    AddMissing("Global XYZ Coordinates", id, $"V[{i}]", "Vertex missing from actual shell");
+                            }
                         }
                     }
                 }
