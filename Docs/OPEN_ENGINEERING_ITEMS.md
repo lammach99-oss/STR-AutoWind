@@ -1,21 +1,24 @@
 # Open engineering items
 
-Sprint 4A establishes the versioned data foundation, manifest provenance, rights classification, component SHA256 verification, and fail-closed validation gates for ASCE 7-22 and AS/NZS 1170.2:2021. However, no licensed normative dataset is installed. Demo pressures and wall materials remain synthetic/illustrative. Both standard calculation engines and real engineering approval/assignment remain strictly blocked.
+Sprint 4A and 4A.1 establish the hardened versioned data foundation, manifest provenance, rights classification, component byte SHA256 verification, comprehensive canonical semantic hashing, and fail-closed validation gates for ASCE 7-22 and AS/NZS 1170.2:2021. However, no licensed normative dataset is installed. Demo pressures and wall materials remain synthetic/illustrative. Both standard calculation engines and real engineering approval/assignment remain strictly blocked.
 
 ## Status baseline and remaining engineering tasks
 
-- **Software automated verification:** 250 unit and integration tests pass in both Debug and Release configurations with zero failures and zero skips. All six WPF smoke processes pass cleanly.
+- **Software automated verification:** 271 unit and integration tests pass in both Debug and Release configurations with zero failures and zero skips. All six WPF smoke processes pass cleanly.
 - **Physical ETABS benchmark execution:** Agent-reported Passed on private local model `artifacts/physical-benchmark-private/ETABS-BENCHMARK.EDB` in ETABS 23.2.0 (125/125 physical checks passed, exit code 0). The benchmark geometry pipeline is *fixture-directed* for roof-plane grouping and does not prove automatic roof-plane discovery on arbitrary real models.
 - **Independent external engineering sign-off:** Not established by the public repository; remains a separate required verification gate.
 - **SAP2000 physical qualification:** Remains Pending (no disposable SAP2000 27 model was qualified).
 - **Standards normative data qualification:** Blocked / Not Started until licensed applicable datasets and independently checked reference fixtures are provided.
 
-## Sprint 4A deliverables and gates
+## Sprint 4A & 4A.1 deliverables and gates
 
 - Versioned, strongly typed standards data contracts (`StandardsDataContracts.cs`) separating ASCE 7-22 and AS/NZS 1170.2:2021 domain models without false shared abstractions.
+- Comprehensive canonical semantic hashing (`StandardsDataBundle.ComputeCanonicalHash()`) incorporating all engineering-significant metadata (locators, conditions, units, sign conventions, amendments, coverage matrix) while remaining invariant to JSON formatting/whitespace on disk.
+- Mandatory component byte presence and path traversal validation (`StandardsDataBundleValidator.cs`), enforcing raw SHA256 matching and safe relative paths.
 - Strict fail-closed validation engine (`StandardsDataBundleValidator.cs`) enforcing all 9 fail-closed validation rules: manifest integrity, SHA256 checksums, component file verification, mandatory coverage completeness, no-extrapolation, no cross-categorical interpolation, explicit amendment applicability for AS/NZS 1170.2:2021, and independent reviewer attestation (self-approval rejected).
-- Strict promotion prevention: Synthetic or demo data can never authorize normative pressure calculations (`CanCalculateNormativePressures` strictly `false`).
-- Reference calculation benchmark contracts (`ReferenceCalculationContracts.cs`) with strict absolute and relative tolerances for intermediate factors and net pressures.
+- Strict promotion prevention: `CanCalculateNormativePressures` is strictly `false` across the board, preventing premature calculation eligibility before Sprint 4B.
+- Reviewer independence check: verifies that preparer and reviewer identities are distinct; self-approval is strictly rejected.
+- Reference calculation benchmark contracts (`ReferenceCalculationContracts.cs`) with strict absolute and relative tolerances for intermediate factors and net pressures, requiring exact `(ZoneId:StateId)` keys with no zone-only fallback.
 - Licensed applicable normative datasets for ASCE/SEI 7-22 and AS/NZS 1170.2:2021 must be installed before engineering calculation and approval can be enabled.
 - SAP2000 physical qualification remains pending.
 

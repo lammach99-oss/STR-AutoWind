@@ -6,7 +6,7 @@
   "Amendments": [],
   "Rights": "SyntheticTestData",
   "RightsStatement": "TEST ONLY / SYNTHETIC / NOT STANDARDS-COMPLIANT. Generated purely for unit test qualification.",
-  "ContentHash": "",
+  "ContentHash": "C501CB8B1AEEB6F0FEA4D5FFB7F40C745B00A397422E1B064CA0F9687C9DAD45",
   "ComponentFiles": {
     "coefficients_mwfrs.json": "2A6A234FEB27E6F18E48A0E417B5D07FA51BAF103E0F8FF61A506497B80EE838",
     "coefficients_cc.json": "ABEE51141EDE28907B14CB9140A1FFFE49B2A3BE581B28B77649B3E993A54DC8",

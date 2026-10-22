@@ -78,6 +78,26 @@ public enum InterpolationPolicy
     Bilinear2D = 3
 }
 
+/// <summary>Explicit applicability status for a specific standard amendment.</summary>
+public enum AmendmentStatus
+{
+    /// <summary>Amendment applicability has not been verified against primary licensed source.</summary>
+    Unresolved = 0,
+
+    /// <summary>Amendment has been independently verified as governing and applicable.</summary>
+    Applicable = 1,
+
+    /// <summary>Amendment has been independently verified as not applicable to the design scenario.</summary>
+    NotApplicable = 2
+}
+
+/// <summary>Record tracking governing applicability and provenance of a standard amendment.</summary>
+public sealed record AmendmentRecord(
+    string AmendmentId,
+    AmendmentStatus Status,
+    string SourceDocumentRef,
+    string? Notes = null);
+
 /// <summary>Severity level for standards validation issues.</summary>
 public enum StandardsValidationSeverity
 {
@@ -192,7 +212,8 @@ public sealed record StandardsDataBundleManifest(
     ImmutableArray<MandatoryCoverageItem> CoverageMatrix,
     string LicenseNotice,
     DateTimeOffset CreatedAt,
-    DateTimeOffset LastValidatedAt);
+    DateTimeOffset LastValidatedAt,
+    string CanonicalHashAlgorithmVersion = "1.0");
 
 /// <summary>Individual finding produced during standards data validation.</summary>
 public sealed record StandardsValidationIssue(

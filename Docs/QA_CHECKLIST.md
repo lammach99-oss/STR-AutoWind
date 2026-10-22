@@ -1,4 +1,17 @@
 # Executed qualification
+- [x] Sprint 4A.1: Expanded canonical semantic hashing incorporating all engineering-significant metadata (locators, conditions, units, sign conventions, amendments, coverage matrix) while excluding ContentHash from preimage.
+- [x] Sprint 4A.1: Canonical semantic hash is invariant to JSON whitespace and formatting on disk, while raw component file SHA256 detects byte-level changes.
+- [x] Sprint 4A.1: Mandatory component file byte verification (STD_INTEGRITY_UNVERIFIED), safe relative path traversal validation (STD_UNSAFE_PATH), and extra component file detection (STD_EXTRA_COMPONENT).
+- [x] Sprint 4A.1: Immutable in-memory byte capture in StandardsDataBundle.RawComponentBytes preventing TOCTOU races between hashing and validation.
+- [x] Sprint 4A.1: Strict promotion prevention: CanCalculateNormativePressures is strictly false across the board in Sprint 4A.1, even for non-synthetic manifests with seemingly valid review metadata.
+- [x] Sprint 4A.1: Distinct preparer and reviewer validation rejecting self-approval (STD_SELF_APPROVAL_REJECTED when preparer equals reviewer).
+- [x] Sprint 4A.1: Exact procedure coverage and system isolation (MWFRS vs C&C), with internal pressure sign alternatives check elevated to Error severity.
+- [x] Sprint 4A.1: Hardened FindExactRecord with bidirectional exact categorical match and numerical condition tolerance check.
+- [x] Sprint 4A.1: Hardened Interpolate1D requiring identical categorical regimes, units, sign conventions, and non-extrapolating bounding domain.
+- [x] Sprint 4A.1: ParameterDomain validation enforcing ordered, finite bounds and rejecting extrapolation.
+- [x] Sprint 4A.1: ReferenceCalculationValidator.Evaluate fails closed on empty fixtures, duplicate expected factors/pressures, or invalid tolerances, with strict exact (ZoneId:StateId) matching and no zone-only fallback.
+- [x] Sprint 4A.1: 271 automated tests passing in both Release and Debug configurations (21 new integrity hardening tests).
+- [x] Sprint 4A.1: All 6 WPF smoke processes pass in Release mode with clean shutdown markers.
 - [x] Sprint 4A: Standards data foundation contracts separating ASCE 7-22 and AS/NZS 1170.2:2021 domain models without false shared abstractions (StandardsDataContracts.cs).
 - [x] Sprint 4A: Versioned lifecycle state machine (Unknown, Missing, Unsupported, Unreviewed, Invalid, ReadyForQualification, EngineerReviewed, Blocked) and rights classifications.
 - [x] Sprint 4A: Deterministic canonical content hashing across sorted coefficient records detecting tampering or whitespace alterations (StandardsDataBundle.ComputeCanonicalHash).

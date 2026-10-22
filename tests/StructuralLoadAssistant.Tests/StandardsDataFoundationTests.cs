@@ -49,6 +49,7 @@ public sealed class StandardsDataFoundationTests
         Assert.Equal(DataRightsClassification.SyntheticTestData, bundle.Manifest.Rights);
         Assert.NotEmpty(bundle.Records);
         Assert.Equal(6, bundle.Records.Length); // 2 MWFRS + 2 CC + 2 IP
+        Assert.Equal("C501CB8B1AEEB6F0FEA4D5FFB7F40C745B00A397422E1B064CA0F9687C9DAD45", bundle.ComputeCanonicalHash());
     }
 
     [Fact]
@@ -66,6 +67,8 @@ public sealed class StandardsDataFoundationTests
         Assert.Contains("Amendment 1:2023", bundle.Manifest.Amendments);
         Assert.Contains("Amendment 2:2024", bundle.Manifest.Amendments);
         Assert.Equal(8, bundle.Records.Length); // 2 reg + 2 terrain + 2 shape + 2 ip
+        Assert.NotEmpty(bundle.ComputeCanonicalHash());
+        Assert.Equal("6C9AA266E069D59957CA6E258360608EF14CDB8C0A156FB7C0AFF7C6E006E9D7", bundle.ComputeCanonicalHash());
     }
 
     [Fact]

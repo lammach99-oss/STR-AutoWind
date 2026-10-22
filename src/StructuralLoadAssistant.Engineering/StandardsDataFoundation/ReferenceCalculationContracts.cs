@@ -57,9 +57,22 @@ public sealed record ReferenceComparison(
 public sealed record ReferenceCalculationEvaluation(
     string FixtureId,
     bool Passed,
+    bool IsNumericalMatch,
+    bool CanAuthorizeProductionCalculation,
     ImmutableArray<ReferenceComparison> Comparisons,
     ImmutableArray<string> Issues,
-    string Summary);
+    string Summary)
+{
+    public ReferenceCalculationEvaluation(
+        string fixtureId,
+        bool passed,
+        ImmutableArray<ReferenceComparison> comparisons,
+        ImmutableArray<string> issues,
+        string summary)
+        : this(fixtureId, passed, passed, false, comparisons, issues, summary)
+    {
+    }
+}
 
 /// <summary>Evaluates analytical calculation results against an independent reference fixture.</summary>
 public static class ReferenceCalculationValidator
@@ -94,6 +107,38 @@ public static class ReferenceCalculationValidator
         var comps = ImmutableArray.CreateBuilder<ReferenceComparison>();
         var issues = ImmutableArray.CreateBuilder<string>();
 
+        // Detect empty fixture (must never pass)
+        if (fixture.ExpectedFactors.IsEmpty && fixture.ExpectedPressures.IsEmpty)
+        {
+            issues.Add("Reference calculation fixture contains zero expected factors and zero expected pressures. Cannot evaluate empty fixture.");
+            return new ReferenceCalculationEvaluation(
+                fixture.FixtureId,
+                false,
+                false,
+                false,
+                ImmutableArray<ReferenceComparison>.Empty,
+                issues.ToImmutable(),
+                "Reference Calculation Benchmark FAILED • Fixture contains zero expected assertions.");
+        }
+
+        // Validate factors definitions
+        var seenFactorNames = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var ef in fixture.ExpectedFactors)
+        {
+            if (!seenFactorNames.Add(ef.Name))
+            {
+                issues.Add($"Duplicate expected intermediate factor '{ef.Name}' declared in reference fixture.");
+            }
+            if (!double.IsFinite(ef.ExpectedValue))
+            {
+                issues.Add($"Expected intermediate factor '{ef.Name}' has non-finite value '{ef.ExpectedValue}'.");
+            }
+            if (ef.Tolerance < 0 || !double.IsFinite(ef.Tolerance))
+            {
+                issues.Add($"Expected intermediate factor '{ef.Name}' has invalid negative or non-finite tolerance '{ef.Tolerance}'.");
+            }
+        }
+
         // 1. Evaluate Intermediate Factors
         foreach (var ef in fixture.ExpectedFactors)
         {
@@ -111,14 +156,39 @@ public static class ReferenceCalculationValidator
         }
 
         // 2. Evaluate Pressures
+        var seenPressureKeys = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var ep in fixture.ExpectedPressures)
         {
             string key = $"{ep.ZoneId}:{ep.StateId}";
-            if (!actualPressures.TryGetValue(key, out double actualPress) &&
-                !actualPressures.TryGetValue(ep.ZoneId, out actualPress))
+            if (!seenPressureKeys.Add(key))
             {
-                issues.Add($"Missing pressure result for zone '{ep.ZoneId}' state '{ep.StateId}'.");
-                comps.Add(new ReferenceComparison(key, "ZonePressure", ep.ExpectedNetPressurePa, double.NaN, ep.AbsoluteTolPa, false, "Zone pressure missing"));
+                issues.Add($"Duplicate expected pressure key '{key}' declared in reference fixture.");
+            }
+            if (!double.IsFinite(ep.ExpectedNetPressurePa))
+            {
+                issues.Add($"Expected pressure '{key}' has non-finite value '{ep.ExpectedNetPressurePa}'.");
+            }
+            if (ep.AbsoluteTolPa < 0 || !double.IsFinite(ep.AbsoluteTolPa) ||
+                ep.RelativeTol < 0 || !double.IsFinite(ep.RelativeTol))
+            {
+                issues.Add($"Expected pressure '{key}' has invalid negative or non-finite tolerance.");
+            }
+        }
+
+        foreach (var ep in fixture.ExpectedPressures)
+        {
+            string key = $"{ep.ZoneId}:{ep.StateId}";
+            // Strict (ZoneId, StateId) key matching only! Fallback to zone-only is strictly prohibited.
+            if (!actualPressures.TryGetValue(key, out double actualPress))
+            {
+                issues.Add($"Missing pressure result for exact key '{key}'.");
+                comps.Add(new ReferenceComparison(key, "ZonePressure", ep.ExpectedNetPressurePa, double.NaN, ep.AbsoluteTolPa, false, "Exact (ZoneId:StateId) pressure missing from calculation output"));
+                continue;
+            }
+            if (!double.IsFinite(actualPress))
+            {
+                issues.Add($"Actual pressure for '{key}' is non-finite '{actualPress}'.");
+                comps.Add(new ReferenceComparison(key, "ZonePressure", ep.ExpectedNetPressurePa, actualPress, ep.AbsoluteTolPa, false, "Actual pressure is non-finite"));
                 continue;
             }
 
@@ -128,14 +198,18 @@ public static class ReferenceCalculationValidator
             comps.Add(new ReferenceComparison(key, "ZonePressure", ep.ExpectedNetPressurePa, actualPress, ep.AbsoluteTolPa, pass, $"Expected {ep.ExpectedNetPressurePa:F2} Pa, actual {actualPress:F2} Pa"));
         }
 
-        bool allPassed = issues.Count == 0 && comps.All(c => c.Passed);
-        string summary = allPassed
-            ? $"Reference Calculation Benchmark PASSED • All {comps.Count} comparisons satisfied."
+        bool isNumericalMatch = issues.Count == 0 && comps.Count > 0 && comps.All(c => c.Passed);
+        bool canAuthorizeProduction = false; // Strictly false in Sprint 4A.1!
+        bool passed = isNumericalMatch;
+        string summary = passed
+            ? $"Reference Calculation Benchmark NUMERICAL MATCH • All {comps.Count} comparisons satisfied. (Production authorization: strictly disabled in Sprint 4A.1)"
             : $"Reference Calculation Benchmark FAILED • {issues.Count} issues found.";
 
         return new ReferenceCalculationEvaluation(
             fixture.FixtureId,
-            allPassed,
+            passed,
+            isNumericalMatch,
+            canAuthorizeProduction,
             comps.ToImmutable(),
             issues.ToImmutable(),
             summary);
