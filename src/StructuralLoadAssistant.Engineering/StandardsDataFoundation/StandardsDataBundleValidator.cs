@@ -159,7 +159,7 @@ public static class StandardsDataBundleValidator
             }
 
             // Cryptographically bind in-memory records to parsed bytes
-            if (!issues.Any(i => i.Code == "STD_HASH_MISMATCH" || i.Code == "STD_COMPONENT_MISSING"))
+            if (verifiedBytes.Count > 0)
             {
                 var deserializedRecords = StandardsDataBundle.DeserializeRecordsFromBytes(
                     verifiedBytes.ToImmutableDictionary(), manifest.ComponentFiles.Keys);

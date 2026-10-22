@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Treat standards fixture JSON files as exact binary byte assets to prevent CRLF normalization
+fixtures/standards/** -text
