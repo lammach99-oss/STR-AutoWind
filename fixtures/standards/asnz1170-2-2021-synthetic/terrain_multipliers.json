@@ -1,0 +1,36 @@
+﻿[
+  {
+    "RecordKey": "ASNZ1170_2_2021_MZCAT_TC2_10M",
+    "TableOrFigure": "Table 4.1",
+    "ClauseReference": "Clause 4.2.1",
+    "ParameterCategory": "TerrainHeightMultiplier",
+    "CategoricalConditions": {
+      "TerrainCategory": "TC2"
+    },
+    "NumericalConditions": {
+      "HeightM": 10.0
+    },
+    "Value": 1.00,
+    "Unit": "dimensionless",
+    "SignConvention": "Positive multiplier",
+    "Interpolation": "Linear1D",
+    "ApplicabilityNotes": "TEST ONLY / SYNTHETIC / NOT STANDARDS-COMPLIANT"
+  },
+  {
+    "RecordKey": "ASNZ1170_2_2021_MZCAT_TC2Point5_10M",
+    "TableOrFigure": "Table 4.1",
+    "ClauseReference": "Clause 4.2.1",
+    "ParameterCategory": "TerrainHeightMultiplier",
+    "CategoricalConditions": {
+      "TerrainCategory": "TC2Point5"
+    },
+    "NumericalConditions": {
+      "HeightM": 10.0
+    },
+    "Value": 0.92,
+    "Unit": "dimensionless",
+    "SignConvention": "Positive multiplier",
+    "Interpolation": "Linear1D",
+    "ApplicabilityNotes": "TEST ONLY / SYNTHETIC / NOT STANDARDS-COMPLIANT"
+  }
+]

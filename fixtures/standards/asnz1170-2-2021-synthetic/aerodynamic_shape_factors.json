@@ -1,0 +1,40 @@
+﻿[
+  {
+    "RecordKey": "ASNZ1170_2_2021_CPE_GABLE_ROOF_WINDWARD",
+    "TableOrFigure": "Table 5.3(A)",
+    "ClauseReference": "Clause 5.4.2",
+    "ParameterCategory": "ExternalPressure_Roofs",
+    "CategoricalConditions": {
+      "RoofForm": "Gable",
+      "Surface": "WindwardSlope",
+      "WindAngle": "0deg"
+    },
+    "NumericalConditions": {
+      "PitchDegrees": 26.565
+    },
+    "Value": -0.30,
+    "Unit": "dimensionless",
+    "SignConvention": "+ = Inward; - = Outward / Suction",
+    "Interpolation": "Linear1D",
+    "ApplicabilityNotes": "TEST ONLY / SYNTHETIC / NOT STANDARDS-COMPLIANT"
+  },
+  {
+    "RecordKey": "ASNZ1170_2_2021_CPE_GABLE_ROOF_LEEWARD",
+    "TableOrFigure": "Table 5.3(A)",
+    "ClauseReference": "Clause 5.4.2",
+    "ParameterCategory": "ExternalPressure_Roofs",
+    "CategoricalConditions": {
+      "RoofForm": "Gable",
+      "Surface": "LeewardSlope",
+      "WindAngle": "0deg"
+    },
+    "NumericalConditions": {
+      "PitchDegrees": 26.565
+    },
+    "Value": -0.50,
+    "Unit": "dimensionless",
+    "SignConvention": "+ = Inward; - = Outward / Suction",
+    "Interpolation": "Linear1D",
+    "ApplicabilityNotes": "TEST ONLY / SYNTHETIC / NOT STANDARDS-COMPLIANT"
+  }
+]

@@ -1,0 +1,60 @@
+﻿{
+  "BundleId": "ASNZ1170-2-2021-SYNTHETIC-BUNDLE-01",
+  "SchemaVersion": "1.0.0",
+  "Family": "AsNz1170_2",
+  "Edition": "2021",
+  "Amendments": [
+    "Amendment 1:2023",
+    "Amendment 2:2024"
+  ],
+  "Rights": "SyntheticTestData",
+  "RightsStatement": "TEST ONLY / SYNTHETIC / NOT STANDARDS-COMPLIANT. Generated purely for unit test qualification.",
+  "ContentHash": "SYNTHETIC_CANONICAL_HASH",
+  "ComponentFiles": {
+    "regional_speeds.json": "C2CC074B915CAD867A96E9295313F684E06DBDF0E1D999F91828B0E36E3ECD7C",
+    "terrain_multipliers.json": "C21133C9C8611AE7B7D816D603671E4FEAFF9B03E59B02D748EAAA07C20C6043",
+    "aerodynamic_shape_factors.json": "18760EE34D91E59D043A1CB3006C7390958BEE19F875ED02670DD84403693AAF",
+    "internal_pressure.json": "352896046DDF70CECB14EFE3D8E9919B91118C176B0C386908309670974DDD84"
+  },
+  "ReviewTrace": {
+    "PreparerName": "Synthetic Dataset Generator",
+    "PreparerOrganization": "Structural Load Assistant Testing",
+    "PreparedDate": "2026-10-22T00:00:00Z",
+    "ReviewerName": "Independent Synthetic QA Reviewer",
+    "ReviewerOrganization": "Structural Load Assistant QA",
+    "ReviewDate": "2026-10-22T00:00:00Z",
+    "ReviewScope": "Verification of schema compliance, amendment declaration, and fail-closed gate rejection",
+    "EvidenceDocumentUri": "fixtures/standards/reference-calculations/asnz1170_2_2021_synthetic_gable_reference.json",
+    "EvidenceDocumentHash": "SYNTHETIC_EVIDENCE_HASH",
+    "IsIndependentReview": true
+  },
+  "CoverageMatrix": [
+    {
+      "CategoryKey": "RegionalWindSpeed",
+      "Description": "Regional 500-year Wind Speeds",
+      "IsRequired": true,
+      "AvailableRecordCount": 2
+    },
+    {
+      "CategoryKey": "TerrainHeightMultiplier",
+      "Description": "Terrain/Height Multipliers Mz,cat",
+      "IsRequired": true,
+      "AvailableRecordCount": 2
+    },
+    {
+      "CategoryKey": "ExternalPressure_Roofs",
+      "Description": "Aerodynamic Shape Factors Cpe for Roofs",
+      "IsRequired": true,
+      "AvailableRecordCount": 2
+    },
+    {
+      "CategoryKey": "InternalPressure",
+      "Description": "Internal Pressure Coefficients Cpi",
+      "IsRequired": true,
+      "AvailableRecordCount": 2
+    }
+  ],
+  "LicenseNotice": "TEST ONLY / SYNTHETIC / NOT STANDARDS-COMPLIANT",
+  "CreatedAt": "2026-10-22T00:00:00Z",
+  "LastValidatedAt": "2026-10-22T00:00:00Z"
+}

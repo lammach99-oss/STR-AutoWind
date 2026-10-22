@@ -1,0 +1,44 @@
+﻿[
+  {
+    "RecordKey": "ASCE7_22_MWFRS_ROOF_ZONE1_WINDWARD",
+    "TableOrFigure": "Figure 27.3-1",
+    "ClauseReference": "Section 27.3.1",
+    "ParameterCategory": "ExternalPressure_MWFRS",
+    "CategoricalConditions": {
+      "System": "MWFRS",
+      "Zone": "1",
+      "Surface": "WindwardRoof",
+      "WindDirection": "NormalToRidge"
+    },
+    "NumericalConditions": {
+      "RoofSlopeDeg": 26.565,
+      "MeanRoofHeightM": 10.0
+    },
+    "Value": -0.45,
+    "Unit": "dimensionless",
+    "SignConvention": "+ = Pressure (Inward); - = Suction (Outward)",
+    "Interpolation": "Linear1D",
+    "ApplicabilityNotes": "TEST ONLY / SYNTHETIC / NOT STANDARDS-COMPLIANT"
+  },
+  {
+    "RecordKey": "ASCE7_22_MWFRS_ROOF_ZONE2_LEEWARD",
+    "TableOrFigure": "Figure 27.3-1",
+    "ClauseReference": "Section 27.3.1",
+    "ParameterCategory": "ExternalPressure_MWFRS",
+    "CategoricalConditions": {
+      "System": "MWFRS",
+      "Zone": "2",
+      "Surface": "LeewardRoof",
+      "WindDirection": "NormalToRidge"
+    },
+    "NumericalConditions": {
+      "RoofSlopeDeg": 26.565,
+      "MeanRoofHeightM": 10.0
+    },
+    "Value": -0.60,
+    "Unit": "dimensionless",
+    "SignConvention": "+ = Pressure (Inward); - = Suction (Outward)",
+    "Interpolation": "Linear1D",
+    "ApplicabilityNotes": "TEST ONLY / SYNTHETIC / NOT STANDARDS-COMPLIANT"
+  }
+]

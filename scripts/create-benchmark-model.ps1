@@ -1,5 +1,6 @@
 param(
-    [string]$OutputPath = "artifacts/physical-benchmark-private/ETABS-BENCHMARK.EDB"
+    [string]$OutputPath = "artifacts/physical-benchmark-private/ETABS-BENCHMARK.EDB",
+    [switch]$Force
 )
 
 $ErrorActionPreference = 'Stop'
@@ -12,6 +13,9 @@ try {
     Write-Host "==========================================================" -ForegroundColor Cyan
 
     $fullOutputPath = [System.IO.Path]::GetFullPath($OutputPath)
+    if ((Test-Path -LiteralPath $fullOutputPath) -and -not $Force) {
+        throw "Target benchmark file already exists at '$fullOutputPath'. Pass -Force to allow recreating the benchmark model."
+    }
     $outputDir = Split-Path $fullOutputPath -Parent
     if (-not (Test-Path $outputDir)) {
         New-Item -ItemType Directory -Path $outputDir -Force | Out-Null

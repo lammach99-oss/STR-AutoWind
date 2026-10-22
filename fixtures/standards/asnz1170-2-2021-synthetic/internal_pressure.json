@@ -1,0 +1,34 @@
+﻿[
+  {
+    "RecordKey": "ASNZ1170_2_2021_CPI_STANDARD_POS",
+    "TableOrFigure": "Table 5.1(A)",
+    "ClauseReference": "Clause 5.3.1",
+    "ParameterCategory": "InternalPressure",
+    "CategoricalConditions": {
+      "Permeability": "NominallySealed",
+      "InternalPressureState": "IP+"
+    },
+    "NumericalConditions": {},
+    "Value": 0.20,
+    "Unit": "dimensionless",
+    "SignConvention": "+ = Internal Pressure",
+    "Interpolation": "Categorical",
+    "ApplicabilityNotes": "TEST ONLY / SYNTHETIC / NOT STANDARDS-COMPLIANT"
+  },
+  {
+    "RecordKey": "ASNZ1170_2_2021_CPI_STANDARD_NEG",
+    "TableOrFigure": "Table 5.1(A)",
+    "ClauseReference": "Clause 5.3.1",
+    "ParameterCategory": "InternalPressure",
+    "CategoricalConditions": {
+      "Permeability": "NominallySealed",
+      "InternalPressureState": "IP-"
+    },
+    "NumericalConditions": {},
+    "Value": -0.20,
+    "Unit": "dimensionless",
+    "SignConvention": "- = Internal Suction",
+    "Interpolation": "Categorical",
+    "ApplicabilityNotes": "TEST ONLY / SYNTHETIC / NOT STANDARDS-COMPLIANT"
+  }
+]

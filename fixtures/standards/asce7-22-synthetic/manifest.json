@@ -1,0 +1,50 @@
+﻿{
+  "BundleId": "ASCE7-22-SYNTHETIC-BUNDLE-01",
+  "SchemaVersion": "1.0.0",
+  "Family": "Asce7",
+  "Edition": "7-22",
+  "Amendments": [],
+  "Rights": "SyntheticTestData",
+  "RightsStatement": "TEST ONLY / SYNTHETIC / NOT STANDARDS-COMPLIANT. Generated purely for unit test qualification.",
+  "ContentHash": "",
+  "ComponentFiles": {
+    "coefficients_mwfrs.json": "2A6A234FEB27E6F18E48A0E417B5D07FA51BAF103E0F8FF61A506497B80EE838",
+    "coefficients_cc.json": "ABEE51141EDE28907B14CB9140A1FFFE49B2A3BE581B28B77649B3E993A54DC8",
+    "internal_pressure.json": "CC8AAF2171AD5C959323A7244B665968FC9534C37104BE804900BDB7A1E60BB0"
+  },
+  "ReviewTrace": {
+    "PreparerName": "Synthetic Dataset Generator",
+    "PreparerOrganization": "Structural Load Assistant Testing",
+    "PreparedDate": "2026-10-22T00:00:00Z",
+    "ReviewerName": "Independent Synthetic QA Reviewer",
+    "ReviewerOrganization": "Structural Load Assistant QA",
+    "ReviewDate": "2026-10-22T00:00:00Z",
+    "ReviewScope": "Verification of schema compliance and fail-closed gate rejection of synthetic data",
+    "EvidenceDocumentUri": "fixtures/standards/reference-calculations/asce7_22_synthetic_gable_reference.json",
+    "EvidenceDocumentHash": "SYNTHETIC_EVIDENCE_HASH",
+    "IsIndependentReview": true
+  },
+  "CoverageMatrix": [
+    {
+      "CategoryKey": "ExternalPressure_MWFRS",
+      "Description": "MWFRS External Pressure Coefficients",
+      "IsRequired": true,
+      "AvailableRecordCount": 2
+    },
+    {
+      "CategoryKey": "ExternalPressure_CC",
+      "Description": "Components and Cladding External Coefficients",
+      "IsRequired": true,
+      "AvailableRecordCount": 2
+    },
+    {
+      "CategoryKey": "InternalPressure",
+      "Description": "Internal Pressure Coefficients (GCpi)",
+      "IsRequired": true,
+      "AvailableRecordCount": 2
+    }
+  ],
+  "LicenseNotice": "TEST ONLY / SYNTHETIC / NOT STANDARDS-COMPLIANT",
+  "CreatedAt": "2026-10-22T00:00:00Z",
+  "LastValidatedAt": "2026-10-22T00:00:00Z"
+}

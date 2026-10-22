@@ -1,0 +1,85 @@
+﻿{
+  "FixtureId": "ASNZ1170-2-2021-SYNTHETIC-GABLE-REF-01",
+  "Title": "Synthetic Gable Roof Reference Calculation for AS/NZS 1170.2:2021",
+  "Family": "AsNz1170_2",
+  "Edition": "2021",
+  "Amendments": [
+    "Amendment 1:2023",
+    "Amendment 2:2024"
+  ],
+  "ProcedureId": "ASNZ_1170_2_2021_SEC5_EXT",
+  "SourceClauseReference": "Section 5 Aerodynamic Shape Factor",
+  "CategoricalInputs": {
+    "WindRegion": "A",
+    "TerrainCategory": "TC2",
+    "RoofForm": "Gable",
+    "Permeability": "NominallySealed"
+  },
+  "NumericalInputs": {
+    "ReturnPeriodYears": 500.0,
+    "ReferenceHeightM": 10.0,
+    "PitchDegrees": 26.565
+  },
+  "ExpectedFactors": [
+    {
+      "Name": "VR",
+      "Clause": "Table 3.1",
+      "ExpectedValue": 45.0,
+      "Tolerance": 0.1,
+      "Unit": "m/s"
+    },
+    {
+      "Name": "Mzcat",
+      "Clause": "Table 4.1",
+      "ExpectedValue": 1.00,
+      "Tolerance": 0.01,
+      "Unit": "dimensionless"
+    },
+    {
+      "Name": "Vsitbeta",
+      "Clause": "Clause 2.2",
+      "ExpectedValue": 45.0,
+      "Tolerance": 0.1,
+      "Unit": "m/s"
+    },
+    {
+      "Name": "qdes_theta",
+      "Clause": "Clause 2.4",
+      "ExpectedValue": 1215.0,
+      "Tolerance": 5.0,
+      "Unit": "Pa"
+    }
+  ],
+  "ExpectedPressures": [
+    {
+      "ZoneId": "Zone-A1-Full",
+      "StateId": "WX+/IP+",
+      "ExpectedNetPressurePa": -607.5,
+      "AbsoluteTolPa": 5.0,
+      "RelativeTol": 0.02,
+      "Direction": "Local3"
+    },
+    {
+      "ZoneId": "Zone-A2-Half",
+      "StateId": "WX+/IP+",
+      "ExpectedNetPressurePa": -850.5,
+      "AbsoluteTolPa": 5.0,
+      "RelativeTol": 0.02,
+      "Direction": "Local3"
+    }
+  ],
+  "ReviewTrace": {
+    "PreparerName": "Synthetic Benchmark Author",
+    "PreparerOrganization": "Structural Load Assistant Testing",
+    "PreparedDate": "2026-10-22T00:00:00Z",
+    "ReviewerName": "Independent Synthetic Checker",
+    "ReviewerOrganization": "Structural Load Assistant QA",
+    "ReviewDate": "2026-10-22T00:00:00Z",
+    "ReviewScope": "Verification of analytical formula derivation and tolerance limits",
+    "EvidenceDocumentUri": "fixtures/standards/reference-calculations/asnz1170_2_2021_synthetic_gable_reference.json",
+    "EvidenceDocumentHash": "SYNTHETIC_EVIDENCE_HASH",
+    "IsIndependentReview": true
+  },
+  "RightsClassification": "SyntheticTestData",
+  "IsSynthetic": true
+}

@@ -1,4 +1,19 @@
 # Executed qualification
+- [x] Sprint 4A: Standards data foundation contracts separating ASCE 7-22 and AS/NZS 1170.2:2021 domain models without false shared abstractions (StandardsDataContracts.cs).
+- [x] Sprint 4A: Versioned lifecycle state machine (Unknown, Missing, Unsupported, Unreviewed, Invalid, ReadyForQualification, EngineerReviewed, Blocked) and rights classifications.
+- [x] Sprint 4A: Deterministic canonical content hashing across sorted coefficient records detecting tampering or whitespace alterations (StandardsDataBundle.ComputeCanonicalHash).
+- [x] Sprint 4A: Component file SHA256 checksum verification against manifest with tamper detection.
+- [x] Sprint 4A: Fail-closed bundle validation rejecting duplicate/conflicting record keys, non-finite values, and incomplete mandatory procedure coverage.
+- [x] Sprint 4A: Parameter domain boundary enforcement rejecting out-of-range inputs without explicit extrapolation authorization.
+- [x] Sprint 4A: Categorical boundary interpolation rejection across zones, surfaces, wind angles, and limit states.
+- [x] Sprint 4A: Explicit AS/NZS amendment resolution enforcing Amendment 1:2023 and Amendment 2:2024 tracking.
+- [x] Sprint 4A: Independent engineering review attestation verification rejecting self-approval or missing evidence hashes.
+- [x] Sprint 4A: Strict promotion prevention ensuring synthetic and demo data can never authorize normative pressure calculations (CanCalculateNormativePressures strictly false).
+- [x] Sprint 4A: Reference calculation benchmark contracts evaluating intermediate factors and net pressures within strict tolerances (ReferenceCalculationContracts.cs).
+- [x] Sprint 4A: 17 new deterministic foundation tests, bringing total automated test count to 250 passing, 0 failing, 0 skipping.
+- [x] Sprint 4A: Backward compatibility preserved for legacy StandardCalculators.Asce7_22 and StandardCalculators.AsNz1170_2_2021 signatures.
+- [x] Sprint 4A: All 6 WPF smoke processes pass in Release mode with clean shutdown markers.
+- [ ] Sprint 4B: Import licensed ASCE 7-22 and AS/NZS 1170.2:2021 coefficient tables and independently verified benchmark calculation fixtures.
 - [x] Sprint 3.4.2: Closed physical benchmark execution pipeline via BenchmarkExecutionPipeline; runs 3D geometry processing, roof plane reconstruction, UV projection, and production NetTopologySuite overlay engine (ZonePolygonEngine.Classify).
 - [x] Sprint 3.4.2: Defined 2 explicit overlapping polygons for Shell 201 (Zone-B1-OverlapA and Zone-B1-OverlapB at 75% coverage each, 6.7082 m² intersection area, OverlappingZones classification, NeedsSplitInCSI = true).
 - [x] Sprint 3.4.2: Strict qualification runner scripts/qualify-csi.ps1 parses benchmarkFrames and benchmarkShells schemas, propagates CSI_BENCHMARK_FIXTURE_PATH and CSI_PROCESS_ID, avoids silent GetObject fallback, checks TRX counters to reject 0-test runs, and writes machine-readable reports.

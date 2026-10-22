@@ -1,0 +1,40 @@
+﻿[
+  {
+    "RecordKey": "ASCE7_22_CC_ROOF_ZONE1_INTERIOR",
+    "TableOrFigure": "Figure 30.3-2A",
+    "ClauseReference": "Section 30.3.2",
+    "ParameterCategory": "ExternalPressure_CC",
+    "CategoricalConditions": {
+      "System": "ComponentsAndCladding",
+      "Zone": "1",
+      "Surface": "RoofField"
+    },
+    "NumericalConditions": {
+      "EffectiveWindAreaM2": 10.0
+    },
+    "Value": -0.90,
+    "Unit": "dimensionless",
+    "SignConvention": "+ = Pressure; - = Suction",
+    "Interpolation": "Linear1D",
+    "ApplicabilityNotes": "TEST ONLY / SYNTHETIC / NOT STANDARDS-COMPLIANT"
+  },
+  {
+    "RecordKey": "ASCE7_22_CC_ROOF_ZONE2_EDGE",
+    "TableOrFigure": "Figure 30.3-2A",
+    "ClauseReference": "Section 30.3.2",
+    "ParameterCategory": "ExternalPressure_CC",
+    "CategoricalConditions": {
+      "System": "ComponentsAndCladding",
+      "Zone": "2",
+      "Surface": "RoofPerimeter"
+    },
+    "NumericalConditions": {
+      "EffectiveWindAreaM2": 10.0
+    },
+    "Value": -1.50,
+    "Unit": "dimensionless",
+    "SignConvention": "+ = Pressure; - = Suction",
+    "Interpolation": "Linear1D",
+    "ApplicabilityNotes": "TEST ONLY / SYNTHETIC / NOT STANDARDS-COMPLIANT"
+  }
+]

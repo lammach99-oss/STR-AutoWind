@@ -1,0 +1,34 @@
+﻿[
+  {
+    "RecordKey": "ASCE7_22_GCPI_ENCLOSED_POS",
+    "TableOrFigure": "Table 26.13-1",
+    "ClauseReference": "Section 26.13",
+    "ParameterCategory": "InternalPressure",
+    "CategoricalConditions": {
+      "Enclosure": "Enclosed",
+      "InternalPressureState": "IP+"
+    },
+    "NumericalConditions": {},
+    "Value": 0.18,
+    "Unit": "dimensionless",
+    "SignConvention": "+ = Internal Pressure",
+    "Interpolation": "Categorical",
+    "ApplicabilityNotes": "TEST ONLY / SYNTHETIC / NOT STANDARDS-COMPLIANT"
+  },
+  {
+    "RecordKey": "ASCE7_22_GCPI_ENCLOSED_NEG",
+    "TableOrFigure": "Table 26.13-1",
+    "ClauseReference": "Section 26.13",
+    "ParameterCategory": "InternalPressure",
+    "CategoricalConditions": {
+      "Enclosure": "Enclosed",
+      "InternalPressureState": "IP-"
+    },
+    "NumericalConditions": {},
+    "Value": -0.18,
+    "Unit": "dimensionless",
+    "SignConvention": "- = Internal Suction",
+    "Interpolation": "Categorical",
+    "ApplicabilityNotes": "TEST ONLY / SYNTHETIC / NOT STANDARDS-COMPLIANT"
+  }
+]

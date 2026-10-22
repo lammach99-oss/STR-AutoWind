@@ -1,0 +1,83 @@
+﻿{
+  "FixtureId": "ASCE7-22-SYNTHETIC-GABLE-REF-01",
+  "Title": "Synthetic Gable Roof MWFRS Reference Calculation for ASCE 7-22",
+  "Family": "Asce7",
+  "Edition": "7-22",
+  "Amendments": [],
+  "ProcedureId": "ASCE7_22_CH27_MWFRS",
+  "SourceClauseReference": "Chapter 27 Part 1 Directional Procedure",
+  "CategoricalInputs": {
+    "RiskCategory": "II",
+    "Exposure": "C",
+    "Enclosure": "Enclosed",
+    "WindDirection": "NormalToRidge"
+  },
+  "NumericalInputs": {
+    "BasicWindSpeedMPerS": 40.0,
+    "MeanRoofHeightM": 10.0,
+    "GroundElevationM": 0.0,
+    "RoofSlopeDeg": 26.565
+  },
+  "ExpectedFactors": [
+    {
+      "Name": "Kz",
+      "Clause": "Table 26.10-1",
+      "ExpectedValue": 0.98,
+      "Tolerance": 0.01,
+      "Unit": "dimensionless"
+    },
+    {
+      "Name": "Kd",
+      "Clause": "Table 26.6-1",
+      "ExpectedValue": 0.85,
+      "Tolerance": 0.01,
+      "Unit": "dimensionless"
+    },
+    {
+      "Name": "G",
+      "Clause": "Section 26.11",
+      "ExpectedValue": 0.85,
+      "Tolerance": 0.01,
+      "Unit": "dimensionless"
+    },
+    {
+      "Name": "qz",
+      "Clause": "Equation 26.10-1",
+      "ExpectedValue": 815.7,
+      "Tolerance": 5.0,
+      "Unit": "Pa"
+    }
+  ],
+  "ExpectedPressures": [
+    {
+      "ZoneId": "Zone-A1-Full",
+      "StateId": "WX+/IP+",
+      "ExpectedNetPressurePa": -436.4,
+      "AbsoluteTolPa": 5.0,
+      "RelativeTol": 0.02,
+      "Direction": "Local3"
+    },
+    {
+      "ZoneId": "Zone-A2-Half",
+      "StateId": "WX+/IP+",
+      "ExpectedNetPressurePa": -540.4,
+      "AbsoluteTolPa": 5.0,
+      "RelativeTol": 0.02,
+      "Direction": "Local3"
+    }
+  ],
+  "ReviewTrace": {
+    "PreparerName": "Synthetic Benchmark Author",
+    "PreparerOrganization": "Structural Load Assistant Testing",
+    "PreparedDate": "2026-10-22T00:00:00Z",
+    "ReviewerName": "Independent Synthetic Checker",
+    "ReviewerOrganization": "Structural Load Assistant QA",
+    "ReviewDate": "2026-10-22T00:00:00Z",
+    "ReviewScope": "Verification of analytical formula derivation and tolerance limits",
+    "EvidenceDocumentUri": "fixtures/standards/reference-calculations/asce7_22_synthetic_gable_reference.json",
+    "EvidenceDocumentHash": "SYNTHETIC_EVIDENCE_HASH",
+    "IsIndependentReview": true
+  },
+  "RightsClassification": "SyntheticTestData",
+  "IsSynthetic": true
+}
