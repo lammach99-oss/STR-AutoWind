@@ -1,5 +1,15 @@
 # Implementation status — 2026-10-20
 
+## Sprint 4A.3: Final Standards-Data Trust Closure & Licensed Reference Intake Preflight
+
+- **Structural Canonical Semantic Hash (V3)**: Implemented CANONICAL_STANDARDS_BUNDLE_V3 with individual element length prefixing ([len]:[utf8_bytes];) for nested collections, amendments, coverage matrix entries, and condition maps. Eliminates delimiter-injection collisions across joined strings (e.g. {"A":"B,C=D"} vs {"A":"B","C":"D"} and ["A,B"] vs ["A","B"]). Preserved V1/V2 read compatibility for synthetic fixtures while enforcing fail-closed rejection for unsupported algorithm versions. Enforced finite-only double checks and normalized -0.0 to +0.0.
+- **Source-Byte / In-Memory Record Coherence Closure**: Hardened StandardsDataBundleValidator.RecordsMatch() to compare all engineering fields using exact StringComparison.Ordinal, explicitly including ApplicabilityNotes. Mutating in-memory applicability notes or condition values while retaining verified component bytes is caught and blocked as STD_RECORD_BYTES_MISMATCH.
+- **Graceful Duplicate Raw Component Keys**: Replaced direct dictionary construction with duplicate key grouping, returning structured STD_DUPLICATE_SOURCE_KEY FatalBlocker issues rather than throwing unhandled exceptions.
+- **Fail-Closed System Scoping & Substring False-Positive Elimination**: Enhanced MatchesSystem to reject unrecognized system types and eliminate category substring heuristics (Contains("CC")). Added FindRecordForProcedure(ProcedureSelection, ...) enforcing family, edition, and procedure-scoped system isolation.
+- **Licensed Data Intake Kit & Private Directory Protection**: Added fixtures/standards/private/, artifacts/standards-private/, and *.pdf to .gitignore. Delivered public JSON templates in fixtures/standards/templates/ (template-manifest.json, template-coefficients.json, template-reference-calculation.json) and comprehensive documentation in Docs/STANDARDS_DATA_INTAKE_AND_ENGINEER_REVIEW.md. Added StandardsDataBundleValidator.VerifyEvidenceDocument() preflight verification helper.
+- **Safety Invariant Maintained**: CanCalculateNormativePressures == false across all bundles and rights categories. RealReadOnly pressure calculation, approvals, and live CSI writes remain disabled.
+- **Verification**: 297 automated tests pass (Debug/Release, non-physical). All 6 WPF smoke processes pass.
+
 ## Sprint 4A.2: Standards Bundle Coherence & Procedure-Safe Coefficient Retrieval
 
 - **Source-Byte and In-Memory Record Coherence Gate**: Implemented strict verification in `StandardsDataBundleValidator.Validate()` comparing in-memory records against records deserialized from verified raw component bytes. Any discrepancy in record counts, record keys, values, conditions, units, or sign conventions triggers `STD_RECORD_BYTES_MISMATCH` (FatalBlocker). A bundle with valid component SHA256 and matching semantic hash but mutated in-memory records is strictly rejected.

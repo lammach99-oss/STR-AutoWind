@@ -49,10 +49,11 @@ public static class StandardsDataBundleValidator
         }
 
         if (!string.Equals(manifest.CanonicalHashAlgorithmVersion, "1.0", StringComparison.Ordinal) &&
-            !string.Equals(manifest.CanonicalHashAlgorithmVersion, "2.0", StringComparison.Ordinal))
+            !string.Equals(manifest.CanonicalHashAlgorithmVersion, "2.0", StringComparison.Ordinal) &&
+            !string.Equals(manifest.CanonicalHashAlgorithmVersion, "3.0", StringComparison.Ordinal))
         {
             AddIssue("STD_HASH_VERSION_UNSUPPORTED", StandardsValidationSeverity.FatalBlocker, "Manifest.CanonicalHashAlgorithmVersion", null,
-                $"Unsupported canonical hash version ''{manifest.CanonicalHashAlgorithmVersion}''. Only 1.0 and 2.0 are supported.");
+                $"Unsupported canonical hash version ''{manifest.CanonicalHashAlgorithmVersion}''. Only 1.0, 2.0, and 3.0 are supported.");
         }
 
         switch (manifest.Family)
@@ -164,6 +165,20 @@ public static class StandardsDataBundleValidator
                 var deserializedRecords = StandardsDataBundle.DeserializeRecordsFromBytes(
                     verifiedBytes.ToImmutableDictionary(), manifest.ComponentFiles.Keys);
 
+                var duplicateRawKeys = deserializedRecords.GroupBy(r => r.RecordKey, StringComparer.Ordinal)
+                    .Where(g => g.Count() > 1)
+                    .Select(g => g.Key)
+                    .ToList();
+
+                if (duplicateRawKeys.Count > 0)
+                {
+                    foreach (var dup in duplicateRawKeys)
+                    {
+                        AddIssue("STD_DUPLICATE_SOURCE_KEY", StandardsValidationSeverity.FatalBlocker, "ComponentFiles", dup,
+                            $"Duplicate record key ''{dup}'' detected in raw component bytes.");
+                    }
+                }
+
                 if (bundle.Records.Length != deserializedRecords.Length)
                 {
                     AddIssue("STD_RECORD_BYTES_MISMATCH", StandardsValidationSeverity.FatalBlocker, "Records", null,
@@ -171,10 +186,20 @@ public static class StandardsDataBundleValidator
                 }
                 else
                 {
-                    var bytesRecordsMap = deserializedRecords.ToDictionary(r => r.RecordKey, StringComparer.Ordinal);
+                    var bytesRecordsMap = new Dictionary<string, List<CoefficientRecord>>(StringComparer.Ordinal);
+                    foreach (var r in deserializedRecords)
+                    {
+                        if (!bytesRecordsMap.TryGetValue(r.RecordKey, out var list))
+                        {
+                            list = new List<CoefficientRecord>();
+                            bytesRecordsMap[r.RecordKey] = list;
+                        }
+                        list.Add(r);
+                    }
+
                     foreach (var r in bundle.Records)
                     {
-                        if (!bytesRecordsMap.TryGetValue(r.RecordKey, out var br) || !RecordsMatch(r, br))
+                        if (!bytesRecordsMap.TryGetValue(r.RecordKey, out var matchingList) || !matchingList.Any(br => RecordsMatch(r, br)))
                         {
                             AddIssue("STD_RECORD_BYTES_MISMATCH", StandardsValidationSeverity.FatalBlocker, "Records", r.RecordKey,
                                 $"In-memory record ''{r.RecordKey}'' data differs from verified raw component bytes. Stale or manipulated records detected.");
@@ -500,18 +525,19 @@ public static class StandardsDataBundleValidator
     private static bool RecordsMatch(CoefficientRecord a, CoefficientRecord b)
     {
         if (!string.Equals(a.RecordKey, b.RecordKey, StringComparison.Ordinal)) return false;
-        if (!string.Equals(a.ParameterCategory, b.ParameterCategory, StringComparison.OrdinalIgnoreCase)) return false;
-        if (!string.Equals(a.TableOrFigure, b.TableOrFigure, StringComparison.OrdinalIgnoreCase)) return false;
-        if (!string.Equals(a.ClauseReference, b.ClauseReference, StringComparison.OrdinalIgnoreCase)) return false;
-        if (!string.Equals(a.SignConvention, b.SignConvention, StringComparison.OrdinalIgnoreCase)) return false;
-        if (!string.Equals(a.Unit, b.Unit, StringComparison.OrdinalIgnoreCase)) return false;
+        if (!string.Equals(a.ParameterCategory, b.ParameterCategory, StringComparison.Ordinal)) return false;
+        if (!string.Equals(a.TableOrFigure, b.TableOrFigure, StringComparison.Ordinal)) return false;
+        if (!string.Equals(a.ClauseReference, b.ClauseReference, StringComparison.Ordinal)) return false;
+        if (!string.Equals(a.SignConvention, b.SignConvention, StringComparison.Ordinal)) return false;
+        if (!string.Equals(a.Unit, b.Unit, StringComparison.Ordinal)) return false;
         if (a.Interpolation != b.Interpolation) return false;
+        if (!string.Equals(a.ApplicabilityNotes ?? string.Empty, b.ApplicabilityNotes ?? string.Empty, StringComparison.Ordinal)) return false;
         if (BitConverter.DoubleToInt64Bits(a.Value) != BitConverter.DoubleToInt64Bits(b.Value)) return false;
 
         if (a.CategoricalConditions.Count != b.CategoricalConditions.Count) return false;
         foreach (var (k, v) in a.CategoricalConditions)
         {
-            if (!b.CategoricalConditions.TryGetValue(k, out var bv) || !string.Equals(v, bv, StringComparison.OrdinalIgnoreCase)) return false;
+            if (!b.CategoricalConditions.TryGetValue(k, out var bv) || !string.Equals(v, bv, StringComparison.Ordinal)) return false;
         }
 
         if (a.NumericalConditions.Count != b.NumericalConditions.Count) return false;
@@ -522,5 +548,26 @@ public static class StandardsDataBundleValidator
 
         return true;
     }
-}
 
+    /// <summary>
+    /// Optional local preflight check verifying that a private evidence file exists and its
+    /// computed SHA-256 matches the manifest's declared EvidenceDocumentHash.
+    /// Does not print or expose file contents.
+    /// </summary>
+    public static (bool Valid, string Message) VerifyEvidenceDocument(string evidenceFilePath, StandardsDataBundleManifest manifest)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(evidenceFilePath);
+        ArgumentNullException.ThrowIfNull(manifest);
+
+        if (!File.Exists(evidenceFilePath))
+            return (false, $"Evidence file not found at '{evidenceFilePath}'.");
+
+        using var stream = File.OpenRead(evidenceFilePath);
+        var computedHash = Convert.ToHexString(SHA256.HashData(stream));
+        if (!string.Equals(computedHash, manifest.ReviewTrace.EvidenceDocumentHash, StringComparison.OrdinalIgnoreCase))
+        {
+            return (false, $"Evidence file SHA-256 mismatch: computed {computedHash}, expected {manifest.ReviewTrace.EvidenceDocumentHash}.");
+        }
+        return (true, "Evidence file SHA-256 verified successfully.");
+    }
+}

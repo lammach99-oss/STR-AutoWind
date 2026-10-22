@@ -1,0 +1,22 @@
+[
+  {
+    "RecordKey": "TEMPLATE_FAMILY_EDITION_TABLE_ZONE_01",
+    "TableOrFigure": "Table 26.5-1",
+    "ClauseReference": "Clause 26.5.1",
+    "ParameterCategory": "ExternalPressure_MWFRS",
+    "CategoricalConditions": {
+      "System": "MWFRS",
+      "RoofForm": "Gable",
+      "Surface": "Windward",
+      "Zone": "1"
+    },
+    "NumericalConditions": {
+      "PitchDegrees": 10
+    },
+    "Value": -0.5,
+    "Unit": "dimensionless",
+    "SignConvention": "+=Pressure / - =Suction",
+    "Interpolation": "Linear1D",
+    "ApplicabilityNotes": "Applicable for enclosed buildings with mean roof height <= 18m"
+  }
+]

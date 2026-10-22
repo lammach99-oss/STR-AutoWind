@@ -75,7 +75,13 @@ public sealed class StandardsDataBundle
         IReadOnlyDictionary<string, string> recordConditions,
         IDictionary<string, string> queryConditions)
     {
-        if (recordConditions.Count != queryConditions.Count) return false;
+        // Allow procedure queries to omit redundant "System" condition if handled by MatchesSystem
+        int expectedCount = recordConditions.ContainsKey("System") && !queryConditions.ContainsKey("System")
+            ? recordConditions.Count - 1
+            : recordConditions.Count;
+
+        if (expectedCount != queryConditions.Count) return false;
+
         foreach (var (k, v) in queryConditions)
         {
             if (!recordConditions.TryGetValue(k, out var val) ||
@@ -126,25 +132,132 @@ public sealed class StandardsDataBundle
         if (string.IsNullOrWhiteSpace(systemType)) return true;
         if (record.CategoricalConditions.TryGetValue("System", out var s))
         {
+            if (systemType.Equals("MWFRS", StringComparison.OrdinalIgnoreCase))
+            {
+                return s.Equals("MWFRS", StringComparison.OrdinalIgnoreCase) ||
+                       s.Equals("Directional", StringComparison.OrdinalIgnoreCase) ||
+                       s.Equals("Envelope", StringComparison.OrdinalIgnoreCase);
+            }
+            if (systemType.Equals("CC", StringComparison.OrdinalIgnoreCase) || systemType.Equals("ComponentsAndCladding", StringComparison.OrdinalIgnoreCase))
+            {
+                return s.Equals("CC", StringComparison.OrdinalIgnoreCase) ||
+                       s.Equals("ComponentsAndCladding", StringComparison.OrdinalIgnoreCase);
+            }
             return string.Equals(s, systemType, StringComparison.OrdinalIgnoreCase);
         }
-        if (systemType.Equals("MWFRS", StringComparison.OrdinalIgnoreCase))
+
+        // Recognized system-neutral categories applicable across procedures
+        if (record.ParameterCategory.Equals("InternalPressure", StringComparison.OrdinalIgnoreCase) ||
+            record.ParameterCategory.Equals("VelocityPressure", StringComparison.OrdinalIgnoreCase) ||
+            record.ParameterCategory.Equals("RegionalWindSpeed", StringComparison.OrdinalIgnoreCase) ||
+            record.ParameterCategory.Equals("TerrainHeightMultiplier", StringComparison.OrdinalIgnoreCase))
         {
-            return !record.ParameterCategory.Contains("CC", StringComparison.OrdinalIgnoreCase) &&
-                   !record.ParameterCategory.Contains("ComponentsAndCladding", StringComparison.OrdinalIgnoreCase);
+            return systemType.Equals("MWFRS", StringComparison.OrdinalIgnoreCase) ||
+                   systemType.Equals("CC", StringComparison.OrdinalIgnoreCase) ||
+                   systemType.Equals("ComponentsAndCladding", StringComparison.OrdinalIgnoreCase);
         }
-        if (systemType.Equals("CC", StringComparison.OrdinalIgnoreCase) || systemType.Equals("ComponentsAndCladding", StringComparison.OrdinalIgnoreCase))
+
+        // Unknown or unmatched system type fails closed
+        return false;
+    }
+
+    /// <summary>
+    /// Finds a single record applicable to an explicit ProcedureSelection, enforcing standard family,
+    /// edition, and procedure-scoped system isolation.
+    /// </summary>
+    public CoefficientRecord? FindRecordForProcedure(
+        ProcedureSelection procedure,
+        string category,
+        IDictionary<string, string> categoricalConditions,
+        IDictionary<string, double>? numericalConditions = null)
+    {
+        ArgumentNullException.ThrowIfNull(procedure);
+        ArgumentNullException.ThrowIfNull(categoricalConditions);
+
+        if (procedure.Family != Manifest.Family) return null;
+        if (!string.IsNullOrWhiteSpace(procedure.Edition) &&
+            !string.Equals(procedure.Edition, Manifest.Edition, StringComparison.OrdinalIgnoreCase))
         {
-            return record.ParameterCategory.Contains("CC", StringComparison.OrdinalIgnoreCase) ||
-                   record.ParameterCategory.Contains("ComponentsAndCladding", StringComparison.OrdinalIgnoreCase);
+            return null;
         }
-        return true;
+
+        return FindExactRecord(category, categoricalConditions, numericalConditions, procedure.SystemType);
     }
 
     /// <summary>Calculates a deterministic canonical content hash across all sorted records.</summary>
     public string ComputeCanonicalHash()
     {
         var sorted = Records.OrderBy(r => r.RecordKey, StringComparer.Ordinal).ToList();
+
+        if (string.Equals(Manifest.CanonicalHashAlgorithmVersion, "3.0", StringComparison.Ordinal))
+        {
+            using var ms = new MemoryStream();
+            void WritePrefixed(string val)
+            {
+                var utf8 = Encoding.UTF8.GetBytes(val ?? string.Empty);
+                var header = Encoding.UTF8.GetBytes($"{utf8.Length}:");
+                ms.Write(header);
+                ms.Write(utf8);
+                ms.WriteByte((byte)';');
+            }
+            void WritePrefixedInt(int i) => WritePrefixed(i.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            void WritePrefixedBool(bool b) => WritePrefixed(b ? "T" : "F");
+            void WritePrefixedDouble(double d)
+            {
+                if (!double.IsFinite(d)) throw new InvalidOperationException($"Non-finite double '{d}' cannot be encoded in canonical hash.");
+                if (d == 0.0 || BitConverter.DoubleToInt64Bits(d) == unchecked((long)0x8000000000000000)) d = 0.0;
+                WritePrefixed(d.ToString("R", System.Globalization.CultureInfo.InvariantCulture));
+            }
+
+            WritePrefixed("CANONICAL_STANDARDS_BUNDLE_V3");
+            WritePrefixed(Manifest.BundleId);
+            WritePrefixed(Manifest.Family.ToString());
+            WritePrefixed(Manifest.Edition);
+            WritePrefixed(Manifest.Rights.ToString());
+            WritePrefixedInt(Manifest.Amendments.Length);
+            foreach (var amd in Manifest.Amendments.OrderBy(a => a, StringComparer.Ordinal))
+            {
+                WritePrefixed(amd);
+            }
+            WritePrefixedInt(Manifest.CoverageMatrix.Length);
+            foreach (var cov in Manifest.CoverageMatrix.OrderBy(c => c.CategoryKey, StringComparer.Ordinal))
+            {
+                WritePrefixed(cov.CategoryKey);
+                WritePrefixed(cov.Description);
+                WritePrefixedBool(cov.IsRequired);
+                WritePrefixedInt(cov.AvailableRecordCount);
+            }
+
+            WritePrefixedInt(sorted.Count);
+            foreach (var r in sorted)
+            {
+                WritePrefixed(r.RecordKey);
+                WritePrefixed(r.ParameterCategory);
+                WritePrefixed(r.TableOrFigure);
+                WritePrefixed(r.ClauseReference);
+                WritePrefixed(r.SignConvention);
+                WritePrefixed(r.Unit);
+                WritePrefixed(r.Interpolation.ToString());
+                WritePrefixedDouble(r.Value);
+                WritePrefixed(r.ApplicabilityNotes ?? string.Empty);
+
+                WritePrefixedInt(r.CategoricalConditions.Count);
+                foreach (var (k, v) in r.CategoricalConditions.OrderBy(kv => kv.Key, StringComparer.Ordinal))
+                {
+                    WritePrefixed(k);
+                    WritePrefixed(v);
+                }
+
+                WritePrefixedInt(r.NumericalConditions.Count);
+                foreach (var (k, v) in r.NumericalConditions.OrderBy(kv => kv.Key, StringComparer.Ordinal))
+                {
+                    WritePrefixed(k);
+                    WritePrefixedDouble(v);
+                }
+            }
+
+            return Convert.ToHexString(SHA256.HashData(ms.ToArray()));
+        }
 
         if (string.Equals(Manifest.CanonicalHashAlgorithmVersion, "2.0", StringComparison.Ordinal))
         {
@@ -187,7 +300,9 @@ public sealed class StandardsDataBundle
             return Convert.ToHexString(SHA256.HashData(ms.ToArray()));
         }
 
-        var sb = new StringBuilder();
+        if (string.Equals(Manifest.CanonicalHashAlgorithmVersion, "1.0", StringComparison.Ordinal))
+        {
+            var sb = new StringBuilder();
         sb.Append("CANONICAL_STANDARDS_BUNDLE_V1|")
           .Append(Manifest.BundleId).Append('|')
           .Append(Manifest.Family).Append('|')
@@ -215,6 +330,10 @@ public sealed class StandardsDataBundle
               .Append(r.ApplicabilityNotes ?? string.Empty).AppendLine();
         }
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString())));
+        }
+
+        throw new NotSupportedException(
+            $"Unsupported canonical hash algorithm version '{Manifest.CanonicalHashAlgorithmVersion}'. Only 1.0, 2.0, and 3.0 are supported.");
     }
 
     /// <summary>Loads and parses a standards dataset bundle from a folder containing manifest.json.</summary>

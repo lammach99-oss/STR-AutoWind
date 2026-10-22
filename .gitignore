@@ -61,3 +61,8 @@ nuget.config
 NuGet.Config
 *.nupkg
 *.snupkg
+
+# Private licensed standards datasets and review evidence documents
+fixtures/standards/private/
+artifacts/standards-private/
+*.pdf

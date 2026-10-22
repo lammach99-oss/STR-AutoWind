@@ -1,0 +1,48 @@
+{
+  "$schema": "./template-manifest.schema.json",
+  "BundleId": "STANDARD_FAMILY-EDITION-DATASET-TEMPLATE",
+  "SchemaVersion": "1.0.0",
+  "Family": "Asce7",
+  "Edition": "7-22",
+  "Amendments": [
+    "Supplement 1",
+    "Errata 1"
+  ],
+  "Rights": "LocalLicensedOnly",
+  "RightsStatement": "Licensed extract for private engineering design only. Strictly prohibited from public repository distribution.",
+  "ContentHash": "COMPUTE_USING_CANONICAL_HASH_V3_64_HEX",
+  "ComponentFiles": {
+    "coefficients_mwfrs.json": "EXACT_RAW_FILE_SHA256_HEX",
+    "internal_pressure.json": "EXACT_RAW_FILE_SHA256_HEX"
+  },
+  "ReviewTrace": {
+    "PreparerName": "Engineer Name, PE",
+    "PreparerOrganization": "Firm Name LLC",
+    "PreparedDate": "2026-10-22T00:00:00Z",
+    "ReviewerName": "Independent Checker, SE",
+    "ReviewerOrganization": "Independent Peer Review Firm",
+    "ReviewDate": "2026-10-22T00:00:00Z",
+    "ReviewScope": "Independent check of coefficient extraction against primary licensed standard text",
+    "EvidenceDocumentUri": "fixtures/standards/private/asce7-22/review-signoff-memo.pdf",
+    "EvidenceDocumentHash": "EXACT_64_HEX_SHA256_OF_EVIDENCE_DOCUMENT_PDF",
+    "IsIndependentReview": true
+  },
+  "CoverageMatrix": [
+    {
+      "CategoryKey": "ExternalPressure_MWFRS",
+      "Description": "MWFRS External Pressure Coefficients",
+      "IsRequired": true,
+      "AvailableRecordCount": 1
+    },
+    {
+      "CategoryKey": "InternalPressure",
+      "Description": "Internal Pressure Coefficients (GCpi)",
+      "IsRequired": true,
+      "AvailableRecordCount": 2
+    }
+  ],
+  "LicenseNotice": "Restricted proprietary licensed material. Do not commit or share.",
+  "CreatedAt": "2026-10-22T00:00:00Z",
+  "LastValidatedAt": "2026-10-22T00:00:00Z",
+  "CanonicalHashAlgorithmVersion": "3.0"
+}

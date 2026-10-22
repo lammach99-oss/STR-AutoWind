@@ -1,4 +1,11 @@
 # Executed qualification
+- [x] Sprint 4A.3: V3 structural canonical semantic hash (CANONICAL_STANDARDS_BUNDLE_V3) eliminating delimiter-injection ambiguity across nested collections.
+- [x] Sprint 4A.3: Full field comparison in RecordsMatch using StringComparison.Ordinal and comparing ApplicabilityNotes.
+- [x] Sprint 4A.3: Graceful structured handling of duplicate raw component keys (STD_DUPLICATE_SOURCE_KEY).
+- [x] Sprint 4A.3: Fail-closed system scoping in MatchesSystem and FindRecordForProcedure without substring heuristics.
+- [x] Sprint 4A.3: Private directory git protection (.gitignore) and public JSON intake templates in fixtures/standards/templates/.
+- [x] Sprint 4A.3: Local evidence document preflight verification helper (VerifyEvidenceDocument).
+- [x] Sprint 4A.3: 297 automated tests passing in Release configuration (0 failures, 0 skips).
 - [x] Sprint 4A.2: Source-byte to in-memory record cryptographic coherence gate (STD_RECORD_BYTES_MISMATCH), detecting modified in-memory records even when raw file SHA256 and ContentHash match.
 - [x] Sprint 4A.2: Delimiter-injection collision-proof canonical hashing algorithm V2 (CANONICAL_STANDARDS_BUNDLE_V2) using length-prefixed UTF-8 segments.
 - [x] Sprint 4A.2: Strict bidirectional numerical condition matching in FindExactRecord, rejecting lookups when records have numerical dimensions but query lacks them.

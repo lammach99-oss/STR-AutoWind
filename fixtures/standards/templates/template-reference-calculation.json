@@ -1,0 +1,61 @@
+{
+  "FixtureId": "TEMPLATE-ASCE7-22-FLAT-ROOF-REF-01",
+  "Title": "Independent Benchmark Calculation for Flat Roof ASCE 7-22 Directional Procedure",
+  "Family": "Asce7",
+  "Edition": "7-22",
+  "Amendments": [],
+  "ProcedureId": "ASCE7_22_CH27_MWFRS",
+  "SourceClauseReference": "Chapter 27 Part 1 Directional Procedure",
+  "CategoricalInputs": {
+    "RiskCategory": "II",
+    "Exposure": "C",
+    "Enclosure": "Enclosed",
+    "WindDirection": "NormalToRidge"
+  },
+  "NumericalInputs": {
+    "BasicWindSpeedMPerS": 45,
+    "MeanRoofHeightM": 12,
+    "GroundElevationM": 0,
+    "RoofSlopeDeg": 0
+  },
+  "ExpectedFactors": [
+    {
+      "Name": "Kz",
+      "Clause": "Table 26.10-1",
+      "ExpectedValue": 1.04,
+      "Tolerance": 0.01,
+      "Unit": "dimensionless"
+    },
+    {
+      "Name": "Kd",
+      "Clause": "Table 26.6-1",
+      "ExpectedValue": 0.85,
+      "Tolerance": 0.01,
+      "Unit": "dimensionless"
+    }
+  ],
+  "ExpectedPressures": [
+    {
+      "ZoneId": "Zone-1",
+      "StateId": "WX+/IP+",
+      "ExpectedNetPressurePa": -620.5,
+      "AbsoluteTolPa": 5,
+      "RelativeTol": 0.02,
+      "Direction": "Local3"
+    }
+  ],
+  "ReviewTrace": {
+    "PreparerName": "Engineer Author, PE",
+    "PreparerOrganization": "Structural Consultants Inc",
+    "PreparedDate": "2026-10-22T00:00:00Z",
+    "ReviewerName": "Senior Technical Reviewer, SE",
+    "ReviewerOrganization": "Independent Peer Review Group",
+    "ReviewDate": "2026-10-22T00:00:00Z",
+    "ReviewScope": "Independent hand calculation verification of intermediate factors and net pressure values",
+    "EvidenceDocumentUri": "fixtures/standards/private/asce7-22/hand-calc-sheet-01.pdf",
+    "EvidenceDocumentHash": "EXACT_64_HEX_SHA256_OF_HAND_CALC_EVIDENCE_PDF",
+    "IsIndependentReview": true
+  },
+  "RightsClassification": "LocalLicensedOnly",
+  "IsSynthetic": false
+}
