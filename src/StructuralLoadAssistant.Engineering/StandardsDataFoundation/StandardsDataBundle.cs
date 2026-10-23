@@ -65,7 +65,7 @@ public sealed class StandardsDataBundle
     {
         ArgumentNullException.ThrowIfNull(categoricalConditions);
         var candidates = GetRecordsForCategory(category);
-        var matches = candidates.Where(c => MatchesCategorical(c.CategoricalConditions, categoricalConditions) &&
+        var matches = candidates.Where(c => MatchesCategorical(c.CategoricalConditions, categoricalConditions, systemType) &&
                                             MatchesNumerical(c.NumericalConditions, numericalConditions) &&
                                             MatchesSystem(c, systemType)).ToList();
         return matches.Count == 1 ? matches[0] : null;
@@ -73,14 +73,35 @@ public sealed class StandardsDataBundle
 
     private static bool MatchesCategorical(
         IReadOnlyDictionary<string, string> recordConditions,
-        IDictionary<string, string> queryConditions)
+        IDictionary<string, string> queryConditions,
+        string? systemType = null)
     {
-        // Allow procedure queries to omit redundant "System" condition if handled by MatchesSystem
-        int expectedCount = recordConditions.ContainsKey("System") && !queryConditions.ContainsKey("System")
-            ? recordConditions.Count - 1
-            : recordConditions.Count;
+        bool isProcedureScoped = !string.IsNullOrWhiteSpace(systemType) && IsRecognizedSystemType(systemType);
 
-        if (expectedCount != queryConditions.Count) return false;
+        if (isProcedureScoped)
+        {
+            foreach (var (k, v) in queryConditions)
+            {
+                if (!recordConditions.TryGetValue(k, out var val) ||
+                    !string.Equals(val, v, StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+            }
+
+            foreach (var (k, _) in recordConditions)
+            {
+                if (IsProcedureScopeKey(k)) continue;
+                if (!queryConditions.ContainsKey(k))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        if (recordConditions.Count != queryConditions.Count) return false;
 
         foreach (var (k, v) in queryConditions)
         {
@@ -91,6 +112,25 @@ public sealed class StandardsDataBundle
             }
         }
         return true;
+    }
+
+    private static bool IsProcedureScopeKey(string key)
+    {
+        return key.Equals("System", StringComparison.OrdinalIgnoreCase) ||
+               key.Equals("ProcedureId", StringComparison.OrdinalIgnoreCase) ||
+               key.Equals("Procedure", StringComparison.OrdinalIgnoreCase) ||
+               key.Equals("Method", StringComparison.OrdinalIgnoreCase) ||
+               key.Equals("LimitState", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static bool IsRecognizedSystemType(string? systemType)
+    {
+        if (string.IsNullOrWhiteSpace(systemType)) return false;
+        return systemType.Equals("MWFRS", StringComparison.OrdinalIgnoreCase) ||
+               systemType.Equals("Directional", StringComparison.OrdinalIgnoreCase) ||
+               systemType.Equals("Envelope", StringComparison.OrdinalIgnoreCase) ||
+               systemType.Equals("CC", StringComparison.OrdinalIgnoreCase) ||
+               systemType.Equals("ComponentsAndCladding", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool MatchesNumerical(
@@ -174,17 +214,52 @@ public sealed class StandardsDataBundle
         ArgumentNullException.ThrowIfNull(procedure);
         ArgumentNullException.ThrowIfNull(categoricalConditions);
 
-        if (procedure.Family != Manifest.Family) return null;
-        if (!string.IsNullOrWhiteSpace(procedure.Edition) &&
-            !string.Equals(procedure.Edition, Manifest.Edition, StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
+        if (string.IsNullOrWhiteSpace(procedure.Edition)) return null;
+        if (string.IsNullOrWhiteSpace(procedure.ProcedureId)) return null;
+        if (string.IsNullOrWhiteSpace(procedure.Method)) return null;
+        if (string.IsNullOrWhiteSpace(procedure.SystemType) || !IsRecognizedSystemType(procedure.SystemType)) return null;
 
-        return FindExactRecord(category, categoricalConditions, numericalConditions, procedure.SystemType);
+        if (procedure.Family != Manifest.Family) return null;
+        if (!string.Equals(procedure.Edition, Manifest.Edition, StringComparison.OrdinalIgnoreCase)) return null;
+
+        var matches = Records.Where(r =>
+            string.Equals(r.ParameterCategory, category, StringComparison.OrdinalIgnoreCase) &&
+            MatchesSystem(r, procedure.SystemType) &&
+            MatchesProcedureMetadata(r, procedure) &&
+            MatchesCategorical(r.CategoricalConditions, categoricalConditions, procedure.SystemType) &&
+            MatchesNumerical(r.NumericalConditions, numericalConditions)).ToList();
+
+        return matches.Count == 1 ? matches[0] : null;
     }
 
-    /// <summary>Calculates a deterministic canonical content hash across all sorted records.</summary>
+    private static bool MatchesProcedureMetadata(CoefficientRecord record, ProcedureSelection procedure)
+    {
+        bool hasProcId = record.CategoricalConditions.TryGetValue("ProcedureId", out var pId) ||
+                         record.CategoricalConditions.TryGetValue("Procedure", out pId);
+        if (!hasProcId || !string.Equals(pId, procedure.ProcedureId, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (!record.CategoricalConditions.TryGetValue("Method", out var method) ||
+            !string.Equals(method, procedure.Method, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (record.CategoricalConditions.TryGetValue("LimitState", out var ls))
+        {
+            if (!string.Equals(ls, procedure.LimitState.ToString(), StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(ls, "Both", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(ls, "All", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     public string ComputeCanonicalHash()
     {
         var sorted = Records.OrderBy(r => r.RecordKey, StringComparer.Ordinal).ToList();

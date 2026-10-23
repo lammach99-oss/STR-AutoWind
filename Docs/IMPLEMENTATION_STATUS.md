@@ -1,4 +1,14 @@
-# Implementation status — 2026-10-20
+# Implementation status — 2026-10-23
+
+## Sprint 4B.0: Standards Qualification Preflight & Fail-Closed API Closure
+
+- **Fail-Closed Public Validation Boundary (Zero Unhandled Exceptions)**: Eliminated unhandled exceptions from StandardsDataBundleValidator.Validate() for all anticipated invalid inputs. An unsupported hash version (e.g. 4.0 or arbitrary) returns a structured STD_HASH_VERSION_UNSUPPORTED FatalBlocker issue without throwing NotSupportedException. Malformed component JSON bytes produce STD_COMPONENT_JSON_MALFORMED without throwing JsonException. Missing/empty component files emit STD_COMPONENT_FILES_EMPTY. Non-finite record values (NaN, +Inf, -Inf) and numerical conditions emit STD_NONFINITE_VALUE and STD_NONFINITE_NUMERICAL_CONDITION without calling hashing or throwing InvalidOperationException. Direct throwing contracts on ComputeCanonicalHash() remain intact when called directly.
+- **Genuine Procedure Identity, Method, and Limit-State Scoping**: Hardened StandardsDataBundle.FindRecordForProcedure(ProcedureSelection, ...) to enforce non-empty edition, valid procedure ID, recognized method, valid limit state, and system type. Records must declare explicit procedure applicability metadata (ProcedureId/Procedure, Method, LimitState) to be retrieved in procedure scope; bare records lacking procedure metadata return null.
+- **Strict Direct Unscoped Lookup Invariant**: Enhanced MatchesCategorical() so that direct unscoped calls to FindExactRecord() without a validated systemType parameter strictly require explicit "System" condition matching; "System" condition omission relaxation is strictly restricted to validated procedure-scoped queries.
+- **Standards Intake Preflight Reporting (GenerateIntakePreflight)**: Delivered StandardsIntakePreflightReport providing separate, truthful auditing of source rights, V3 structural semantic integrity, component byte coherence, procedure coverage, local evidence file hash verification (Verified, MissingFile, HashMismatch, NotPerformed), human review role separation (SelfDeclaredMetadata, EvidenceHashVerified, IndependentEngineerReviewed), non-synthetic reference benchmark availability, and overall qualification readiness (Blocked, Invalid, Unverified, ReadyForIndependentReview).
+- **Owner Handoff & Checklist Readiness**: Updated Docs/STANDARDS_DATA_INTAKE_AND_ENGINEER_REVIEW.md with explicit owner checklists for ASCE 7-22 and AS/NZS 1170.2:2021. Both standards are accurately reported as Blocked / MissingExternalEvidence.
+- **Safety Invariant Preserved**: CanCalculateNormativePressures == false across all bundles and rights categories. All real CSI writes, production pressure calculations, and engineering approvals remain strictly disabled.
+- **Verification**: 315 automated tests pass (Debug/Release, non-physical). All 6 WPF smoke processes pass.
 
 ## Sprint 4A.3: Final Standards-Data Trust Closure & Licensed Reference Intake Preflight
 

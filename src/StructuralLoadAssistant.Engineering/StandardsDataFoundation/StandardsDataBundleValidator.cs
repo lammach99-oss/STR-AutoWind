@@ -48,9 +48,11 @@ public static class StandardsDataBundleValidator
             AddIssue("STD_SCHEMA_UNSUPPORTED", StandardsValidationSeverity.FatalBlocker, "Manifest.SchemaVersion", null, $"Unsupported schema version ''{manifest.SchemaVersion}''. Only 1.x is supported.");
         }
 
-        if (!string.Equals(manifest.CanonicalHashAlgorithmVersion, "1.0", StringComparison.Ordinal) &&
-            !string.Equals(manifest.CanonicalHashAlgorithmVersion, "2.0", StringComparison.Ordinal) &&
-            !string.Equals(manifest.CanonicalHashAlgorithmVersion, "3.0", StringComparison.Ordinal))
+        bool isHashVersionSupported = string.Equals(manifest.CanonicalHashAlgorithmVersion, "1.0", StringComparison.Ordinal) ||
+            string.Equals(manifest.CanonicalHashAlgorithmVersion, "2.0", StringComparison.Ordinal) ||
+            string.Equals(manifest.CanonicalHashAlgorithmVersion, "3.0", StringComparison.Ordinal);
+
+        if (!isHashVersionSupported)
         {
             AddIssue("STD_HASH_VERSION_UNSUPPORTED", StandardsValidationSeverity.FatalBlocker, "Manifest.CanonicalHashAlgorithmVersion", null,
                 $"Unsupported canonical hash version ''{manifest.CanonicalHashAlgorithmVersion}''. Only 1.0, 2.0, and 3.0 are supported.");
@@ -84,6 +86,13 @@ public static class StandardsDataBundleValidator
                 break;
         }
 
+        if (manifest.ComponentFiles == null || manifest.ComponentFiles.Count == 0)
+        {
+            AddIssue("STD_COMPONENT_FILES_EMPTY", StandardsValidationSeverity.FatalBlocker, "Manifest.ComponentFiles", null,
+                "Manifest does not declare any component files. At least one component file is required.");
+        }
+
+        var componentFiles = manifest.ComponentFiles ?? ImmutableDictionary<string, string>.Empty;
         // 2. Component File Checksums, Safe Paths, and Tampering Verification
         var verifiedBytes = new Dictionary<string, ImmutableArray<byte>>(StringComparer.OrdinalIgnoreCase);
 
@@ -96,7 +105,7 @@ public static class StandardsDataBundleValidator
         // If rawComponentFolder is provided, read any files from disk
         if (!string.IsNullOrWhiteSpace(rawComponentFolder) && Directory.Exists(rawComponentFolder))
         {
-            foreach (var (relPath, _) in manifest.ComponentFiles)
+            foreach (var (relPath, _) in componentFiles)
             {
                 try
                 {
@@ -115,14 +124,14 @@ public static class StandardsDataBundleValidator
         }
 
         // If no component bytes exist, fail-closed immediately
-        if (verifiedBytes.Count == 0 && manifest.ComponentFiles.Count > 0)
+        if (verifiedBytes.Count == 0 && componentFiles.Count > 0)
         {
             AddIssue("STD_INTEGRITY_UNVERIFIED", StandardsValidationSeverity.FatalBlocker, "ComponentFiles", null,
                 "Component file bytes were not supplied or could not be verified. Integrity verification is mandatory.");
         }
         else
         {
-            foreach (var (relPath, expectedSha) in manifest.ComponentFiles)
+            foreach (var (relPath, expectedSha) in componentFiles)
             {
                 try
                 {
@@ -152,7 +161,7 @@ public static class StandardsDataBundleValidator
             // Check for undeclared extra component files
             foreach (var extraKey in verifiedBytes.Keys)
             {
-                if (!manifest.ComponentFiles.ContainsKey(extraKey))
+                if (!componentFiles.ContainsKey(extraKey))
                 {
                     AddIssue("STD_EXTRA_COMPONENT", StandardsValidationSeverity.Error, "ComponentFiles", extraKey,
                         $"Component file ''{extraKey}'' was provided but is not declared in manifest.");
@@ -162,8 +171,27 @@ public static class StandardsDataBundleValidator
             // Cryptographically bind in-memory records to parsed bytes
             if (verifiedBytes.Count > 0)
             {
-                var deserializedRecords = StandardsDataBundle.DeserializeRecordsFromBytes(
-                    verifiedBytes.ToImmutableDictionary(), manifest.ComponentFiles.Keys);
+                ImmutableArray<CoefficientRecord> deserializedRecords = ImmutableArray<CoefficientRecord>.Empty;
+                bool deserializationFailed = false;
+                try
+                {
+                    deserializedRecords = StandardsDataBundle.DeserializeRecordsFromBytes(
+                        verifiedBytes.ToImmutableDictionary(), componentFiles.Keys);
+                }
+                catch (System.Text.Json.JsonException ex)
+                {
+                    deserializationFailed = true;
+                    AddIssue("STD_COMPONENT_JSON_MALFORMED", StandardsValidationSeverity.FatalBlocker, "ComponentFiles", null,
+                        $"Failed to deserialize component JSON bytes: {ex.Message}");
+                }
+                catch (Exception ex)
+                {
+                    deserializationFailed = true;
+                    AddIssue("STD_COMPONENT_LOAD_FAILED", StandardsValidationSeverity.FatalBlocker, "ComponentFiles", null,
+                        $"Failed to parse component bytes: {ex.Message}");
+                }
+                if (!deserializationFailed)
+                {
 
                 var duplicateRawKeys = deserializedRecords.GroupBy(r => r.RecordKey, StringComparer.Ordinal)
                     .Where(g => g.Count() > 1)
@@ -206,16 +234,40 @@ public static class StandardsDataBundleValidator
                         }
                     }
                 }
+                }
             }
         }
 
-        // 3. Canonical Semantic Content Hash Verification
-        var computedCanonicalHash = bundle.ComputeCanonicalHash();
-        if (string.IsNullOrWhiteSpace(manifest.ContentHash) ||
-            !string.Equals(computedCanonicalHash, manifest.ContentHash, StringComparison.OrdinalIgnoreCase))
+        // 3. Record Value Sanity, Units, and Non-Finite Checks
+        bool hasNonFiniteValues = false;
+        foreach (var r in bundle.Records)
         {
-            AddIssue("STD_CANONICAL_HASH_MISMATCH", StandardsValidationSeverity.FatalBlocker, "Manifest.ContentHash", null,
-                $"Computed canonical semantic hash ''{computedCanonicalHash}'' does not match manifest ContentHash ''{manifest.ContentHash}''. Possible metadata modification or tampering.");
+            if (string.IsNullOrWhiteSpace(r.RecordKey))
+            {
+                AddIssue("STD_RECORD_KEY_MISSING", StandardsValidationSeverity.FatalBlocker, "Records", null, "Record is missing RecordKey.");
+            }
+            if (!double.IsFinite(r.Value))
+            {
+                hasNonFiniteValues = true;
+                AddIssue("STD_NONFINITE_VALUE", StandardsValidationSeverity.FatalBlocker, "Records", r.RecordKey, $"Record ''{r.RecordKey}'' has non-finite value ''{r.Value}''.");
+            }
+            foreach (var (k, v) in r.NumericalConditions)
+            {
+                if (!double.IsFinite(v))
+                {
+                    hasNonFiniteValues = true;
+                    AddIssue("STD_NONFINITE_NUMERICAL_CONDITION", StandardsValidationSeverity.FatalBlocker, "Records", r.RecordKey,
+                        $"Record ''{r.RecordKey}'' has non-finite numerical condition ''{k}'' with value ''{v}''.");
+                }
+            }
+            if (string.IsNullOrWhiteSpace(r.Unit))
+            {
+                AddIssue("STD_UNIT_MISSING", StandardsValidationSeverity.Error, "Records", r.RecordKey, $"Record ''{r.RecordKey}'' is missing explicit physical unit declaration.");
+            }
+            if (string.IsNullOrWhiteSpace(r.ClauseReference))
+            {
+                AddIssue("STD_CLAUSE_MISSING", StandardsValidationSeverity.Warning, "Records", r.RecordKey, $"Record ''{r.RecordKey}'' lacks source clause locator.");
+            }
         }
 
         // 4. Duplicate and Conflicting Record Keys
@@ -229,21 +281,29 @@ public static class StandardsDataBundleValidator
             AddIssue("STD_DUPLICATE_KEY", StandardsValidationSeverity.FatalBlocker, "Records", dup, $"Duplicate record key ''{dup}'' detected. Keys must be globally unique within bundle.");
         }
 
-        // 5. Record Value Sanity and Units
-        foreach (var r in bundle.Records)
+        // 5. Canonical Semantic Content Hash Verification
+        if (isHashVersionSupported && !hasNonFiniteValues)
         {
-            if (!double.IsFinite(r.Value))
+            try
             {
-                AddIssue("STD_NONFINITE_VALUE", StandardsValidationSeverity.FatalBlocker, "Records", r.RecordKey, $"Record ''{r.RecordKey}'' has non-finite value ''{r.Value}''.");
+                var computedCanonicalHash = bundle.ComputeCanonicalHash();
+                if (string.IsNullOrWhiteSpace(manifest.ContentHash) ||
+                    !string.Equals(computedCanonicalHash, manifest.ContentHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    AddIssue("STD_CANONICAL_HASH_MISMATCH", StandardsValidationSeverity.FatalBlocker, "Manifest.ContentHash", null,
+                        $"Computed canonical semantic hash ''{computedCanonicalHash}'' does not match manifest ContentHash ''{manifest.ContentHash}''. Possible metadata modification or tampering.");
+                }
             }
-            if (string.IsNullOrWhiteSpace(r.Unit))
+            catch (Exception ex)
             {
-                AddIssue("STD_UNIT_MISSING", StandardsValidationSeverity.Error, "Records", r.RecordKey, $"Record ''{r.RecordKey}'' is missing explicit physical unit declaration.");
+                AddIssue("STD_CANONICAL_HASH_FAILED", StandardsValidationSeverity.FatalBlocker, "Manifest.ContentHash", null,
+                    $"Failed to compute canonical semantic hash: {ex.Message}");
             }
-            if (string.IsNullOrWhiteSpace(r.ClauseReference))
-            {
-                AddIssue("STD_CLAUSE_MISSING", StandardsValidationSeverity.Warning, "Records", r.RecordKey, $"Record ''{r.RecordKey}'' lacks source clause locator.");
-            }
+        }
+        else if (string.IsNullOrWhiteSpace(manifest.ContentHash))
+        {
+            AddIssue("STD_MANIFEST_HASH_MISSING", StandardsValidationSeverity.FatalBlocker, "Manifest.ContentHash", null,
+                "Manifest is missing a required ContentHash.");
         }
 
         // 6. Mandatory Coverage Verification
@@ -569,5 +629,136 @@ public static class StandardsDataBundleValidator
             return (false, $"Evidence file SHA-256 mismatch: computed {computedHash}, expected {manifest.ReviewTrace.EvidenceDocumentHash}.");
         }
         return (true, "Evidence file SHA-256 verified successfully.");
+    }
+
+    /// <summary>
+    /// Generates an unambiguous standards intake preflight report distinguishing cryptographic integrity,
+    /// local evidence file hash verification, human reviewer role separation, and calculation authorization.
+    /// </summary>
+    public static StandardsIntakePreflightReport GenerateIntakePreflight(
+        StandardsDataBundle bundle,
+        string? evidenceFilePath = null,
+        StandardReferenceCalculationFixture? referenceFixture = null,
+        ProcedureSelection? procedure = null,
+        string rawComponentFolder = "")
+    {
+        ArgumentNullException.ThrowIfNull(bundle);
+
+        var validationReport = Validate(bundle, procedure, rawComponentFolder: rawComponentFolder);
+        var manifest = bundle.Manifest;
+        var blockers = ImmutableArray.CreateBuilder<string>();
+
+        bool semanticHashValid = !validationReport.Issues.Any(i => i.Code == "STD_CANONICAL_HASH_MISMATCH" || i.Code == "STD_CANONICAL_HASH_FAILED" || i.Code == "STD_HASH_VERSION_UNSUPPORTED");
+        bool componentBytesCoherent = !validationReport.Issues.Any(i => i.Code == "STD_RECORD_BYTES_MISMATCH" || i.Code == "STD_COMPONENT_MISSING" || i.Code == "STD_HASH_MISMATCH" || i.Code == "STD_INTEGRITY_UNVERIFIED");
+        bool procedureCoverageValid = !validationReport.Issues.Any(i => i.Code == "STD_COVERAGE_UNDECLARED" || i.Code == "STD_COVERAGE_COUNT_MISMATCH");
+
+        EvidenceVerificationStatus evidenceStatus = EvidenceVerificationStatus.NotPerformed;
+        if (!string.IsNullOrWhiteSpace(evidenceFilePath))
+        {
+            if (!File.Exists(evidenceFilePath))
+            {
+                evidenceStatus = EvidenceVerificationStatus.MissingFile;
+                blockers.Add($"Evidence document not found at '{evidenceFilePath}'.");
+            }
+            else
+            {
+                using var stream = File.OpenRead(evidenceFilePath);
+                var computedSha = Convert.ToHexString(SHA256.HashData(stream));
+                if (string.Equals(computedSha, manifest.ReviewTrace?.EvidenceDocumentHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    evidenceStatus = EvidenceVerificationStatus.Verified;
+                }
+                else
+                {
+                    evidenceStatus = EvidenceVerificationStatus.HashMismatch;
+                    blockers.Add($"Evidence document SHA-256 mismatch (computed {computedSha}, declared {manifest.ReviewTrace?.EvidenceDocumentHash}).");
+                }
+            }
+        }
+        else
+        {
+            blockers.Add("Local review evidence document not provided (verification NotPerformed).");
+        }
+
+        HumanReviewStatus reviewStatus = HumanReviewStatus.Unverified;
+        if (manifest.ReviewTrace != null)
+        {
+            bool isSelfReview = string.Equals(
+                manifest.ReviewTrace.PreparerName?.Trim(),
+                manifest.ReviewTrace.ReviewerName?.Trim(),
+                StringComparison.OrdinalIgnoreCase);
+
+            if (!isSelfReview)
+            {
+                if (evidenceStatus == EvidenceVerificationStatus.Verified && manifest.ReviewTrace.IsIndependentReview)
+                {
+                    reviewStatus = HumanReviewStatus.EvidenceHashVerified;
+                }
+                else
+                {
+                    reviewStatus = HumanReviewStatus.SelfDeclaredMetadata;
+                }
+            }
+        }
+
+        if (reviewStatus != HumanReviewStatus.EvidenceHashVerified && reviewStatus != HumanReviewStatus.IndependentEngineerReviewed)
+        {
+            blockers.Add("Independent engineering review trace unverified.");
+        }
+
+        bool refCalcAvailable = referenceFixture != null &&
+                                !referenceFixture.IsSynthetic &&
+                                referenceFixture.Family == manifest.Family &&
+                                string.Equals(referenceFixture.Edition, manifest.Edition, StringComparison.OrdinalIgnoreCase);
+
+        if (!refCalcAvailable)
+        {
+            blockers.Add("Non-synthetic independent reference calculation benchmark not supplied.");
+        }
+
+        if (manifest.Rights == DataRightsClassification.SyntheticTestData)
+        {
+            blockers.Add("Synthetic test data strictly blocked from engineering calculation.");
+        }
+
+        if (!string.Equals(manifest.CanonicalHashAlgorithmVersion, "3.0", StringComparison.Ordinal))
+        {
+            blockers.Add($"Legacy canonical hash version '{manifest.CanonicalHashAlgorithmVersion}' cannot qualify new candidates; structural V3 is required.");
+        }
+
+        IntakeQualificationStatus overallStatus;
+        if (manifest.Rights == DataRightsClassification.SyntheticTestData || !string.Equals(manifest.CanonicalHashAlgorithmVersion, "3.0", StringComparison.Ordinal))
+        {
+            overallStatus = IntakeQualificationStatus.Blocked;
+        }
+        else if (validationReport.Issues.Any(i => i.Severity == StandardsValidationSeverity.FatalBlocker))
+        {
+            overallStatus = IntakeQualificationStatus.Invalid;
+        }
+        else if (reviewStatus == HumanReviewStatus.EvidenceHashVerified && refCalcAvailable)
+        {
+            overallStatus = IntakeQualificationStatus.ReadyForIndependentReview;
+        }
+        else
+        {
+            overallStatus = IntakeQualificationStatus.Unverified;
+        }
+
+        return new StandardsIntakePreflightReport(
+            manifest.BundleId,
+            manifest.Family,
+            manifest.Edition,
+            manifest.Rights,
+            manifest.CanonicalHashAlgorithmVersion,
+            semanticHashValid,
+            componentBytesCoherent,
+            procedureCoverageValid,
+            evidenceStatus,
+            reviewStatus,
+            refCalcAvailable,
+            overallStatus,
+            CanCalculateNormativePressures: false,
+            blockers.ToImmutable(),
+            DateTimeOffset.UtcNow);
     }
 }

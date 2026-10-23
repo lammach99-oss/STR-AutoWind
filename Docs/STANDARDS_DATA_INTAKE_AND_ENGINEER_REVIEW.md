@@ -116,11 +116,38 @@ Public, rights-safe JSON templates are available in `fixtures/standards/template
 
 ---
 
-## 9. Outstanding Requirements Before Sprint 4B
+---
 
-The following external engineering and legal items must be provided before Sprint 4B (Normative Pressure Calculations) can begin:
+## 10. Practical Standard-Specific Owner & Reviewer Checklists
 
-1. **Licensed ASCE 7-22 Primary Source:** Verification of Table 26.5-1, Table 26.6-1, Table 26.10-1, Table 26.13-1, Figure 27.3-1, and Table 27.3-1 against licensed text.
-2. **Licensed AS/NZS 1170.2:2021 Primary Source:** Verification of Section 2–5 tables and explicit confirmation of Amendment status from Standards Australia / Standards New Zealand primary sources.
-3. **Independent Engineering Sign-off Memo:** PDF review document signed by an independent licensed engineer (PE/SE or CPEng).
-4. **Hand Calculation Benchmark Fixtures:** Independently calculated flat and gable roof test cases with intermediate factors and net zone pressures.
+### A. ASCE/SEI 7-22 Intake Checklist
+- [ ] **Lawful License & Primary Access:** Lawful access to the official ASCE/SEI 7-22 standard publication (including Supplements 1 & 2 and official Errata).
+- [ ] **Governing Edition & Jurisdiction Basis:** Explicitly record jurisdiction-specific amendments and design code edition basis (e.g. IBC 2024 adopting ASCE 7-22).
+- [ ] **Scope & Method Isolation:** Isolate directional procedure (Chapter 27, Part 1) from envelope procedure (Chapter 28) and components & cladding (Chapter 30).
+- [ ] **Primary Table/Figure Locators:** Verify coefficient values against Table 26.5-1 (Wind Directionality Factor $K_d$), Table 26.6-1 (Ground Elevation Factor $K_e$), Table 26.10-1 (Velocity Pressure Exposure Coefficients $K_z$), Table 26.13-1 (Internal Pressure Coefficients $GC_{pi}$), Figure 27.3-1 ($C_p$ for walls and flat/gable roofs), and Table 27.3-1.
+- [ ] **Hand-Calculated Benchmark Reference Cases:**
+  - Flat roof case ($0^\circ$ slope, Exposure B/C, Risk Category II).
+  - Gable roof case ($15^\circ$ to $30^\circ$ slope, normal to ridge and parallel to ridge wind directions).
+  - Explicit intermediate factor verification ($q_z$, $G$, $C_p$, $GC_{pi}$) and net surface pressures.
+- [ ] **Independent PE/SE Review Memo:** PDF sign-off from a qualified structural engineer independent of data entry, with evidence SHA-256 placed in `manifest.json`.
+
+### B. AS/NZS 1170.2:2021 Intake Checklist
+- [ ] **Lawful License & Primary Access:** Lawful access to the official Standards Australia / Standards New Zealand AS/NZS 1170.2:2021 publication.
+- [ ] **Primary Amendment Applicability:** Lawful confirmation of Amendment 1:2023 and Amendment 2:2024 text from primary sources (no auto-approval by name alone).
+- [ ] **Regional Wind Speed & Multipliers:** Verify regional basic wind speeds ($V_R$), wind directional multipliers ($M_d$), terrain/height multipliers ($M_{z,cat}$), shield multipliers ($M_s$), and topographic multipliers ($M_t$).
+- [ ] **Aerodynamic Shape Factors:** Verify Table 5.1(A) to Table 5.3(C) external pressure coefficients ($C_{p,e}$) and internal pressure coefficients ($C_{p,i}$).
+- [ ] **Hand-Calculated Benchmark Reference Cases:**
+  - Flat roof case (Region A/B, Terrain Category 2/3, ULS/SLS limit states).
+  - Gable roof case with wind angles $0^\circ$ and $90^\circ$.
+- [ ] **Independent CPEng / Reviewer Memo:** Signed review memo placed in local private storage, with evidence SHA-256 recorded in `manifest.json`.
+
+---
+
+## 11. Current Intake Qualification Status (Sprint 4B.0)
+
+| Standard Family | Intake Preflight Status | Semantic & Byte Integrity | Independent Evidence Document | Production Calculation Gate |
+| :--- | :--- | :--- | :--- | :--- |
+| **ASCE 7-22** | **Blocked / MissingExternalEvidence** | Ready (V3 Hash & Fail-Closed API verified) | Missing (No private licensed source/memo supplied) | **Disabled** (`CanCalculateNormativePressures=false`) |
+| **AS/NZS 1170.2:2021** | **Blocked / MissingExternalEvidence** | Ready (V3 Hash & Fail-Closed API verified) | Missing (No private licensed source/memo supplied) | **Disabled** (`CanCalculateNormativePressures=false`) |
+
+**Exit Condition for Sprint 4B.0:** Software infrastructure, fail-closed validation, V3 canonical semantic encoding, and procedure-scoped selection contracts are 100% complete and verified. The repository is in an explicit **Ready for Independent Engineering Review** state. No design pressures can be authorized until external licensed sources and signed review evidence are supplied into local private storage.

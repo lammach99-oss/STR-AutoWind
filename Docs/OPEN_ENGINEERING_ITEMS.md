@@ -1,10 +1,10 @@
 # Open engineering items
 
-Sprint 4A, 4A.1, 4A.2, and 4A.3 establish the hardened versioned data foundation, manifest provenance, rights classification, component byte SHA256 verification, record-to-byte cryptographic coherence, collision-proof length-prefixed canonical hashing (V2), and fail-closed validation gates for ASCE 7-22 and AS/NZS 1170.2:2021. However, no licensed normative dataset is installed. Demo pressures and wall materials remain synthetic/illustrative. Both standard calculation engines and real engineering approval/assignment remain strictly blocked.
+Sprint 4A through 4B.0 establish the hardened versioned data foundation, manifest provenance, rights classification, component byte SHA256 verification, record-to-byte cryptographic coherence, structural canonical semantic hashing (V3; legacy V1/V2 for backward compatibility only), and fail-closed validation gates for ASCE 7-22 and AS/NZS 1170.2:2021. However, no licensed normative dataset is installed. Demo pressures and wall materials remain synthetic/illustrative. Both standard calculation engines and real engineering approval/assignment remain strictly blocked.
 
 ## Status baseline and remaining engineering tasks
 
-- **Software automated verification:** 297 unit and integration tests pass in both Debug and Release configurations with zero failures and zero skips. All six WPF smoke processes pass cleanly.
+- **Software automated verification:** 315 unit and integration tests pass in both Debug and Release configurations with zero failures and zero skips. All six WPF smoke processes pass cleanly.
 - **Physical ETABS benchmark execution:** Agent-reported Passed on private local model `artifacts/physical-benchmark-private/ETABS-BENCHMARK.EDB` in ETABS 23.2.0 (125/125 physical checks passed, exit code 0). The benchmark geometry pipeline is *fixture-directed* for roof-plane grouping and does not prove automatic roof-plane discovery on arbitrary real models.
 - **Independent external engineering sign-off:** Not established by the public repository; remains a separate required verification gate.
 - **SAP2000 physical qualification:** Remains Pending (no disposable SAP2000 27 model was qualified).
@@ -14,7 +14,7 @@ Sprint 4A, 4A.1, 4A.2, and 4A.3 establish the hardened versioned data foundation
 
 - Versioned, strongly typed standards data contracts (`StandardsDataContracts.cs`) separating ASCE 7-22 and AS/NZS 1170.2:2021 domain models without false shared abstractions.
 - Comprehensive canonical semantic hashing (`StandardsDataBundle.ComputeCanonicalHash()`) incorporating all engineering-significant metadata (locators, conditions, units, sign conventions, amendments, coverage matrix) while remaining invariant to JSON formatting/whitespace on disk.
-- Collision-proof canonical hashing algorithm V2 (`CANONICAL_STANDARDS_BUNDLE_V2`) with length-prefixed encoding preventing delimiter injection.
+- Structural canonical semantic hashing algorithm V3 (`CANONICAL_STANDARDS_BUNDLE_V3`) with length-prefixed encoding of individual items/fields preventing delimiter injection; legacy V1/V2 preserved for fixture compatibility only.
 - Source-byte and in-memory record coherence validation: rejects bundles where in-memory records differ from records parsed from verified raw component bytes (`STD_RECORD_BYTES_MISMATCH`).
 - Exact bidirectional numerical matching in `FindExactRecord()`, rejecting partial numerical condition maps and off-value queries.
 - Procedure-scoped system isolation: bundles legitimately containing both MWFRS and C&C records pass schema validation; system isolation is enforced at record lookup time.

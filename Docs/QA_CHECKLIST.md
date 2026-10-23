@@ -1,4 +1,10 @@
 # Executed qualification
+- [x] Sprint 4B.0: Fail-closed public validation boundary returning structured FatalBlockers without unhandled exceptions for unsupported hash versions, non-finite values/conditions, malformed JSON, and empty component declarations.
+- [x] Sprint 4B.0: Procedure identity, method, and limit-state scoping in FindRecordForProcedure requiring explicit record applicability metadata.
+- [x] Sprint 4B.0: Direct unscoped FindExactRecord invariant requiring explicit System condition when systemType is absent.
+- [x] Sprint 4B.0: Standards intake preflight reporting (GenerateIntakePreflight) distinguishing integrity, local evidence file hash, human review, and benchmark readiness.
+- [x] Sprint 4B.0: ASCE 7-22 and AS/NZS 1170.2:2021 intake checklists and Blocked/MissingExternalEvidence status reporting.
+- [x] Sprint 4B.0: 315 automated tests passing in Release configuration (0 failures, 0 skips).
 - [x] Sprint 4A.3: V3 structural canonical semantic hash (CANONICAL_STANDARDS_BUNDLE_V3) eliminating delimiter-injection ambiguity across nested collections.
 - [x] Sprint 4A.3: Full field comparison in RecordsMatch using StringComparison.Ordinal and comparing ApplicabilityNotes.
 - [x] Sprint 4A.3: Graceful structured handling of duplicate raw component keys (STD_DUPLICATE_SOURCE_KEY).
@@ -7,7 +13,7 @@
 - [x] Sprint 4A.3: Local evidence document preflight verification helper (VerifyEvidenceDocument).
 - [x] Sprint 4A.3: 297 automated tests passing in Release configuration (0 failures, 0 skips).
 - [x] Sprint 4A.2: Source-byte to in-memory record cryptographic coherence gate (STD_RECORD_BYTES_MISMATCH), detecting modified in-memory records even when raw file SHA256 and ContentHash match.
-- [x] Sprint 4A.2: Delimiter-injection collision-proof canonical hashing algorithm V2 (CANONICAL_STANDARDS_BUNDLE_V2) using length-prefixed UTF-8 segments.
+- [x] Sprint 4A.2: Length-prefixed canonical hashing algorithm V2 (CANONICAL_STANDARDS_BUNDLE_V2); superseded by structural V3 for qualification candidates.
 - [x] Sprint 4A.2: Strict bidirectional numerical condition matching in FindExactRecord, rejecting lookups when records have numerical dimensions but query lacks them.
 - [x] Sprint 4A.2: Exact IEEE 64-bit numerical equality in FindExactRecord without loose floating-point tolerances.
 - [x] Sprint 4A.2: Procedure-scoped system isolation allowing legitimate combined MWFRS+C&C bundles while isolating record retrieval by procedure system type.

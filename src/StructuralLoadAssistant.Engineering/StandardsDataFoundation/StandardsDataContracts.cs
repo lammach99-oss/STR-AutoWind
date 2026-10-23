@@ -233,4 +233,77 @@ public sealed record StandardsValidationReport(
     string BundleId,
     string ContentHash,
     StandardDataLifecycleState State);
+/// <summary>Status of local evidence file existence and cryptographic hash verification.</summary>
+public enum EvidenceVerificationStatus
+{
+    /// <summary>No local evidence file path was provided for verification.</summary>
+    NotPerformed = 0,
 
+    /// <summary>Declared evidence document file does not exist at the specified path.</summary>
+    MissingFile = 1,
+
+    /// <summary>Local evidence document file exists but its SHA-256 does not match the manifest.</summary>
+    HashMismatch = 2,
+
+    /// <summary>Local evidence document exists and its SHA-256 exactly matches the manifest.</summary>
+    Verified = 3
+}
+
+/// <summary>Status of human engineering review provenance and verification.</summary>
+public enum HumanReviewStatus
+{
+    /// <summary>No human engineering review trace provided or preparer equals reviewer.</summary>
+    Unverified = 0,
+
+    /// <summary>Preparer and reviewer names/organizations declared in metadata only; evidence file unverified.</summary>
+    SelfDeclaredMetadata = 1,
+
+    /// <summary>Evidence document file SHA-256 matches manifest declared hash.</summary>
+    EvidenceHashVerified = 2,
+
+    /// <summary>Independent external engineering review with formal digital attestation verified.</summary>
+    IndependentEngineerReviewed = 3
+}
+
+/// <summary>Overall qualification readiness status of a standards intake dataset.</summary>
+public enum IntakeQualificationStatus
+{
+    /// <summary>Mandatory manifest or dataset component files are missing.</summary>
+    Missing = 0,
+
+    /// <summary>Dataset has fatal schema, hash, or byte mismatch errors.</summary>
+    Invalid = 1,
+
+    /// <summary>Dataset parsed and structurally intact, but lacks independent review evidence.</summary>
+    Unverified = 2,
+
+    /// <summary>Dataset is fully valid, licensed, and ready for independent engineering peer review.</summary>
+    ReadyForIndependentReview = 3,
+
+    /// <summary>Dataset passed independent engineering sign-off and reference benchmark qualification.</summary>
+    EngineerReviewed = 4,
+
+    /// <summary>Dataset is blocked from engineering calculation (e.g. synthetic test fixtures or unverified normative text).</summary>
+    Blocked = 5
+}
+
+/// <summary>
+/// Preflight qualification report evaluating standards data intake readiness,
+/// distinguishing cryptographic integrity, evidence file hash, human review, and calculation eligibility.
+/// </summary>
+public sealed record StandardsIntakePreflightReport(
+    string BundleId,
+    StandardFamily Family,
+    string Edition,
+    DataRightsClassification Rights,
+    string CanonicalHashAlgorithmVersion,
+    bool SemanticHashValid,
+    bool ComponentBytesCoherent,
+    bool ProcedureCoverageValid,
+    EvidenceVerificationStatus EvidenceFileStatus,
+    HumanReviewStatus HumanReviewStatus,
+    bool ReferenceCalculationAvailable,
+    IntakeQualificationStatus OverallQualificationStatus,
+    bool CanCalculateNormativePressures,
+    ImmutableArray<string> Blockers,
+    DateTimeOffset EvaluatedAt);
