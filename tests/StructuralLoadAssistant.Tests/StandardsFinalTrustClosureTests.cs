@@ -166,7 +166,7 @@ public sealed class StandardsFinalTrustClosureTests
     {
         var mwfrsRecord = new CoefficientRecord(
             "MWFRS_REC", "Table 26.5-1", "26.5", "ExternalPressure",
-            ImmutableDictionary<string, string>.Empty.Add("System", "MWFRS").Add("Zone", "1").Add("ProcedureId", "Ch27").Add("Method", "Directional"),
+            ImmutableDictionary<string, string>.Empty.Add("System", "MWFRS").Add("Zone", "1").Add("ProcedureId", "Ch27").Add("Method", "Directional").Add("LimitState", "Uls"),
             ImmutableDictionary<string, double>.Empty,
             -0.5, "dimensionless", "+=P", InterpolationPolicy.None);
 

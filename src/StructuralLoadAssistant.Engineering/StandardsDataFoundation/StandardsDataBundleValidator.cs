@@ -648,9 +648,38 @@ public static class StandardsDataBundleValidator
         var manifest = bundle.Manifest;
         var blockers = ImmutableArray.CreateBuilder<string>();
 
-        bool semanticHashValid = !validationReport.Issues.Any(i => i.Code == "STD_CANONICAL_HASH_MISMATCH" || i.Code == "STD_CANONICAL_HASH_FAILED" || i.Code == "STD_HASH_VERSION_UNSUPPORTED");
-        bool componentBytesCoherent = !validationReport.Issues.Any(i => i.Code == "STD_RECORD_BYTES_MISMATCH" || i.Code == "STD_COMPONENT_MISSING" || i.Code == "STD_HASH_MISMATCH" || i.Code == "STD_INTEGRITY_UNVERIFIED");
-        bool procedureCoverageValid = !validationReport.Issues.Any(i => i.Code == "STD_COVERAGE_UNDECLARED" || i.Code == "STD_COVERAGE_COUNT_MISMATCH");
+        bool hasSemanticHashIssue = validationReport.Issues.Any(i =>
+            i.Code == "STD_CANONICAL_HASH_MISMATCH" ||
+            i.Code == "STD_CANONICAL_HASH_FAILED" ||
+            i.Code == "STD_HASH_VERSION_UNSUPPORTED" ||
+            i.Code == "STD_MANIFEST_HASH_MISSING" ||
+            i.Code == "STD_NONFINITE_VALUE" ||
+            i.Code == "STD_NONFINITE_NUMERICAL_CONDITION" ||
+            i.Code == "STD_RECORD_KEY_MISSING");
+        bool semanticHashValid = !string.IsNullOrWhiteSpace(manifest.ContentHash) && !hasSemanticHashIssue;
+
+        bool hasComponentBytesIssue = validationReport.Issues.Any(i =>
+            i.Code == "STD_RECORD_BYTES_MISMATCH" ||
+            i.Code == "STD_COMPONENT_MISSING" ||
+            i.Code == "STD_HASH_MISMATCH" ||
+            i.Code == "STD_INTEGRITY_UNVERIFIED" ||
+            i.Code == "STD_COMPONENT_FILES_EMPTY" ||
+            i.Code == "STD_COMPONENT_JSON_MALFORMED" ||
+            i.Code == "STD_COMPONENT_LOAD_FAILED" ||
+            i.Code == "STD_EXTRA_COMPONENT" ||
+            i.Code == "STD_DUPLICATE_SOURCE_KEY" ||
+            i.Code == "STD_UNSAFE_PATH");
+        bool componentBytesCoherent = bundle.IsBytesVerified && !hasComponentBytesIssue;
+
+        bool hasProcedureCoverageIssue = validationReport.Issues.Any(i =>
+            i.Code == "STD_COVERAGE_UNDECLARED" ||
+            i.Code == "STD_COVERAGE_COUNT_MISMATCH" ||
+            i.Code == "STD_MANDATORY_CATEGORY_EMPTY" ||
+            i.Code == "STD_INTERNAL_PRESSURE_INCOMPLETE" ||
+            i.Code == "STD_FAMILY_MISMATCH" ||
+            i.Code == "STD_EDITION_UNSUPPORTED" ||
+            i.Code == "STD_AMENDMENT_UNRESOLVED");
+        bool procedureCoverageValid = !manifest.CoverageMatrix.IsDefaultOrEmpty && !hasProcedureCoverageIssue;
 
         EvidenceVerificationStatus evidenceStatus = EvidenceVerificationStatus.NotPerformed;
         if (!string.IsNullOrWhiteSpace(evidenceFilePath))
@@ -706,14 +735,67 @@ public static class StandardsDataBundleValidator
             blockers.Add("Independent engineering review trace unverified.");
         }
 
-        bool refCalcAvailable = referenceFixture != null &&
-                                !referenceFixture.IsSynthetic &&
-                                referenceFixture.Family == manifest.Family &&
-                                string.Equals(referenceFixture.Edition, manifest.Edition, StringComparison.OrdinalIgnoreCase);
-
-        if (!refCalcAvailable)
+        bool refCalcAvailable = false;
+        if (referenceFixture == null)
         {
             blockers.Add("Non-synthetic independent reference calculation benchmark not supplied.");
+        }
+        else if (referenceFixture.IsSynthetic || referenceFixture.RightsClassification == DataRightsClassification.SyntheticTestData)
+        {
+            blockers.Add("Supplied reference calculation fixture is synthetic test data; cannot qualify production intake.");
+        }
+        else if (referenceFixture.Family != manifest.Family ||
+                 !string.Equals(referenceFixture.Edition, manifest.Edition, StringComparison.OrdinalIgnoreCase))
+        {
+            blockers.Add($"Supplied reference calculation fixture family/edition ({referenceFixture.Family} {referenceFixture.Edition}) does not match manifest ({manifest.Family} {manifest.Edition}).");
+        }
+        else if (procedure != null && !string.IsNullOrWhiteSpace(procedure.ProcedureId) &&
+                 !string.Equals(referenceFixture.ProcedureId, procedure.ProcedureId, StringComparison.OrdinalIgnoreCase))
+        {
+            blockers.Add($"Supplied reference calculation fixture procedure ({referenceFixture.ProcedureId}) does not match requested procedure ({procedure.ProcedureId}).");
+        }
+        else if (referenceFixture.ExpectedFactors.IsEmpty && referenceFixture.ExpectedPressures.IsEmpty)
+        {
+            blockers.Add("Supplied reference calculation fixture contains zero expected factor and pressure assertions.");
+        }
+        else
+        {
+            bool hasInvalidTolerance = false;
+            foreach (var ef in referenceFixture.ExpectedFactors)
+            {
+                if (!double.IsFinite(ef.ExpectedValue) || !double.IsFinite(ef.Tolerance) || ef.Tolerance < 0)
+                {
+                    hasInvalidTolerance = true;
+                    break;
+                }
+            }
+            if (!hasInvalidTolerance)
+            {
+                foreach (var ep in referenceFixture.ExpectedPressures)
+                {
+                    if (!double.IsFinite(ep.ExpectedNetPressurePa) ||
+                        !double.IsFinite(ep.AbsoluteTolPa) || ep.AbsoluteTolPa < 0 ||
+                        !double.IsFinite(ep.RelativeTol) || ep.RelativeTol < 0)
+                    {
+                        hasInvalidTolerance = true;
+                        break;
+                    }
+                }
+            }
+
+            if (hasInvalidTolerance)
+            {
+                blockers.Add("Supplied reference calculation fixture contains non-finite values or invalid negative tolerances.");
+            }
+            else if (referenceFixture.ReviewTrace == null || !referenceFixture.ReviewTrace.IsIndependentReview ||
+                     string.Equals(referenceFixture.ReviewTrace.PreparerName?.Trim(), referenceFixture.ReviewTrace.ReviewerName?.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                blockers.Add("Supplied reference calculation fixture lacks verified independent engineering review attestation (self-review or unverified reviewer).");
+            }
+            else
+            {
+                refCalcAvailable = true;
+            }
         }
 
         if (manifest.Rights == DataRightsClassification.SyntheticTestData)
@@ -726,16 +808,28 @@ public static class StandardsDataBundleValidator
             blockers.Add($"Legacy canonical hash version '{manifest.CanonicalHashAlgorithmVersion}' cannot qualify new candidates; structural V3 is required.");
         }
 
+        // Aggregate all validation report errors and fatal blockers into blockers list
+        foreach (var iss in validationReport.Issues)
+        {
+            if (iss.Severity >= StandardsValidationSeverity.Error)
+            {
+                blockers.Add($"[{iss.Severity}] {iss.Code}: {iss.Message}");
+            }
+        }
+
         IntakeQualificationStatus overallStatus;
+        bool hasFatalBlocker = validationReport.Issues.Any(i => i.Severity == StandardsValidationSeverity.FatalBlocker);
+        bool hasError = validationReport.Issues.Any(i => i.Severity == StandardsValidationSeverity.Error);
+
         if (manifest.Rights == DataRightsClassification.SyntheticTestData || !string.Equals(manifest.CanonicalHashAlgorithmVersion, "3.0", StringComparison.Ordinal))
         {
             overallStatus = IntakeQualificationStatus.Blocked;
         }
-        else if (validationReport.Issues.Any(i => i.Severity == StandardsValidationSeverity.FatalBlocker))
+        else if (hasFatalBlocker || hasError || !semanticHashValid || !componentBytesCoherent)
         {
             overallStatus = IntakeQualificationStatus.Invalid;
         }
-        else if (reviewStatus == HumanReviewStatus.EvidenceHashVerified && refCalcAvailable)
+        else if (reviewStatus == HumanReviewStatus.EvidenceHashVerified && refCalcAvailable && procedureCoverageValid)
         {
             overallStatus = IntakeQualificationStatus.ReadyForIndependentReview;
         }

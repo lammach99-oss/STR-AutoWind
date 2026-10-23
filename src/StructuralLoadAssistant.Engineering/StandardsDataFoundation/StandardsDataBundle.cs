@@ -247,14 +247,16 @@ public sealed class StandardsDataBundle
             return false;
         }
 
-        if (record.CategoricalConditions.TryGetValue("LimitState", out var ls))
+        if (!record.CategoricalConditions.TryGetValue("LimitState", out var ls))
         {
-            if (!string.Equals(ls, procedure.LimitState.ToString(), StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(ls, "Both", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(ls, "All", StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
+            return false;
+        }
+
+        if (!string.Equals(ls, procedure.LimitState.ToString(), StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(ls, "Both", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(ls, "All", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
         }
 
         return true;

@@ -1,3 +1,8 @@
+- [x] Sprint 4B.0.1: Readiness gate truthfulness preventing ReadyForIndependentReview when Error-severity issues exist.
+- [x] Sprint 4B.0.1: Robust positive-proof integrity booleans (SemanticHashValid, ComponentBytesCoherent, ProcedureCoverageValid).
+- [x] Sprint 4B.0.1: Deep reference calculation benchmark validation (tolerances, assertions, non-synthetic, independent attestation).
+- [x] Sprint 4B.0.1: Mandatory LimitState categorical condition required for procedure-scoped coefficient records.
+- [x] Sprint 4B.0.1: 325 automated tests passing in Release and Debug configurations (0 failures, 0 skips).
 # Executed qualification
 - [x] Sprint 4B.0: Fail-closed public validation boundary returning structured FatalBlockers without unhandled exceptions for unsupported hash versions, non-finite values/conditions, malformed JSON, and empty component declarations.
 - [x] Sprint 4B.0: Procedure identity, method, and limit-state scoping in FindRecordForProcedure requiring explicit record applicability metadata.

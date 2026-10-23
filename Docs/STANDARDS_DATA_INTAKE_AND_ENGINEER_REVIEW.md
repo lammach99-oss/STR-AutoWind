@@ -143,11 +143,18 @@ Public, rights-safe JSON templates are available in `fixtures/standards/template
 
 ---
 
-## 11. Current Intake Qualification Status (Sprint 4B.0)
+## 11. Current Intake Qualification Status (Sprint 4B.0.1)
+
+### Storage & .gitignore Clarification
+Private directories and protected formats are strictly isolated:
+- Untracked private fixture roots: fixtures/standards/private/<family>/<dataset-id>/
+- Untracked private artifact roots: artifacts/standards-private/
+- The root .gitignore explicitly excludes fixtures/standards/private/, artifacts/standards-private/, and *.pdf. Private workbooks, data models, and proprietary documents must always be placed within these designated private directories to prevent accidental repository staging.
+
 
 | Standard Family | Intake Preflight Status | Semantic & Byte Integrity | Independent Evidence Document | Production Calculation Gate |
 | :--- | :--- | :--- | :--- | :--- |
 | **ASCE 7-22** | **Blocked / MissingExternalEvidence** | Ready (V3 Hash & Fail-Closed API verified) | Missing (No private licensed source/memo supplied) | **Disabled** (`CanCalculateNormativePressures=false`) |
 | **AS/NZS 1170.2:2021** | **Blocked / MissingExternalEvidence** | Ready (V3 Hash & Fail-Closed API verified) | Missing (No private licensed source/memo supplied) | **Disabled** (`CanCalculateNormativePressures=false`) |
 
-**Exit Condition for Sprint 4B.0:** Software infrastructure, fail-closed validation, V3 canonical semantic encoding, and procedure-scoped selection contracts are 100% complete and verified. The repository is in an explicit **Ready for Independent Engineering Review** state. No design pressures can be authorized until external licensed sources and signed review evidence are supplied into local private storage.
+**Exit Condition for Sprint 4B.0.1:** Bounded qualification preflight truthfulness, procedure-scoped LimitState enforcement, deep reference fixture eligibility, and complete blocker aggregation are fully implemented and verified with 325 automated tests and 6 WPF smoke passes. Software infrastructure, fail-closed validation, V3 canonical semantic encoding, and procedure-scoped selection contracts are 100% complete and verified. The repository is in an explicit **Ready for Independent Engineering Review** state. No design pressures can be authorized until external licensed sources and signed review evidence are supplied into local private storage.
