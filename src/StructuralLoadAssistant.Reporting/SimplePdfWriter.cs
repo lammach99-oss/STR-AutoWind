@@ -44,7 +44,12 @@ public sealed class SimplePdfWriter
         foreach (var rawLine in rawLines)
         {
             string clean = rawLine.TrimEnd('\r');
-            if (clean.Length <= 92)
+            // Courier is monospaced at 0.6 * fontSize per character. Headings are
+            // rendered larger than body text (12pt / 10pt vs 9pt), so they must
+            // wrap earlier or they run off the right edge of the 595pt page
+            // (40pt margins leave 515pt of usable width).
+            int maxChars = clean.StartsWith("# ") ? 70 : clean.StartsWith("## ") ? 84 : 92;
+            if (clean.Length <= maxChars)
             {
                 AddLine(clean);
             }
@@ -52,10 +57,10 @@ public sealed class SimplePdfWriter
             {
                 // Wrap gracefully so wide tables and long formulas fit without right-edge clipping
                 string rem = clean;
-                while (rem.Length > 92)
+                while (rem.Length > maxChars)
                 {
-                    int cut = rem.LastIndexOf(' ', 92);
-                    if (cut <= 15) cut = 92;
+                    int cut = rem.LastIndexOf(' ', maxChars);
+                    if (cut <= 15) cut = maxChars;
                     AddLine(rem.Substring(0, cut));
                     rem = "  " + rem.Substring(cut).TrimStart();
                 }
@@ -81,7 +86,11 @@ public sealed class SimplePdfWriter
         void WriteLine(string s) { writer.Write(s + "\n"); writer.Flush(); }
 
         WriteLine("%PDF-1.4");
-        WriteLine("%\xE2\xE3\xCF\xD3");
+        // Binary marker comment (tells readers the file contains binary data).
+        // It must be written as raw bytes: through the ASCII StreamWriter the
+        // high bytes were previously emitted as literal '?' characters.
+        writer.Flush();
+        ms.Write(new byte[] { 0x25, 0xE2, 0xE3, 0xCF, 0xD3, 0x0A }, 0, 6);
 
         // Object 1: Catalog
         offsets.Add(ms.Position);
@@ -168,6 +177,13 @@ public sealed class SimplePdfWriter
             WriteLine("endobj");
         }
 
+        // Info object: carries the document Title that Build() callers set.
+        int infoObjNum = offsets.Count + 1;
+        offsets.Add(ms.Position);
+        WriteLine($"{infoObjNum} 0 obj");
+        WriteLine($"<< /Title ({EscapePdf(Title)}) /Subject ({EscapePdf(Watermark)}) >>");
+        WriteLine("endobj");
+
         long startXref = ms.Position;
         WriteLine("xref");
         WriteLine($"0 {offsets.Count + 1}");
@@ -178,7 +194,7 @@ public sealed class SimplePdfWriter
         }
 
         WriteLine("trailer");
-        WriteLine($"<< /Size {offsets.Count + 1} /Root 1 0 R >>");
+        WriteLine($"<< /Size {offsets.Count + 1} /Root 1 0 R /Info {infoObjNum} 0 R >>");
         WriteLine("startxref");
         WriteLine($"{startXref}");
         WriteLine("%%EOF");
@@ -189,13 +205,34 @@ public sealed class SimplePdfWriter
 
     private static string EscapePdf(string s)
     {
+        // The Type1 Courier font used here has no Unicode encoding, so text is
+        // transliterated to ASCII instead of being silently blanked:
+        // - accents/diacritics are stripped via canonical decomposition
+        //   (e.g. Vietnamese and other Latin-script names stay readable),
+        // - known symbols and punctuation get an explicit ASCII rendering,
+        // - only characters with no reasonable rendering become a space.
         var sb = new StringBuilder();
-        foreach (char c in s)
+        string decomposed = s.Normalize(NormalizationForm.FormD);
+        foreach (char c in decomposed)
         {
+            if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) == System.Globalization.UnicodeCategory.NonSpacingMark)
+            {
+                continue; // diacritic of the preceding base letter: drop it, keep the letter
+            }
             if (c is '(' or ')' or '\\') sb.Append('\\').Append(c);
+            else if (c == '\t') sb.Append("  ");
             else if (c >= 32 && c <= 126) sb.Append(c);
-            else if (c == 'θ') sb.Append("theta");
+            else if (c == 'đ') sb.Append('d');
+            else if (c == 'Đ') sb.Append('D');
+            else if (c == 'θ' || c == 'Θ') sb.Append("theta");
             else if (c == 'Δ') sb.Append("Delta");
+            else if (c == 'α') sb.Append("alpha");
+            else if (c == 'β') sb.Append("beta");
+            else if (c == 'λ') sb.Append("lambda");
+            else if (c == 'μ') sb.Append("mu");
+            else if (c == 'π') sb.Append("pi");
+            else if (c == 'ρ') sb.Append("rho");
+            else if (c == 'φ') sb.Append("phi");
             else if (c == '≤') sb.Append("<=");
             else if (c == '≥') sb.Append(">=");
             else if (c == '±') sb.Append("+/-");
@@ -203,8 +240,14 @@ public sealed class SimplePdfWriter
             else if (c == '°') sb.Append(" deg");
             else if (c == '²') sb.Append("^2");
             else if (c == '³') sb.Append("^3");
-            else if (c == 'ρ') sb.Append("rho");
-            else if (c == 'φ') sb.Append("phi");
+            else if (c == '–' || c == '—') sb.Append('-');
+            else if (c == '‘' || c == '’') sb.Append('\'');
+            else if (c == '“' || c == '”') sb.Append('"');
+            else if (c == '→') sb.Append("->");
+            else if (c == '←') sb.Append("<-");
+            else if (c == '•') sb.Append('-');
+            else if (c == '…') sb.Append("...");
+            else if (c == '✓') sb.Append("OK");
             else sb.Append(' ');
         }
         return sb.ToString();
