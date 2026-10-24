@@ -43,7 +43,8 @@ public class ReportWiringRegressionTests
         string md = builder.BuildMarkdown(model, run);
 
         Assert.Contains(run.Id, md);
-        Assert.Contains("833.68", md);
+        // ASCE reports render in imperial units: qh 833.68 Pa = 17.41 lb/ft2
+        Assert.Contains("17.41", md);
         Assert.DoesNotContain("demo-pressure-ASCE7_22-missing", md);
     }
 
@@ -67,8 +68,9 @@ public class ReportWiringRegressionTests
         var builder = new DetailedReportBuilder();
         string md = builder.BuildMarkdown(model, run);
 
-        // Must bind actual 833.68 and not generic placeholder "As calculated"
-        Assert.Contains("833.68 Pa", md);
+        // Must bind the actual qh (833.68 Pa, rendered 17.41 lb/ft2 for ASCE)
+        // and not a generic placeholder like "As calculated"
+        Assert.Contains("17.41 lb/ft2", md);
         Assert.Contains("NOT CHECKED", md);
     }
 }

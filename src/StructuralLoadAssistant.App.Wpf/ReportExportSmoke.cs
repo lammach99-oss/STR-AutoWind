@@ -66,48 +66,27 @@ public sealed partial class MainWindow
         Check(summary.Contains(runId), "Summary must contain run ID");
         Check(summary.Contains(runHash[..8]), "Summary must contain run content hash");
 
-        // 6. Export all 5 report formats
+        // 6. Export the report product: summary PDF only (2026-10-24 decision).
+        // The full step-by-step calculation stays in the UX; it is not exported.
         string xlsxPath = Path.Combine(outputDir, "smoke-report.xlsx");
         string pdfPath = Path.Combine(outputDir, "smoke-report.pdf");
-        string htmlPath = Path.Combine(outputDir, "smoke-report.html");
-        string mdPath = Path.Combine(outputDir, "smoke-report.md");
-        string jsonPath = Path.Combine(outputDir, "smoke-report.json");
 
-        vm.ExportDetailedReport(xlsxPath);
         vm.ExportDetailedReport(pdfPath);
-        vm.ExportDetailedReport(htmlPath);
-        vm.ExportDetailedReport(mdPath);
-        vm.ExportDetailedReport(jsonPath);
         await Idle();
 
-        Check(File.Exists(xlsxPath) && new FileInfo(xlsxPath).Length > 0, "XLSX export must exist and be non-empty");
-        Check(File.Exists(pdfPath) && new FileInfo(pdfPath).Length > 0, "PDF export must exist and be non-empty");
-        Check(File.Exists(htmlPath) && new FileInfo(htmlPath).Length > 0, "HTML export must exist and be non-empty");
-        Check(File.Exists(mdPath) && new FileInfo(mdPath).Length > 0, "Markdown export must exist and be non-empty");
-        Check(File.Exists(jsonPath) && new FileInfo(jsonPath).Length > 0, "JSON export must exist and be non-empty");
-
-        // Verify XLSX formula tags <f>
-        using (var zip = ZipFile.OpenRead(xlsxPath))
-        {
-            var sheet1 = zip.GetEntry("xl/worksheets/sheet1.xml");
-            Check(sheet1 != null, "XLSX must have sheet1.xml");
-            using var reader = new StreamReader(sheet1!.Open());
-            string xml = reader.ReadToEnd();
-            Check(xml.Contains("<f>"), "XLSX sheet1 must contain dynamic formulas <f>");
-        }
-
-        // Verify PDF contains trace nodes
+        Check(File.Exists(pdfPath) && new FileInfo(pdfPath).Length > 0, "Summary PDF export must exist and be non-empty");
         byte[] pdfBytes = File.ReadAllBytes(pdfPath);
+        Check(System.Text.Encoding.ASCII.GetString(pdfBytes, 0, 4) == "%PDF", "Summary export must be a PDF file");
         string pdfText = System.Text.Encoding.ASCII.GetString(pdfBytes);
-        foreach (var node in run.TraceNodes)
-        {
-            Check(pdfText.Contains(node.NodeId), "PDF must contain trace node " + node.NodeId);
-        }
+        Check(pdfText.Contains("SUMMARY REPORT"), "Summary PDF must be the summary report");
+        Check(pdfText.Contains(runId), "Summary PDF must contain run ID");
+        Check(pdfText.Contains(runHash), "Summary PDF must contain exact run content hash");
+        Check(!pdfText.Contains("FORMULA LEDGER"), "Summary PDF must not contain the detailed formula ledger (UX only)");
 
-        // Verify JSON contains exact run ID and content hash
-        string jsonText = File.ReadAllText(jsonPath);
-        Check(jsonText.Contains(runId), "JSON must contain run ID");
-        Check(jsonText.Contains(runHash), "JSON must contain exact content hash");
+        // Any requested extension is normalised to the summary PDF.
+        vm.ExportDetailedReport(xlsxPath);
+        await Idle();
+        Check(File.Exists(pdfPath), "Export with a non-PDF path must still produce the summary PDF");
 
         // 7. Verify invalidation on wind state change
         vm.Direction = WindDirection.NegativeY;

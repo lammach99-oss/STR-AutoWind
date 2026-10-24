@@ -44,7 +44,8 @@ public class DetailedReportBuilderTests
         Assert.Contains("## 7. MANUAL VERIFICATION WORKSHEET", md);
         Assert.Contains("## APPENDIX A: VALIDATION & BLOCKED PROCEDURES", md);
         Assert.Contains("## APPENDIX B: IMMUTABLE AUDIT TRAIL", md);
-        Assert.Contains("833.68", md);
+        // ASCE reports render in imperial units: qh 833.68 Pa = 17.41 lb/ft2
+        Assert.Contains("17.41", md);
     }
 
     [Fact]
