@@ -292,14 +292,19 @@ public class Sprint4B3RegressionTests
         string sheetXml = reader.ReadToEnd();
         Assert.Contains(expectedId, sheetXml);
 
-        // Numeric pressure parity: 833.68 Pa appears across all formats
+        // Numeric pressure parity, per format's unit system (2026-10-24 decision):
+        // canonical SI value (833.68 Pa) in the machine-readable JSON and the
+        // SI-internal Excel workbook; the same quantity rendered in ASCE
+        // imperial units (17.41 lb/ft2) in the text formats (MD/HTML/PDF).
         double qh = run.ComputedQuantities["qh"];
         string qhStr = qh.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+        string qhDisplay = ReportUnitProfile.ForStandard(run.Request.StandardEdition)
+            .PressureValue(qh).ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
 
         Assert.Contains(qhStr, json);
-        Assert.Contains(qhStr, md);
-        Assert.Contains(qhStr, html);
-        Assert.Contains(qhStr, pdfText);
+        Assert.Contains(qhDisplay, md);
+        Assert.Contains(qhDisplay, html);
+        Assert.Contains(qhDisplay, pdfText);
         Assert.Contains(qhStr, sheetXml);
     }
 }

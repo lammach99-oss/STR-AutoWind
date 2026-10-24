@@ -603,13 +603,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             throw new InvalidOperationException("No engineering calculation run selected. Calculate or select an engineering calculation run before exporting detailed reports.");
         var model = Session.BuildReport(Definition());
         var builder = new DetailedReportBuilder();
-        string ext = Path.GetExtension(path).ToLowerInvariant();
-        if (ext == ".xlsx") { File.WriteAllBytes(path, builder.BuildExcel(model, CurrentEngineeringRun)); }
-        else if (ext == ".pdf") { File.WriteAllBytes(path, builder.BuildPdf(model, CurrentEngineeringRun)); }
-        else if (ext == ".html") { File.WriteAllText(path, builder.BuildHtml(model, CurrentEngineeringRun), System.Text.Encoding.UTF8); }
-        else if (ext == ".json") { File.WriteAllText(path, builder.BuildJson(model, CurrentEngineeringRun), System.Text.Encoding.UTF8); }
-        else { File.WriteAllText(path, builder.BuildMarkdown(model, CurrentEngineeringRun), System.Text.Encoding.UTF8); }
-        Status = $"Exported detailed report to {path}";
+        // Exported report product (2026-10-24 decision): summary PDF only, in the
+        // governing standard's units. The full step-by-step calculation stays in
+        // this UX (ReportText); it is not exported in any format.
+        path = Path.ChangeExtension(path, ".pdf");
+        File.WriteAllBytes(path, builder.BuildSummaryPdf(model, CurrentEngineeringRun));
+        Status = $"Exported summary report (PDF) to {path}";
         Refresh();
     }
 }

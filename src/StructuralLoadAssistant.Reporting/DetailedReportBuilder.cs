@@ -30,22 +30,9 @@ public sealed class DetailedReportBuilder
     public string BuildMarkdown(ReportModel model, EngineeringCalculationRun? calcRun = null)
     {
         ArgumentNullException.ThrowIfNull(model);
-        if (calcRun != null)
-        {
-            // P0-C: Fail closed on contradictory standard / manifest identities
-            string runFamily = calcRun.Request.StandardEdition.Contains("AS/NZS", StringComparison.OrdinalIgnoreCase) ? "AS/NZS" : "ASCE";
-            string manifestEdition = model.Manifest.Edition;
-            bool manifestIsAsNz = manifestEdition.Contains("AS/NZS", StringComparison.OrdinalIgnoreCase) || manifestEdition.Contains("1170", StringComparison.OrdinalIgnoreCase);
-            bool manifestIsAsce = manifestEdition.Contains("ASCE", StringComparison.OrdinalIgnoreCase);
-            if ((runFamily == "AS/NZS" && !manifestIsAsNz) || (runFamily == "ASCE" && !manifestIsAsce))
-            {
-                throw new InvalidOperationException($"Report identity mismatch: Calculation run standard '{calcRun.Request.StandardEdition}' does not match model manifest edition '{manifestEdition}'.");
-            }
-            if (!string.IsNullOrEmpty(calcRun.Request.ProjectId) && !string.Equals(calcRun.Request.ProjectId, model.Project.Id, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException($"Report identity mismatch: Calculation run project '{calcRun.Request.ProjectId}' does not match model project '{model.Project.Id}'.");
-            }
-        }
+        // P0-C: Fail closed on contradictory standard / manifest identities
+        ReportIdentityGuard.ThrowIfMismatch(model, calcRun);
+        var units = ReportUnitProfile.ForStandard(calcRun?.Request.StandardEdition ?? model.Manifest.Edition);
         var sb = new StringBuilder();
         void Line(string s = "") => sb.Append(s).Append('\n');
 
@@ -75,6 +62,7 @@ public sealed class DetailedReportBuilder
             foreach (var r in model.Manifest.Revisions) Line($"- Revision / Amendment: {r}");
             foreach (var refItem in model.Manifest.References) Line($"- Source Reference: {refItem.Document} / {refItem.Clause} / {refItem.Source}");
             Line($"- Active Wind State: {model.Calculation.State.Id}");
+            Line($"- Units: pressures in {units.PressureUnit}, line loads in {units.LineLoadUnit}, lengths in {units.LengthUnit}, wind speed in {units.SpeedUnit} ({units.SystemName}); engine canonical values are SI");
             Line();
         }
 
@@ -98,7 +86,7 @@ public sealed class DetailedReportBuilder
             {
                 Line($"### [{node.NodeId}] {node.QuantityName} ({node.Stage})");
                 Line($"- Symbolic: `{node.SymbolicEquation}`");
-                Line($"- Substituted: `{node.SubstitutedEquation}` = **{node.ResultWithUnit}**");
+                Line($"- Substituted: `{node.SubstitutedEquation}` = **{units.ConvertTraceResult(node.NumericValue, node.OutputUnit, node.ResultWithUnit)}**");
                 Line($"- Reference: {node.SourceReference}");
                 Line($"- Explanation: {node.ExplanatoryNote}");
                 Line();
@@ -115,11 +103,11 @@ public sealed class DetailedReportBuilder
             }
             else
             {
-                Line("| Surface / Zone ID | Description | External Coeff | Net Pressure (Pa) | Global Force Vector (Pa) |");
+                Line($"| Surface / Zone ID | Description | External Coeff | Net Pressure ({units.PressureUnit}) | Global Force Vector ({units.PressureUnit}) |");
                 Line("| :--- | :--- | :--- | :--- | :--- |");
                 foreach (var s in calcRun.SurfaceResults)
                 {
-                    Line($"| {s.SurfaceOrZoneId} | {s.Description} | {s.ExternalCoefficient:F2} | {s.NetPressurePa:F2} | ({s.GlobalPressureVectorPa.X:F1}, {s.GlobalPressureVectorPa.Y:F1}, {s.GlobalPressureVectorPa.Z:F1}) |");
+                    Line($"| {s.SurfaceOrZoneId} | {s.Description} | {s.ExternalCoefficient:F2} | {units.PressureValue(s.NetPressurePa):F2} | ({units.PressureValue(s.GlobalPressureVectorPa.X):F1}, {units.PressureValue(s.GlobalPressureVectorPa.Y):F1}, {units.PressureValue(s.GlobalPressureVectorPa.Z):F1}) |");
                 }
             }
             Line();
@@ -130,22 +118,22 @@ public sealed class DetailedReportBuilder
             Line("## 5. ROOF & FACADE TRIBUTARY DISTRIBUTION");
             if (model.Definition.IncludeFacade)
             {
-                Line("### Facade Line Loads (N/m)");
-                Line("| Panel | Frame | Method | Start (m) | End (m) | Load (N/m) |");
+                Line($"### Facade Line Loads ({units.LineLoadUnit})");
+                Line($"| Panel | Frame | Method | Start ({units.LengthUnit}) | End ({units.LengthUnit}) | Load ({units.LineLoadUnit}) |");
                 Line("| :--- | :--- | :--- | :--- | :--- | :--- |");
                 foreach (var f in model.Facade)
                 {
-                    Line($"| {f.Panel} | {f.Frame} | {f.Method} | {f.StartM:F2} | {f.EndM:F2} | {f.LineLoadNPerM:F2} |");
+                    Line($"| {f.Panel} | {f.Frame} | {f.Method} | {units.LengthValue(f.StartM):F2} | {units.LengthValue(f.EndM):F2} | {units.LineLoadValue(f.LineLoadNPerM):F2} |");
                 }
             }
             if (model.Definition.IncludeRoof && model.Approval is { } a)
             {
                 Line("### Roof Zone Area Load Proposals");
-                Line("| Shell ID | Zone ID | Pattern | Net Pressure (Pa) | Local 3 Direction | Csi Area Load (Pa) |");
+                Line($"| Shell ID | Zone ID | Pattern | Net Pressure ({units.PressureUnit}) | Local 3 Direction | Csi Area Load ({units.PressureUnit}) |");
                 Line("| :--- | :--- | :--- | :--- | :--- | :--- |");
                 foreach (var p in a.Proposals)
                 {
-                    Line($"| {p.ShellId} | {p.ZoneId} | {p.Pattern} | {p.NetPressurePa:F2} | {p.ManualLocal3Direction} | {p.SignedCsiAreaLoadPa:F2} |");
+                    Line($"| {p.ShellId} | {p.ZoneId} | {p.Pattern} | {units.PressureValue(p.NetPressurePa):F2} | {p.ManualLocal3Direction} | {units.PressureValue(p.SignedCsiAreaLoadPa):F2} |");
                 }
             }
             Line();
@@ -154,11 +142,11 @@ public sealed class DetailedReportBuilder
         if (Options.IncludeWallLoads && model.Definition.IncludeWall)
         {
             Line("## 6. WALL GRAVITY LOADS (Global -Z)");
-            Line("| Frame | Pattern | Wall Type | Height (m) | Line Load (N/m) |");
+            Line($"| Frame | Pattern | Wall Type | Height ({units.LengthUnit}) | Line Load ({units.LineLoadUnit}) |");
             Line("| :--- | :--- | :--- | :--- | :--- |");
             foreach (var w in model.Walls)
             {
-                Line($"| {w.Frame} | {w.Pattern} | {w.WallType} | {w.HeightM:F2} | {w.GravityNPerM:F2} |");
+                Line($"| {w.Frame} | {w.Pattern} | {w.WallType} | {units.LengthValue(w.HeightM):F2} | {units.LineLoadValue(w.GravityNPerM):F2} |");
             }
             Line();
         }
@@ -176,9 +164,9 @@ public sealed class DetailedReportBuilder
                     // 0.00 Pa, which would read as a calculated result.
                     Line($"| Velocity / Dynamic Pressure | BLOCKED / NOT COMPUTED | ____________ | 1.0% | ______ | NOT CHECKED | ____________ |");
                 } else {
-                    Line($"| Velocity / Dynamic Pressure | {qh:F2} Pa | ____________ | 1.0% | ______ | NOT CHECKED | ____________ |");
+                    Line($"| Velocity / Dynamic Pressure | {units.Pressure(qh)} | ____________ | 1.0% | ______ | NOT CHECKED | ____________ |");
                     foreach (var s in calcRun.SurfaceResults) {
-                        Line($"| {s.Description} p_net | {s.NetPressurePa:F2} Pa | ____________ | 1.0% | ______ | NOT CHECKED | ____________ |");
+                        Line($"| {s.Description} p_net | {units.Pressure(s.NetPressurePa)} | ____________ | 1.0% | ______ | NOT CHECKED | ____________ |");
                     }
                 }
             } else {
@@ -266,6 +254,14 @@ public sealed class DetailedReportBuilder
         sb.Append("</body></html>");
         return sb.ToString();
     }
+
+    /// <summary>
+    /// The exported report product: a summary-only PDF (identity, key inputs,
+    /// headline results, audit hashes) in the standard's units. The detailed
+    /// outputs of this builder are the in-app UX calculation view, not exports.
+    /// </summary>
+    public byte[] BuildSummaryPdf(ReportModel model, EngineeringCalculationRun? calcRun = null) =>
+        new SummaryReportBuilder { Options = Options }.BuildSummaryPdf(model, calcRun);
 
     public byte[] BuildExcel(ReportModel model, EngineeringCalculationRun? calcRun = null) => new ExcelReportBuilder().Build(model, calcRun);
     public string BuildJson(ReportModel model, EngineeringCalculationRun? calcRun = null)
