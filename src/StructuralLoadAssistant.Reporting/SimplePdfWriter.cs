@@ -1,27 +1,83 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+
 namespace StructuralLoadAssistant.Reporting;
+
 /// <summary>
 /// Standalone, pure C# minimal PDF document generator (PDF 1.4 compliant).
 /// Outputs deterministically formatted vector PDF reports without external dependencies or printer drivers.
+/// Handles multi-page flowing sections and automatic line wrapping so no trace nodes or data rows are clipped.
 /// </summary>
 public sealed class SimplePdfWriter
 {
     private readonly List<string> pages = new();
     public string Title { get; set; } = "Engineering Report";
     public string Watermark { get; set; } = "ENGINEER REVIEW - NOT FOR CONSTRUCTION";
+
     public void AddPage(string pageText)
     {
         pages.Add(pageText);
     }
+
+    public void AddFlowingSection(string sectionText)
+    {
+        var rawLines = sectionText.Split('\n');
+        var pageLines = new List<string>();
+        double currentY = 785;
+
+        void AddLine(string text)
+        {
+            if (currentY < 60)
+            {
+                if (pageLines.Count > 0)
+                {
+                    pages.Add(string.Join("\n", pageLines));
+                    pageLines.Clear();
+                }
+                currentY = 785;
+            }
+            pageLines.Add(text);
+            currentY -= 13;
+        }
+
+        foreach (var rawLine in rawLines)
+        {
+            string clean = rawLine.TrimEnd('\r');
+            if (clean.Length <= 92)
+            {
+                AddLine(clean);
+            }
+            else
+            {
+                // Wrap gracefully so wide tables and long formulas fit without right-edge clipping
+                string rem = clean;
+                while (rem.Length > 92)
+                {
+                    int cut = rem.LastIndexOf(' ', 92);
+                    if (cut <= 15) cut = 92;
+                    AddLine(rem.Substring(0, cut));
+                    rem = "  " + rem.Substring(cut).TrimStart();
+                }
+                if (!string.IsNullOrEmpty(rem))
+                {
+                    AddLine(rem);
+                }
+            }
+        }
+
+        if (pageLines.Count > 0)
+        {
+            pages.Add(string.Join("\n", pageLines));
+        }
+    }
+
     public byte[] Build()
     {
         using var ms = new MemoryStream();
         using var writer = new StreamWriter(ms, Encoding.ASCII, leaveOpen: true);
         var offsets = new List<long>();
 
-        //
         void WriteLine(string s) { writer.Write(s + "\n"); writer.Flush(); }
 
         WriteLine("%PDF-1.4");
@@ -70,16 +126,15 @@ public sealed class SimplePdfWriter
             content.Append("0 0 0 rg\n"); // reset black
 
             // Page Number
-            content.Append("450 0 Td\n");
+            content.Append("430 0 Td\n");
             content.Append($"({EscapePdf($"Page {i + 1} of {pages.Count}")}) Tj\n");
-            content.Append("-450 -25 Td\n");
+            content.Append("-430 -25 Td\n");
 
             // Body lines
             var lines = pages[i].Split('\n');
             double currentY = 785;
             foreach (var line in lines)
             {
-                if (currentY < 45) break;
                 string clean = line.TrimEnd('\r');
                 if (clean.StartsWith("# "))
                 {
@@ -139,6 +194,17 @@ public sealed class SimplePdfWriter
         {
             if (c is '(' or ')' or '\\') sb.Append('\\').Append(c);
             else if (c >= 32 && c <= 126) sb.Append(c);
+            else if (c == 'θ') sb.Append("theta");
+            else if (c == 'Δ') sb.Append("Delta");
+            else if (c == '≤') sb.Append("<=");
+            else if (c == '≥') sb.Append(">=");
+            else if (c == '±') sb.Append("+/-");
+            else if (c == '×') sb.Append("x");
+            else if (c == '°') sb.Append(" deg");
+            else if (c == '²') sb.Append("^2");
+            else if (c == '³') sb.Append("^3");
+            else if (c == 'ρ') sb.Append("rho");
+            else if (c == 'φ') sb.Append("phi");
             else sb.Append(' ');
         }
         return sb.ToString();

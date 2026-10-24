@@ -30,6 +30,22 @@ public sealed class DetailedReportBuilder
     public string BuildMarkdown(ReportModel model, EngineeringCalculationRun? calcRun = null)
     {
         ArgumentNullException.ThrowIfNull(model);
+        if (calcRun != null)
+        {
+            // P0-C: Fail closed on contradictory standard / manifest identities
+            string runFamily = calcRun.Request.StandardEdition.Contains("AS/NZS", StringComparison.OrdinalIgnoreCase) ? "AS/NZS" : "ASCE";
+            string manifestEdition = model.Manifest.Edition;
+            bool manifestIsAsNz = manifestEdition.Contains("AS/NZS", StringComparison.OrdinalIgnoreCase) || manifestEdition.Contains("1170", StringComparison.OrdinalIgnoreCase);
+            bool manifestIsAsce = manifestEdition.Contains("ASCE", StringComparison.OrdinalIgnoreCase);
+            if ((runFamily == "AS/NZS" && !manifestIsAsNz) || (runFamily == "ASCE" && !manifestIsAsce))
+            {
+                throw new InvalidOperationException($"Report identity mismatch: Calculation run standard '{calcRun.Request.StandardEdition}' does not match model manifest edition '{manifestEdition}'.");
+            }
+            if (!string.IsNullOrEmpty(calcRun.Request.ProjectId) && !string.Equals(calcRun.Request.ProjectId, model.Project.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException($"Report identity mismatch: Calculation run project '{calcRun.Request.ProjectId}' does not match model project '{model.Project.Id}'.");
+            }
+        }
         var sb = new StringBuilder();
         void Line(string s = "") => sb.Append(s).Append('\n');
 
@@ -53,6 +69,7 @@ public sealed class DetailedReportBuilder
         {
             Line("## 1. DESIGN BASIS & GOVERNING STANDARDS");
             Line($"- Standard Edition: {model.Manifest.Edition}");
+            if (calcRun != null) Line($"- Procedure: {calcRun.Request.ProcedureName}");
             Line($"- Verification Status: {model.Manifest.Status}");
             Line($"- Standard Manifest Hash: {model.Manifest.Hash}");
             foreach (var r in model.Manifest.Revisions) Line($"- Revision / Amendment: {r}");
@@ -91,11 +108,19 @@ public sealed class DetailedReportBuilder
         if (Options.IncludeWorksheets && calcRun != null)
         {
             Line("## 4. PER-STANDARD SURFACE PRESSURE WORKSHEET");
-            Line("| Surface / Zone ID | Description | External Coeff | Net Pressure (Pa) | Global Force Vector (Pa) |");
-            Line("| :--- | :--- | :--- | :--- | :--- |");
-            foreach (var s in calcRun.SurfaceResults)
+            if (!calcRun.NumericalComputationPossible)
             {
-                Line($"| {s.SurfaceOrZoneId} | {s.Description} | {s.ExternalCoefficient:F2} | {s.NetPressurePa:F2} | ({s.GlobalPressureVectorPa.X:F1}, {s.GlobalPressureVectorPa.Y:F1}, {s.GlobalPressureVectorPa.Z:F1}) |");
+                Line("**NUMERICAL CALCULATION BLOCKED / NOT COMPUTED**");
+                Line("Required normative tables or explicit engineer coefficients are missing. Surface pressures were not computed.");
+            }
+            else
+            {
+                Line("| Surface / Zone ID | Description | External Coeff | Net Pressure (Pa) | Global Force Vector (Pa) |");
+                Line("| :--- | :--- | :--- | :--- | :--- |");
+                foreach (var s in calcRun.SurfaceResults)
+                {
+                    Line($"| {s.SurfaceOrZoneId} | {s.Description} | {s.ExternalCoefficient:F2} | {s.NetPressurePa:F2} | ({s.GlobalPressureVectorPa.X:F1}, {s.GlobalPressureVectorPa.Y:F1}, {s.GlobalPressureVectorPa.Z:F1}) |");
+                }
             }
             Line();
         }
@@ -201,15 +226,15 @@ public sealed class DetailedReportBuilder
         var sections = md.Split(new[] { "\n## " }, StringSplitOptions.None);
         if (sections.Length > 0)
         {
-            pdf.AddPage(sections[0]);
+            pdf.AddFlowingSection(sections[0]);
             for (int i = 1; i < sections.Length; i++)
             {
-                pdf.AddPage("## " + sections[i]);
+                pdf.AddFlowingSection("## " + sections[i]);
             }
         }
         else
         {
-            pdf.AddPage(md);
+            pdf.AddFlowingSection(md);
         }
 
         return pdf.Build();
@@ -239,10 +264,13 @@ public sealed class DetailedReportBuilder
     public byte[] BuildExcel(ReportModel model, EngineeringCalculationRun? calcRun = null) => new ExcelReportBuilder().Build(model, calcRun);
     public string BuildJson(ReportModel model, EngineeringCalculationRun? calcRun = null)
     {
+        var doc = AuditReportDocumentBuilder.BuildDocument(model, calcRun, Options);
         return SnapshotJson.Serialize(new
         {
             ReportModel = model,
             CalculationRun = calcRun,
+            CalculationRunHash = calcRun?.ContentHash,
+            DocumentHash = doc.ContentHash,
             Options = Options,
             GeneratedAt = DateTimeOffset.UtcNow
         });

@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.IO;
+using StructuralLoadAssistant.Csi.Fake;
 using StructuralLoadAssistant.Domain;
 using StructuralLoadAssistant.Engineering;
 using StructuralLoadAssistant.Reporting;
@@ -9,11 +10,26 @@ namespace StructuralLoadAssistant.Tests;
 
 public class SampleArtifactGeneratorTests
 {
+    private static string FindRepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null && !File.Exists(Path.Combine(dir.FullName, "StructuralLoadAssistant.sln")))
+        {
+            dir = dir.Parent;
+        }
+        return dir?.FullName ?? Directory.GetCurrentDirectory();
+    }
+
     [Fact]
     public void Generate_Flat_And_Gable_Roof_Artifacts()
     {
-        string outDir = Path.Combine(Directory.GetCurrentDirectory(), "artifacts", "sample_reports");
-        Directory.CreateDirectory(outDir);
+        string repoRoot = FindRepoRoot();
+        string rootOutDir = Path.Combine(repoRoot, "artifacts", "sample_reports");
+        string localOutDir = Path.Combine(Directory.GetCurrentDirectory(), "artifacts", "sample_reports");
+        Directory.CreateDirectory(rootOutDir);
+        Directory.CreateDirectory(localOutDir);
+
+        var targetDirs = new[] { rootOutDir, localOutDir }.Distinct();
 
         // 1. ASCE 7-22 Gable Roof Run
         var asceStrategy = new Asce7_22CalculationStrategy();
@@ -29,14 +45,32 @@ public class SampleArtifactGeneratorTests
             new Dictionary<string, string> { ["InternalPressure"] = "IP_POS", ["OwnerReviewed"] = "true" }.ToImmutableDictionary());
 
         var gableRun = asceStrategy.Execute(reqGable);
-        var model = ReportTests.Model();
+        var asceModel = new ReportModel(
+            new Project("PRJ-SYNTH-GABLE", "Synthetic ASCE Gable Roof Building", "SI"),
+            DemoFixtures.Calculation("ASCE/SEI 7-22"),
+            DemoFixtures.Manifest("ASCE/SEI 7-22"),
+            DemoFixtures.Model(),
+            [new("B1-B2", "B1", "EqualSplit", 0, 10, 2100)],
+            [new("B1", "WALL", "Illustrative", 3, -750)],
+            null, null, null,
+            new ReportDefinition("report-asce-gable")
+        );
         var builder = new DetailedReportBuilder();
 
-        File.WriteAllBytes(Path.Combine(outDir, "asce7_22_gable_roof_audit.xlsx"), builder.BuildExcel(model, gableRun));
-        File.WriteAllBytes(Path.Combine(outDir, "asce7_22_gable_roof_audit.pdf"), builder.BuildPdf(model, gableRun));
-        File.WriteAllText(Path.Combine(outDir, "asce7_22_gable_roof_audit.html"), builder.BuildHtml(model, gableRun));
-        File.WriteAllText(Path.Combine(outDir, "asce7_22_gable_roof_audit.md"), builder.BuildMarkdown(model, gableRun));
-        File.WriteAllText(Path.Combine(outDir, "asce7_22_gable_roof_audit.json"), builder.BuildJson(model, gableRun));
+        byte[] asceXlsx = builder.BuildExcel(asceModel, gableRun);
+        byte[] ascePdf = builder.BuildPdf(asceModel, gableRun);
+        string asceHtml = builder.BuildHtml(asceModel, gableRun);
+        string asceMd = builder.BuildMarkdown(asceModel, gableRun);
+        string asceJson = builder.BuildJson(asceModel, gableRun);
+
+        foreach (var dir in targetDirs)
+        {
+            File.WriteAllBytes(Path.Combine(dir, "asce7_22_gable_roof_audit.xlsx"), asceXlsx);
+            File.WriteAllBytes(Path.Combine(dir, "asce7_22_gable_roof_audit.pdf"), ascePdf);
+            File.WriteAllText(Path.Combine(dir, "asce7_22_gable_roof_audit.html"), asceHtml);
+            File.WriteAllText(Path.Combine(dir, "asce7_22_gable_roof_audit.md"), asceMd);
+            File.WriteAllText(Path.Combine(dir, "asce7_22_gable_roof_audit.json"), asceJson);
+        }
 
         // 2. AS/NZS 1170.2:2021 Flat Roof Run
         var asnzStrategy = new AsNz1170_2_2021CalculationStrategy();
@@ -52,17 +86,35 @@ public class SampleArtifactGeneratorTests
             new Dictionary<string, string> { ["InternalPressure"] = "IP_POS", ["OwnerReviewed"] = "true" }.ToImmutableDictionary());
 
         var flatRun = asnzStrategy.Execute(reqFlat);
+        var asnzModel = new ReportModel(
+            new Project("PRJ-SYNTH-FLAT", "Synthetic AS/NZS Flat Roof Building", "SI"),
+            DemoFixtures.Calculation("AS/NZS 1170.2:2021"),
+            DemoFixtures.Manifest("AS/NZS 1170.2:2021"),
+            DemoFixtures.Model(),
+            [new("B1-B2", "B1", "EqualSplit", 0, 10, 2100)],
+            [new("B1", "WALL", "Illustrative", 3, -750)],
+            null, null, null,
+            new ReportDefinition("report-asnz-flat")
+        );
 
-        File.WriteAllBytes(Path.Combine(outDir, "asnz1170_2_flat_roof_audit.xlsx"), builder.BuildExcel(model, flatRun));
-        File.WriteAllBytes(Path.Combine(outDir, "asnz1170_2_flat_roof_audit.pdf"), builder.BuildPdf(model, flatRun));
-        File.WriteAllText(Path.Combine(outDir, "asnz1170_2_flat_roof_audit.html"), builder.BuildHtml(model, flatRun));
-        File.WriteAllText(Path.Combine(outDir, "asnz1170_2_flat_roof_audit.md"), builder.BuildMarkdown(model, flatRun));
-        File.WriteAllText(Path.Combine(outDir, "asnz1170_2_flat_roof_audit.json"), builder.BuildJson(model, flatRun));
+        byte[] asnzXlsx = builder.BuildExcel(asnzModel, flatRun);
+        byte[] asnzPdf = builder.BuildPdf(asnzModel, flatRun);
+        string asnzHtml = builder.BuildHtml(asnzModel, flatRun);
+        string asnzMd = builder.BuildMarkdown(asnzModel, flatRun);
+        string asnzJson = builder.BuildJson(asnzModel, flatRun);
 
-        Assert.True(File.Exists(Path.Combine(outDir, "asce7_22_gable_roof_audit.xlsx")));
-        Assert.True(File.Exists(Path.Combine(outDir, "asce7_22_gable_roof_audit.pdf")));
-        Assert.True(File.Exists(Path.Combine(outDir, "asnz1170_2_flat_roof_audit.xlsx")));
-        Assert.True(File.Exists(Path.Combine(outDir, "asnz1170_2_flat_roof_audit.pdf")));
+        foreach (var dir in targetDirs)
+        {
+            File.WriteAllBytes(Path.Combine(dir, "asnz1170_2_flat_roof_audit.xlsx"), asnzXlsx);
+            File.WriteAllBytes(Path.Combine(dir, "asnz1170_2_flat_roof_audit.pdf"), asnzPdf);
+            File.WriteAllText(Path.Combine(dir, "asnz1170_2_flat_roof_audit.html"), asnzHtml);
+            File.WriteAllText(Path.Combine(dir, "asnz1170_2_flat_roof_audit.md"), asnzMd);
+            File.WriteAllText(Path.Combine(dir, "asnz1170_2_flat_roof_audit.json"), asnzJson);
+        }
+
+        Assert.True(File.Exists(Path.Combine(rootOutDir, "asce7_22_gable_roof_audit.xlsx")));
+        Assert.True(File.Exists(Path.Combine(rootOutDir, "asce7_22_gable_roof_audit.pdf")));
+        Assert.True(File.Exists(Path.Combine(rootOutDir, "asnz1170_2_flat_roof_audit.xlsx")));
+        Assert.True(File.Exists(Path.Combine(rootOutDir, "asnz1170_2_flat_roof_audit.pdf")));
     }
 }
-

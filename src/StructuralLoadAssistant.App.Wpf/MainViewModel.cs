@@ -36,7 +36,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             if (mode == value) return;
             ProtectUnsavedDraft();
             mode = value; modeRevision++; inspection.Clear(); ClearZoneEditor(); Session.LoadDemoFixture(Edition); SelectedShell = IsDemo ? "R1" : "";
-            expectedBaseRevision = 0; HasUnsavedChanges = false; PhysicalQualification = null;
+            expectedBaseRevision = 0; HasUnsavedChanges = false; PhysicalQualification = null; CurrentEngineeringRun = null; CurrentCalculationRequest = null;
             SelectedZone = IsDemo ? "Edge" : "Unmapped"; SelectedPattern = IsDemo ? "WX_POS_IP_POS" : "";
             ReportText = IsDemo ? "Preview the current synthetic calculation." : EngineeringBlock; SelectedReport = null;
             Issues = []; ProposedLoads = []; FacadePairRows = []; LowerFrame = ""; UpperFrame = "";
@@ -88,7 +88,23 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     public event Action? Refreshed;
     public string Status { get; private set; } = "Ready. Synthetic data; simulation only.";
     public string DatabasePath { get; set; }
-    public string Edition { get; set; } = "ASCE/SEI 7-22";
+    private string edition = "ASCE/SEI 7-22";
+    public string Edition
+    {
+        get => edition;
+        set
+        {
+            if (edition == value) return;
+            edition = value;
+            CurrentEngineeringRun = null;
+            CurrentCalculationRequest = null;
+            if (IsDemo)
+            {
+                Session.LoadDemoFixture(edition, true, CurrentActiveState);
+            }
+            Refresh();
+        }
+    }
     public string[] Editions { get; } = ["ASCE/SEI 7-22", "AS/NZS 1170.2:2021"];
     public WindDirection Direction { get; set; } = WindDirection.PositiveX;
     public string InternalPressure { get; set; } = "IP_POS";
@@ -297,8 +313,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     {
         if (!IsDemo) throw new InvalidOperationException("Real CSI Read-Only blocks all demo calculations, approvals and assignments. " + EngineeringBlock);
     }
-    public void OpenProject() { RequireDemo(); var opened = new DemoSession(DatabasePath); opened.LoadDemoFixture(Edition); Session = opened; SelectedShell = "R1"; }
-    public void LoadFixture(bool crossing = true) { RequireDemo(); Session.LoadDemoFixture(Edition, crossing); SelectedShell = "R1"; Issues = []; ProposedLoads = []; }
+    public void OpenProject() { RequireDemo(); var opened = new DemoSession(DatabasePath); opened.LoadDemoFixture(Edition); Session = opened; SelectedShell = "R1"; CurrentEngineeringRun = null; CurrentCalculationRequest = null; }
+    public void LoadFixture(bool crossing = true) { RequireDemo(); Session.LoadDemoFixture(Edition, crossing); SelectedShell = "R1"; Issues = []; ProposedLoads = []; CurrentEngineeringRun = null; CurrentCalculationRequest = null; }
     private WindState currentActiveState = new(WindDirection.PositiveX, "IP_POS", "RoofCase1", LimitState.Uls);
     private int expectedBaseRevision;
     private string? editorDatabasePath;
@@ -306,6 +322,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
     public void LoadSelectedState()
     {
+        CurrentEngineeringRun = null;
+        CurrentCalculationRequest = null;
         if (IsDemo)
         {
             currentActiveState = new(Direction, InternalPressure, RoofCase, LimitState.Uls);
@@ -526,6 +544,72 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     }
 
         public EngineeringCalculationRun? CurrentEngineeringRun { get; private set; }
+    public EngineeringCalculationRequest? CurrentCalculationRequest { get; set; }
     public void SetEngineeringRun(EngineeringCalculationRun? run) { CurrentEngineeringRun = run; Refresh(); }
-    public void ExportDetailedReport(string path) { RequireDemo(); var model = Session.BuildReport(Definition()); var builder = new DetailedReportBuilder(); string ext = Path.GetExtension(path).ToLowerInvariant(); if (ext == ".xlsx") { File.WriteAllBytes(path, builder.BuildExcel(model, CurrentEngineeringRun)); } else if (ext == ".pdf") { File.WriteAllBytes(path, builder.BuildPdf(model, CurrentEngineeringRun)); } else if (ext == ".html") { File.WriteAllText(path, builder.BuildHtml(model, CurrentEngineeringRun), System.Text.Encoding.UTF8); } else if (ext == ".json") { File.WriteAllText(path, builder.BuildJson(model, CurrentEngineeringRun), System.Text.Encoding.UTF8); } else { File.WriteAllText(path, builder.BuildMarkdown(model, CurrentEngineeringRun), System.Text.Encoding.UTF8); } Status = $"Exported detailed report to {path}"; Refresh(); }
+    public void SetCalculationRequest(EngineeringCalculationRequest? req) { CurrentCalculationRequest = req; Refresh(); }
+
+    public string CurrentEngineeringRunSummary => CurrentEngineeringRun is null
+        ? "No engineering run selected. Calculate or load an engineering calculation run."
+        : $"Selected Engineering Run: {CurrentEngineeringRun.Id} | Hash: {CurrentEngineeringRun.ContentHash[..8]} | Standard: {CurrentEngineeringRun.Request.StandardEdition} | State: {CurrentEngineeringRun.Request.WindDirection} | Nodes: {CurrentEngineeringRun.TraceNodes.Length} | Status: {CurrentEngineeringRun.QualificationStatus}";
+
+    public void ValidateEngineeringInput()
+    {
+        RequireDemo();
+        if (CurrentCalculationRequest == null)
+        {
+            Status = $"Engineering inputs for {Edition}: No explicit calculation request configured. Supply verified engineering calculation inputs.";
+        }
+        else
+        {
+            bool hasCoeffs = !CurrentCalculationRequest.ExplicitCoefficients.IsEmpty;
+            Status = $"Engineering inputs validated for {CurrentCalculationRequest.StandardEdition}: {(hasCoeffs ? $"{CurrentCalculationRequest.ExplicitCoefficients.Count} explicit coefficients" : "Coefficients missing (licensed tables required)")}.";
+        }
+        Refresh();
+    }
+
+    public void CalculateEngineeringRun()
+    {
+        RequireDemo();
+        if (CurrentCalculationRequest == null)
+        {
+            throw new InvalidOperationException("No explicit engineering calculation inputs configured. Configure or supply an explicit engineering calculation request.");
+        }
+
+        IWindCalculationStrategy strategy = CurrentCalculationRequest.StandardEdition.Contains("AS/NZS", StringComparison.OrdinalIgnoreCase)
+            ? new AsNz1170_2_2021CalculationStrategy()
+            : new Asce7_22CalculationStrategy();
+
+        CurrentEngineeringRun = strategy.Execute(CurrentCalculationRequest);
+        ReportText = new DetailedReportBuilder().BuildMarkdown(Session.BuildReport(Definition()), CurrentEngineeringRun);
+        Status = CurrentEngineeringRun.NumericalComputationPossible
+            ? $"Calculated engineering run {CurrentEngineeringRun.Id} ({CurrentEngineeringRun.ContentHash[..8]})"
+            : $"Calculation blocked: {CurrentEngineeringRun.QualificationStatus}";
+        Refresh();
+    }
+
+    public void SaveEngineeringRun()
+    {
+        RequireDemo();
+        if (CurrentEngineeringRun == null)
+            throw new InvalidOperationException("No engineering calculation run to save. Calculate or select an engineering run first.");
+        Status = $"Saved engineering run {CurrentEngineeringRun.Id} ({CurrentEngineeringRun.ContentHash[..8]}) to session";
+        Refresh();
+    }
+
+    public void ExportDetailedReport(string path)
+    {
+        RequireDemo();
+        if (CurrentEngineeringRun == null)
+            throw new InvalidOperationException("No engineering calculation run selected. Calculate or select an engineering calculation run before exporting detailed reports.");
+        var model = Session.BuildReport(Definition());
+        var builder = new DetailedReportBuilder();
+        string ext = Path.GetExtension(path).ToLowerInvariant();
+        if (ext == ".xlsx") { File.WriteAllBytes(path, builder.BuildExcel(model, CurrentEngineeringRun)); }
+        else if (ext == ".pdf") { File.WriteAllBytes(path, builder.BuildPdf(model, CurrentEngineeringRun)); }
+        else if (ext == ".html") { File.WriteAllText(path, builder.BuildHtml(model, CurrentEngineeringRun), System.Text.Encoding.UTF8); }
+        else if (ext == ".json") { File.WriteAllText(path, builder.BuildJson(model, CurrentEngineeringRun), System.Text.Encoding.UTF8); }
+        else { File.WriteAllText(path, builder.BuildMarkdown(model, CurrentEngineeringRun), System.Text.Encoding.UTF8); }
+        Status = $"Exported detailed report to {path}";
+        Refresh();
+    }
 }

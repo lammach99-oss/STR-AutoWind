@@ -32,6 +32,7 @@ try {
         finally { $process.Dispose() }
     }
     Invoke-Smoke 'demo' @('--smoke')
+    Invoke-Smoke 'report-export' @('--smoke-report-export')
     Invoke-Smoke 'readonly' @('--smoke-readonly')
     Invoke-Smoke 'roof-initial' @('--smoke-roof-workflow')
     # The first OS process must have exited before reopening its exact database.

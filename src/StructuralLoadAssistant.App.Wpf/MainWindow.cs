@@ -133,7 +133,7 @@ public sealed partial class MainWindow : Window
         var p = Stack(); p.Children.Add(Text("Wind calculation / standards gate", 22)); p.Children.Add(Combo("Edition", vm.Editions));
         p.Children.Add(Button("Load Demo Pressure Fixture", () => vm.LoadFixture())); p.Children.Add(BoundText("ManifestSummary"));
         p.Children.Add(Text("Engineering inputs (locked until verified datasets are installed): wind speed [m/s], terrain / exposure, ground datum [m], importance / risk, directionality, building geometry, enclosure / internal pressure."));
-        p.Children.Add(Row(Disabled("Validate engineering input", "Verified licensed standards datasets and typed calculation contract are unavailable."), Disabled("Calculate", "Synthetic fixtures are available; normative coefficients are missing."), Disabled("Save engineering run", "No verified engineering calculation exists.")));
+        p.Children.Add(Row(Button("Validate engineering input", vm.ValidateEngineeringInput), Button("Calculate", vm.CalculateEngineeringRun), Button("Save engineering run", vm.SaveEngineeringRun))); p.Children.Add(BoundText("CurrentEngineeringRunSummary"));
         p.Children.Add(Text("Source pressure profile — elevation [m], net pressure [Pa]")); p.Children.Add(Table("Session.Calculation.Profile"));
         p.Children.Add(Text("Calculation trace / provenance")); p.Children.Add(Table("Session.Calculation.Trace", 160)); return p;
     }
@@ -277,7 +277,7 @@ public sealed partial class MainWindow : Window
     private UIElement ReportPage()
     {
         var p = Stack(); p.Children.Add(Text("Report builder / immutable stored snapshots", 22));
-        p.Children.Add(Text("Source: current synthetic calculation; current optional simulated assignment and readback are included automatically."));
+        p.Children.Add(Text("Source: current synthetic calculation; current optional simulated assignment and readback are included automatically.")); p.Children.Add(BoundText("CurrentEngineeringRunSummary"));
         p.Children.Add(Row(Check("Facade", "IncludeFacade"), Check("Roof", "IncludeRoof"), Check("Wall", "IncludeWall")));
         p.Children.Add(Row(Button("Preview current report", vm.PreviewReport), Button("Save immutable report", vm.SaveReport), Button("Export XLSX / PDF / HTML / MD / JSON", () => {
             var dialog = new SaveFileDialog { Filter = "Excel (*.xlsx)|*.xlsx|PDF (*.pdf)|*.pdf|HTML (*.html)|*.html|Markdown (*.md)|*.md|JSON (*.json)|*.json", FileName = "wind-load-audit.xlsx" };
