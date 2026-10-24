@@ -95,5 +95,32 @@ public class DetailedReportBuilderTests
         Assert.Contains("Options", json);
         Assert.Contains("SYNTHETIC EXAMPLE - NOT FOR DESIGN", json);
     }
-}
 
+    [Fact]
+    public void DetailedReportBuilder_Generates_Valid_Excel_OpenXml_Bytes()
+    {
+        var run = CreateSyntheticRun();
+        var model = ReportTests.Model();
+        var builder = new DetailedReportBuilder();
+
+        byte[] xlsxBytes = builder.BuildExcel(model, run);
+
+        Assert.NotNull(xlsxBytes);
+        Assert.True(xlsxBytes.Length > 200);
+
+        // Verify it is a valid Zip Archive with required OpenXML parts
+        using var ms = new MemoryStream(xlsxBytes);
+        using var zip = new System.IO.Compression.ZipArchive(ms, System.IO.Compression.ZipArchiveMode.Read);
+        Assert.NotNull(zip.GetEntry("[Content_Types].xml"));
+        Assert.NotNull(zip.GetEntry("xl/workbook.xml"));
+        Assert.NotNull(zip.GetEntry("xl/worksheets/sheet1.xml"));
+        Assert.NotNull(zip.GetEntry("xl/worksheets/sheet2.xml"));
+        Assert.NotNull(zip.GetEntry("xl/worksheets/sheet3.xml"));
+
+        // Verify calculation sheet content has project and watermark
+        using var reader = new StreamReader(zip.GetEntry("xl/worksheets/sheet1.xml")!.Open());
+        string content = reader.ReadToEnd();
+        Assert.Contains("STRUCTURAL WIND LOAD CALCULATION REPORT", content);
+        Assert.Contains("833.68", content);
+    }
+}

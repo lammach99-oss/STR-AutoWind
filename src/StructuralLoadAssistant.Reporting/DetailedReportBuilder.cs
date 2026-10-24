@@ -33,7 +33,7 @@ public sealed class DetailedReportBuilder
         var sb = new StringBuilder();
         void Line(string s = "") => sb.Append(s).Append('\n');
 
-        string watermark = calcRun?.QualificationStatus ?? "SYNTHETIC EXAMPLE - NOT FOR DESIGN";
+        string watermark = calcRun?.QualificationStatus ?? "NO ENGINEERING CALCULATION RUN SELECTED - SYNTHETIC WORKSPACE ONLY";
 
         if (Options.IncludeCover)
         {
@@ -144,10 +144,15 @@ public sealed class DetailedReportBuilder
             Line("Independent engineering check register (to be filled by reviewing engineer):");
             Line("| Quantity | Software Value | Hand-Check Value | Tolerance | Difference | Check Result | Reviewer |");
             Line("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |");
-            Line("| Velocity Pressure qh / q_des | As calculated | ____________ | 1.0% | ______ | [ ] Pass [ ] Fail | ____________ |");
-            Line("| Windward Wall Net Pressure | As calculated | ____________ | 1.0% | ______ | [ ] Pass [ ] Fail | ____________ |");
-            Line("| Roof Windward Net Pressure | As calculated | ____________ | 1.0% | ______ | [ ] Pass [ ] Fail | ____________ |");
-            Line("| Facade Frame Line Load | As calculated | ____________ | 1.0% | ______ | [ ] Pass [ ] Fail | ____________ |");
+            if (calcRun != null) {
+                double qVal = calcRun.ComputedQuantities.TryGetValue("qh", out var qh) ? qh : (calcRun.ComputedQuantities.TryGetValue("q_des", out var qdes) ? qdes : 0.0);
+                Line($"| Velocity / Dynamic Pressure | {qVal:F2} Pa | ____________ | 1.0% | ______ | NOT CHECKED | ____________ |");
+                foreach (var s in calcRun.SurfaceResults) {
+                    Line($"| {s.Description} p_net | {s.NetPressurePa:F2} Pa | ____________ | 1.0% | ______ | NOT CHECKED | ____________ |");
+                }
+            } else {
+                Line("| No engineering run loaded | N/A | ____________ | 1.0% | ______ | NOT CHECKED | ____________ |");
+            }
             Line();
         }
 
@@ -172,7 +177,7 @@ public sealed class DetailedReportBuilder
         if (Options.IncludeAuditAppendix)
         {
             Line("## APPENDIX B: IMMUTABLE AUDIT TRAIL");
-            Line($"- Calculation Run ID: {model.Calculation.Id}");
+            Line($"- Calculation Run ID: {calcRun?.Id ?? model.Calculation.Id}");
             Line($"- Calculation Provenance: {model.Calculation.Provenance}");
             Line($"- Model Geometry Fingerprint: {model.Model.GeometryFingerprint}");
             Line($"- Model Existing Loads Fingerprint: {model.Model.ExistingLoadsFingerprint}");
@@ -231,6 +236,7 @@ public sealed class DetailedReportBuilder
         return sb.ToString();
     }
 
+    public byte[] BuildExcel(ReportModel model, EngineeringCalculationRun? calcRun = null) => new ExcelReportBuilder().Build(model, calcRun);
     public string BuildJson(ReportModel model, EngineeringCalculationRun? calcRun = null)
     {
         return SnapshotJson.Serialize(new

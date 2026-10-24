@@ -32,6 +32,7 @@ public class SampleArtifactGeneratorTests
         var model = ReportTests.Model();
         var builder = new DetailedReportBuilder();
 
+        File.WriteAllBytes(Path.Combine(outDir, "asce7_22_gable_roof_audit.xlsx"), builder.BuildExcel(model, gableRun));
         File.WriteAllBytes(Path.Combine(outDir, "asce7_22_gable_roof_audit.pdf"), builder.BuildPdf(model, gableRun));
         File.WriteAllText(Path.Combine(outDir, "asce7_22_gable_roof_audit.html"), builder.BuildHtml(model, gableRun));
         File.WriteAllText(Path.Combine(outDir, "asce7_22_gable_roof_audit.md"), builder.BuildMarkdown(model, gableRun));
@@ -52,12 +53,15 @@ public class SampleArtifactGeneratorTests
 
         var flatRun = asnzStrategy.Execute(reqFlat);
 
+        File.WriteAllBytes(Path.Combine(outDir, "asnz1170_2_flat_roof_audit.xlsx"), builder.BuildExcel(model, flatRun));
         File.WriteAllBytes(Path.Combine(outDir, "asnz1170_2_flat_roof_audit.pdf"), builder.BuildPdf(model, flatRun));
         File.WriteAllText(Path.Combine(outDir, "asnz1170_2_flat_roof_audit.html"), builder.BuildHtml(model, flatRun));
         File.WriteAllText(Path.Combine(outDir, "asnz1170_2_flat_roof_audit.md"), builder.BuildMarkdown(model, flatRun));
         File.WriteAllText(Path.Combine(outDir, "asnz1170_2_flat_roof_audit.json"), builder.BuildJson(model, flatRun));
 
+        Assert.True(File.Exists(Path.Combine(outDir, "asce7_22_gable_roof_audit.xlsx")));
         Assert.True(File.Exists(Path.Combine(outDir, "asce7_22_gable_roof_audit.pdf")));
+        Assert.True(File.Exists(Path.Combine(outDir, "asnz1170_2_flat_roof_audit.xlsx")));
         Assert.True(File.Exists(Path.Combine(outDir, "asnz1170_2_flat_roof_audit.pdf")));
     }
 }
