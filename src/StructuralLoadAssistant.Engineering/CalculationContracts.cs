@@ -73,7 +73,11 @@ public sealed record SurfacePressureResult(
     // envelope is auditable without doubling the surface list.
     double NetPressurePositiveInternalPa = 0,
     double NetPressureNegativeInternalPa = 0,
-    string GoverningInternalPressureCase = "");
+    string GoverningInternalPressureCase = "",
+    // Workbook-method dual limit states: net pressure at the OTHER limit
+    // state (SLS when the run is ULS and vice versa), scaled by the
+    // velocity-pressure ratio. Zero when no second limit state was derived.
+    double AlternateLimitStateNetPressurePa = 0);
 
 public sealed record EngineeringCalculationRun(
     string Id,

@@ -18,6 +18,21 @@ public sealed class AsNz1170_2_2021CalculationStrategy : IWindCalculationStrateg
     public EngineeringCalculationRun Execute(EngineeringCalculationRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        if (!WorkbookRequestDerivation.IsWorkbookMode(request, "ASNZS"))
+            return ExecuteCore(request);
+
+        // Workbook method (owner's AS.NZS_Wind_load.xlsm): V_R and Mz,cat
+        // are derived from the workbook's Table 3.1 equations / Table 4.1
+        // grids and Cpe values arrive pre-folded with the Cfig factor
+        // chain; the standard pipeline then runs unchanged. Cdyn and the
+        // alternate-limit-state ratio are applied as post-scales.
+        var (derived, altRatio, cdyn, extraTraces) = WorkbookRequestDerivation.DeriveAsNz(request);
+        var run = ExecuteCore(derived);
+        return WorkbookRunPostProcess.Apply(run, altRatio, cdyn, extraTraces, "q_des", "q_des_alt");
+    }
+
+    private EngineeringCalculationRun ExecuteCore(EngineeringCalculationRequest request)
+    {
         var issues = ImmutableArray.CreateBuilder<CalculationIssue>();
         var traces = ImmutableArray.CreateBuilder<CalculationTraceNode>();
         var computed = new Dictionary<string, double>();

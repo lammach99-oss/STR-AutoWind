@@ -17,6 +17,19 @@ public sealed class Asce7_22CalculationStrategy : IWindCalculationStrategy
     public EngineeringCalculationRun Execute(EngineeringCalculationRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        if (!WorkbookRequestDerivation.IsWorkbookMode(request, "ASCE7"))
+            return ExecuteCore(request);
+
+        // Workbook method (owner's ASCE_Wind_load.xlsm): coefficients the
+        // workbook derives from its tables are injected first; the standard
+        // pipeline (validation, envelope, traces) then runs unchanged.
+        var (derived, slsRatio, extraTraces) = WorkbookRequestDerivation.DeriveAsce(request);
+        var run = ExecuteCore(derived);
+        return WorkbookRunPostProcess.Apply(run, slsRatio, 1.0, extraTraces, "qh", "qh_sls");
+    }
+
+    private EngineeringCalculationRun ExecuteCore(EngineeringCalculationRequest request)
+    {
         var issues = ImmutableArray.CreateBuilder<CalculationIssue>();
         var traces = ImmutableArray.CreateBuilder<CalculationTraceNode>();
         var computed = new Dictionary<string, double>();
@@ -306,6 +319,15 @@ public sealed class Asce7_22CalculationStrategy : IWindCalculationStrategy
         if (cls.Contains("Partially", StringComparison.OrdinalIgnoreCase)) expected = 0.55;
         else if (cls.Contains("Open", StringComparison.OrdinalIgnoreCase)) expected = 0.0;
         else if (cls.Contains("Enclosed", StringComparison.OrdinalIgnoreCase)) expected = 0.18;
+
+        // Workbook method: GCpi may carry the Section 26.13.3 reduction
+        // factor Ri for large-volume buildings (workbook cell K101 is
+        // table value x Ri), so the expected magnitude scales with Ri.
+        if (expected is double exp && request.ExplicitCoefficients.TryGetValue("Ri", out var riCoeff)
+            && double.IsFinite(riCoeff.Value) && riCoeff.Value > 0)
+        {
+            expected = exp * riCoeff.Value;
+        }
 
         if (expected is null)
         {
