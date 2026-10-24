@@ -57,11 +57,16 @@ public sealed class AsNz1170_2_2021CalculationStrategy : IWindCalculationStrateg
             []
         ));
 
-        bool hasMd = TryGetRequiredCoeff(request, "Md", "Wind Direction Multiplier", "AS/NZS 1170.2:2021 Section 3.3", traces, issues, out double md);
-        bool hasMzCat = TryGetRequiredCoeff(request, "Mz_cat", "Terrain/Height Multiplier at reference height", "AS/NZS 1170.2:2021 Section 4.2, Table 4.1", traces, issues, out double mz_cat);
-        bool hasMs = TryGetRequiredCoeff(request, "Ms", "Shielding Multiplier", "AS/NZS 1170.2:2021 Section 4.3", traces, issues, out double ms);
-        bool hasMt = TryGetRequiredCoeff(request, "Mt", "Topographic Multiplier", "AS/NZS 1170.2:2021 Section 4.4", traces, issues, out double mt);
-        bool hasMc = TryGetRequiredCoeff(request, "Mc", "Climate Multiplier", "AS/NZS 1170.2:2021 Section 3.4", traces, issues, out double mc);
+        bool hasMd = TryGetRequiredCoeff(request, "Md", "Wind Direction Multiplier", "AS/NZS 1170.2:2021 Section 3.3", traces, issues, out double md,
+            minExclusive: 0, rangeRule: "Md > 0");
+        bool hasMzCat = TryGetRequiredCoeff(request, "Mz_cat", "Terrain/Height Multiplier at reference height", "AS/NZS 1170.2:2021 Section 4.2, Table 4.1", traces, issues, out double mz_cat,
+            minExclusive: 0, rangeRule: "Mz_cat > 0");
+        bool hasMs = TryGetRequiredCoeff(request, "Ms", "Shielding Multiplier", "AS/NZS 1170.2:2021 Section 4.3", traces, issues, out double ms,
+            minExclusive: 0, rangeRule: "Ms > 0");
+        bool hasMt = TryGetRequiredCoeff(request, "Mt", "Topographic Multiplier", "AS/NZS 1170.2:2021 Section 4.4", traces, issues, out double mt,
+            minExclusive: 0, rangeRule: "Mt > 0");
+        bool hasMc = TryGetRequiredCoeff(request, "Mc", "Climate Multiplier", "AS/NZS 1170.2:2021 Section 3.4", traces, issues, out double mc,
+            minExclusive: 0, rangeRule: "Mc > 0");
 
         bool hasAllMultipliers = hasMd && hasMzCat && hasMs && hasMt && hasMc && vr > 0;
         if (!hasAllMultipliers)
@@ -81,6 +86,19 @@ public sealed class AsNz1170_2_2021CalculationStrategy : IWindCalculationStrateg
                 false, false, false, false, false,
                 "BLOCKED / REQUIRED MULTIPLIER EVIDENCE MISSING",
                 profile.ToImmutable(), surfaces.ToImmutable(), traces.ToImmutable(), issues.ToImmutable(), computed.ToImmutableDictionary()
+            );
+        }
+
+        // Phase 1: roof slope drives the roof surface normals; reject
+        // unusable geometry up front.
+        double slopeDeg = request.RoofSlopeDegrees;
+        if (!double.IsFinite(slopeDeg) || slopeDeg < 0 || slopeDeg >= 90)
+        {
+            issues.Add(new CalculationIssue("INVALID_ROOF_SLOPE", CalculationIssueSeverity.Error, "Geometry", "Roof slope must be finite and in [0, 90) degrees."));
+            return new EngineeringCalculationRun(
+                "calc-asnz-blocked-geom-" + Guid.NewGuid().ToString("N")[..8],
+                DateTimeOffset.UtcNow, request, DataProvenance.Unverified, false, false, false, false, false,
+                "BLOCKED / INVALID GEOMETRY", profile.ToImmutable(), surfaces.ToImmutable(), traces.ToImmutable(), issues.ToImmutable(), computed.ToImmutableDictionary()
             );
         }
 
@@ -157,22 +175,29 @@ public sealed class AsNz1170_2_2021CalculationStrategy : IWindCalculationStrateg
             );
         }
 
-        bool isNegIp = request.Options.TryGetValue("InternalPressure", out var ipOpt) && ipOpt.Contains("NEG", StringComparison.OrdinalIgnoreCase);
-        double activeCpi = isNegIp ? -Math.Abs(cpi) : Math.Abs(cpi);
-        double pi = qdes * activeCpi;
-        computed["p_i"] = pi;
+        // Phase 1 envelope: BOTH internal-pressure signs are computed for
+        // every surface (the supplied |Cpi| is enveloped over +/-; AS/NZS
+        // Table 5.1 case selection by openings remains engineer input). The
+        // legacy Options["InternalPressure"] text flag no longer selects a
+        // single case.
+        double cpiAbs = Math.Abs(cpi);
+        double piPos = qdes * cpiAbs;
+        double piNeg = -piPos;
+        computed["p_i"] = piPos;
+        computed["p_i_pos"] = piPos;
+        computed["p_i_neg"] = piNeg;
 
         traces.Add(new CalculationTraceNode(
             "TR-ASNZ-04",
             "Internal Pressure",
             "p_i",
-            "q_des * C_p,i",
-            $"{qdes:F2} * ({activeCpi:F2})",
-            $"{pi:F2} Pa",
-            pi,
+            "q_des * (+/-C_p,i)",
+            $"{qdes:F2} * (+/-{cpiAbs:F2})",
+            $"+{piPos:F2} Pa / {piNeg:F2} Pa",
+            piPos,
             "Pa",
             "AS/NZS 1170.2:2021 Section 5.3",
-            "Internal pressure acting normal to interior surfaces.",
+            "Internal pressure acting normal to interior surfaces. Both signs are evaluated per surface; each surface reports its governing (larger absolute) net pressure and carries both case values.",
             ["TR-ASNZ-03"],
             []
         ));
@@ -180,11 +205,17 @@ public sealed class AsNz1170_2_2021CalculationStrategy : IWindCalculationStrateg
         void AddSurface(string id, string desc, double cpe, Vec3 normal)
         {
             double p_ext = qdes * cpe;
-            double p_net = p_ext - pi;
+            double netPos = p_ext - piPos;
+            double netNeg = p_ext - piNeg;
+            bool negGoverns = Math.Abs(netNeg) > Math.Abs(netPos);
+            double p_net = negGoverns ? netNeg : netPos;
+            double activeCpi = negGoverns ? -cpiAbs : cpiAbs;
+            double pi = negGoverns ? piNeg : piPos;
             Vec3 forceVec = EngineeringMath.GlobalForce(p_net, normal);
 
             surfaces.Add(new SurfacePressureResult(
-                id, desc, cpe, p_ext, activeCpi, pi, p_net, normal, forceVec
+                id, desc, cpe, p_ext, activeCpi, pi, p_net, normal, forceVec,
+                netPos, netNeg, negGoverns ? "NEGATIVE" : "POSITIVE"
             ));
 
             traces.Add(new CalculationTraceNode(
@@ -197,17 +228,23 @@ public sealed class AsNz1170_2_2021CalculationStrategy : IWindCalculationStrateg
                 p_net,
                 "Pa",
                 "AS/NZS 1170.2:2021 Section 5.2",
-                $"{desc}: positive indicates inward acting pressure.",
+                $"{desc}: positive indicates inward acting pressure. Envelope: +Cpi net {netPos:F2} Pa; -Cpi net {netNeg:F2} Pa; governing case {(negGoverns ? "NEGATIVE" : "POSITIVE")}.",
                 ["TR-ASNZ-03", "TR-ASNZ-04"],
                 []
             ));
         }
 
+        // Phase 1: roof normals derive from the actual roof slope, not a
+        // hard-coded 36.9 deg vector.
+        double slopeRad = slopeDeg * Math.PI / 180.0;
+        Vec3 roofWindwardNormal = new Vec3(0, -Math.Sin(slopeRad), Math.Cos(slopeRad)).Unit();
+        Vec3 roofLeewardNormal = new Vec3(0, Math.Sin(slopeRad), Math.Cos(slopeRad)).Unit();
+
         AddSurface("WindwardWall", "Windward Wall", cpe_ww, new Vec3(-1, 0, 0));
         AddSurface("LeewardWall", "Leeward Wall", cpe_lw, new Vec3(1, 0, 0));
         AddSurface("SideWall", "Side Wall", cpe_side, new Vec3(0, 1, 0));
-        AddSurface("RoofWindward", "Windward Roof", cpe_rw, new Vec3(0, -0.6, 0.8).Unit());
-        AddSurface("RoofLeeward", "Leeward Roof", cpe_rl, new Vec3(0, 0.6, 0.8).Unit());
+        AddSurface("RoofWindward", "Windward Roof", cpe_rw, roofWindwardNormal);
+        AddSurface("RoofLeeward", "Leeward Roof", cpe_rl, roofLeewardNormal);
 
         DataProvenance prov = request.ExplicitCoefficients.Values.Any(c => c.Provenance == DataProvenance.SyntheticDemoFixture)
             ? DataProvenance.SyntheticDemoFixture
@@ -241,11 +278,31 @@ public sealed class AsNz1170_2_2021CalculationStrategy : IWindCalculationStrateg
         string reference,
         ImmutableArray<CalculationTraceNode>.Builder traces,
         ImmutableArray<CalculationIssue>.Builder issues,
-        out double value)
+        out double value,
+        double? minExclusive = null,
+        double? minInclusive = null,
+        double? maxInclusive = null,
+        string? rangeRule = null)
     {
         if (req.ExplicitCoefficients.TryGetValue(name, out var coeff))
         {
             value = coeff.Value;
+            // Phase 1: a present-but-invalid multiplier/factor blocks exactly
+            // like a missing one; NaN/Infinity or out-of-range values must
+            // never flow into computed pressures.
+            if (!double.IsFinite(value)
+                || (minExclusive.HasValue && !(value > minExclusive.Value))
+                || (minInclusive.HasValue && !(value >= minInclusive.Value))
+                || (maxInclusive.HasValue && !(value <= maxInclusive.Value)))
+            {
+                issues.Add(new CalculationIssue(
+                    $"INVALID_COEFF_{name}",
+                    CalculationIssueSeverity.Error,
+                    "Explicit Multiplier Input",
+                    $"Parameter '{name}' ({description}) has invalid value {value}. Required: {(rangeRule ?? "a finite value")}. Reference: {reference}."
+                ));
+                return false;
+            }
             traces.Add(new CalculationTraceNode(
                 $"TR-ASNZ-COEFF-{name}",
                 "Explicit Input Multiplier",
