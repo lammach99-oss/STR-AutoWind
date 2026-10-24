@@ -170,10 +170,16 @@ public sealed class DetailedReportBuilder
             Line("| Quantity | Software Value | Hand-Check Value | Tolerance | Difference | Check Result | Reviewer |");
             Line("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |");
             if (calcRun != null) {
-                double qVal = calcRun.ComputedQuantities.TryGetValue("qh", out var qh) ? qh : (calcRun.ComputedQuantities.TryGetValue("q_des", out var qdes) ? qdes : 0.0);
-                Line($"| Velocity / Dynamic Pressure | {qVal:F2} Pa | ____________ | 1.0% | ______ | NOT CHECKED | ____________ |");
-                foreach (var s in calcRun.SurfaceResults) {
-                    Line($"| {s.Description} p_net | {s.NetPressurePa:F2} Pa | ____________ | 1.0% | ______ | NOT CHECKED | ____________ |");
+                bool hasQ = calcRun.ComputedQuantities.TryGetValue("qh", out var qh) || calcRun.ComputedQuantities.TryGetValue("q_des", out qh);
+                if (!calcRun.NumericalComputationPossible || !hasQ) {
+                    // A blocked run computed no pressure. Never render a default
+                    // 0.00 Pa, which would read as a calculated result.
+                    Line($"| Velocity / Dynamic Pressure | BLOCKED / NOT COMPUTED | ____________ | 1.0% | ______ | NOT CHECKED | ____________ |");
+                } else {
+                    Line($"| Velocity / Dynamic Pressure | {qh:F2} Pa | ____________ | 1.0% | ______ | NOT CHECKED | ____________ |");
+                    foreach (var s in calcRun.SurfaceResults) {
+                        Line($"| {s.Description} p_net | {s.NetPressurePa:F2} Pa | ____________ | 1.0% | ______ | NOT CHECKED | ____________ |");
+                    }
                 }
             } else {
                 Line("| No engineering run loaded | N/A | ____________ | 1.0% | ______ | NOT CHECKED | ____________ |");

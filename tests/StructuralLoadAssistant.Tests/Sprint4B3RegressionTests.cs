@@ -191,6 +191,10 @@ public class Sprint4B3RegressionTests
 
         Assert.Contains("BLOCKED / NOT COMPUTED", md);
         Assert.DoesNotContain("0.00 Pa (calculated net pressure)", md);
+        // Phase 0: a blocked quantity must never be rendered as a numeric
+        // 0.00 Pa anywhere in the report (previously the manual verification
+        // worksheet defaulted the missing pressure to 0.0).
+        Assert.DoesNotContain("0.00 Pa", md);
     }
 
     [Fact]

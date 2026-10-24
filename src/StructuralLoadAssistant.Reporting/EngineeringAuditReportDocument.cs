@@ -32,7 +32,10 @@ public sealed record EngineeringAuditReportDocument(
     string QualificationStatus)
 {
     [System.Text.Json.Serialization.JsonIgnore]
-    public string ContentHash => SnapshotJson.Hash(this);
+    // GeneratedAt is generation metadata, not document content: excluding it
+    // keeps the hash stable so identical inputs always produce the same
+    // DocumentHash, across regenerations and across formats.
+    public string ContentHash => SnapshotJson.Hash(this with { GeneratedAt = default });
 }
 
 public static class AuditReportDocumentBuilder

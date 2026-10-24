@@ -103,7 +103,7 @@ public sealed class ExcelReportBuilder
 
         return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\r\n" +
                "<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">\r\n" +
-               "  <calcPr calcId=\"124519\" fullCalcOnLoad=\"1\" forceFullCalc=\"1\"/>\r\n" +
+               "  <calcPr calcId=\"124519\" fullCalcOnLoad=\"1\"/>\r\n" +
                "  <sheets>\r\n" +
                $"    <sheet name=\"{Escape(sheet1Name)}\" sheetId=\"1\" r:id=\"rId1\"/>\r\n" +
                "    <sheet name=\"Formula Trace\" sheetId=\"2\" r:id=\"rId2\"/>\r\n" +
@@ -269,7 +269,10 @@ public sealed class ExcelReportBuilder
         }
         else
         {
-            RowFormula("Velocity / Dynamic Pressure", "q", $"{qh:F2}", qh, "Pa", "Evaluated Dynamic Pressure", 5);
+            // Coefficient rows are insufficient to reconstruct a cell-referencing
+            // formula, so emit the evaluated value as a typed number. A constant
+            // inside an <f> element would falsely present it as a live formula.
+            RowNum("Velocity / Dynamic Pressure", "q", qh, "Pa", "Evaluated Dynamic Pressure", 4);
         }
 
         RowStr("", "", "", "", "");
@@ -484,7 +487,8 @@ public sealed class ExcelReportBuilder
             var activeDir = calcRun.Request.WindDirection.ToString();
             var activeIp = calcRun.Request.Options.TryGetValue("InternalPressure", out var ip) ? ip : "IP_POS";
             var activeLs = calcRun.Request.LimitState.ToString();
-            double qVal = calcRun.ComputedQuantities.TryGetValue("qh", out var qh) ? qh : (calcRun.ComputedQuantities.TryGetValue("q_des", out var qd) ? qd : 0.0);
+            bool hasQ = calcRun.ComputedQuantities.TryGetValue("qh", out var qh) || calcRun.ComputedQuantities.TryGetValue("q_des", out qh);
+            bool blocked = !calcRun.NumericalComputationPossible || !hasQ;
 
             string[] directions = ["PositiveX", "NegativeX", "PositiveY", "NegativeY"];
             string[] ips = ["IP_POS", "IP_NEG"];
@@ -494,10 +498,21 @@ public sealed class ExcelReportBuilder
                 foreach (var p in ips)
                 {
                     bool isActive = d == activeDir && p == activeIp;
-                    if (isActive)
+                    if (isActive && blocked)
+                    {
+                        // A blocked run computed nothing: never present 0.00 Pa
+                        // or a calculated/verified status for it.
+                        Row(d, p, activeLs, "BLOCKED / NOT COMPUTED", "N/A", "BLOCKED / NOT COMPUTED", 6);
+                    }
+                    else if (isActive)
                     {
                         var maxSurf = calcRun.SurfaceResults.OrderByDescending(s => Math.Abs(s.NetPressurePa)).FirstOrDefault();
-                        Row(d, p, activeLs, $"{qVal:F2} Pa", maxSurf != null ? $"{maxSurf.Description} ({maxSurf.NetPressurePa:F2} Pa)" : "Evaluated", "CALCULATED & VERIFIED", 0);
+                        // "VERIFIED" is reserved for runs an independent engineer
+                        // has actually reviewed; a self-computed run is not verified.
+                        string status = calcRun.IndependentEngineerReviewed
+                            ? "CALCULATED & VERIFIED"
+                            : "CALCULATED - NOT INDEPENDENTLY VERIFIED";
+                        Row(d, p, activeLs, $"{qh:F2} Pa", maxSurf != null ? $"{maxSurf.Description} ({maxSurf.NetPressurePa:F2} Pa)" : "Evaluated", status, 0);
                     }
                     else
                     {
