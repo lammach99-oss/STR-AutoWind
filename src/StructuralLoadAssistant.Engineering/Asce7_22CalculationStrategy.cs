@@ -55,14 +55,23 @@ public sealed class Asce7_22CalculationStrategy : IWindCalculationStrategy
             []
         ));
 
-        bool hasKd = TryGetRequiredCoeff(request, "Kd", "Wind Directionality Factor", "ASCE 7-22 Table 26.6-1", traces, issues, out double kd);
-        bool hasKzt = TryGetRequiredCoeff(request, "Kzt", "Topographic Factor", "ASCE 7-22 Section 26.8.2", traces, issues, out double kzt);
-        bool hasKe = TryGetRequiredCoeff(request, "Ke", "Ground Elevation Factor", "ASCE 7-22 Section 26.9", traces, issues, out double ke);
-        bool hasKh = TryGetRequiredCoeff(request, "Kh", "Velocity Pressure Exposure Coefficient at h", "ASCE 7-22 Table 26.10-1", traces, issues, out double kh);
-        bool hasG = TryGetRequiredCoeff(request, "G", "Gust-Effect Factor", "ASCE 7-22 Section 26.11.1", traces, issues, out double g);
+        bool hasKd = TryGetRequiredCoeff(request, "Kd", "Wind Directionality Factor", "ASCE 7-22 Table 26.6-1", traces, issues, out double kd,
+            minExclusive: 0, maxInclusive: 1, rangeRule: "0 < Kd <= 1 (ASCE 7-22 Table 26.6-1)");
+        bool hasKzt = TryGetRequiredCoeff(request, "Kzt", "Topographic Factor", "ASCE 7-22 Section 26.8.2", traces, issues, out double kzt,
+            minInclusive: 1, rangeRule: "Kzt >= 1.0 (ASCE 7-22 Section 26.8)");
+        bool hasKe = TryGetRequiredCoeff(request, "Ke", "Ground Elevation Factor", "ASCE 7-22 Section 26.9", traces, issues, out double ke,
+            minExclusive: 0, rangeRule: "Ke > 0 (ASCE 7-22 Section 26.9)");
+        bool hasKh = TryGetRequiredCoeff(request, "Kh", "Velocity Pressure Exposure Coefficient at h", "ASCE 7-22 Table 26.10-1", traces, issues, out double kh,
+            minExclusive: 0, rangeRule: "Kh > 0 (ASCE 7-22 Table 26.10-1)");
+        bool hasG = TryGetRequiredCoeff(request, "G", "Gust-Effect Factor", "ASCE 7-22 Section 26.11.1", traces, issues, out double g,
+            minExclusive: 0, maxInclusive: 1.5, rangeRule: "0 < G <= 1.5 (ASCE 7-22 Section 26.11)");
         bool hasGcpi = TryGetRequiredCoeff(request, "GCpi", "Internal Pressure Coefficient", "ASCE 7-22 Table 26.13-1", traces, issues, out double gcpi);
 
-        bool hasAllFactors = hasKd && hasKzt && hasKe && hasKh && hasG && hasGcpi && v > 0;
+        // Phase 1: the supplied |GCpi| must match the typed enclosure
+        // classification (ASCE 7-22 Table 26.13-1); a mismatch blocks the run.
+        bool gcpiOk = !hasGcpi || ValidateGcpiAgainstEnclosure(request, gcpi, issues);
+
+        bool hasAllFactors = hasKd && hasKzt && hasKe && hasKh && hasG && hasGcpi && gcpiOk && v > 0;
 
         if (!hasAllFactors)
         {
@@ -81,6 +90,19 @@ public sealed class Asce7_22CalculationStrategy : IWindCalculationStrategy
                 false, false, false, false, false,
                 "BLOCKED / REQUIRED COEFFICIENT EVIDENCE MISSING",
                 profile.ToImmutable(), surfaces.ToImmutable(), traces.ToImmutable(), issues.ToImmutable(), computed.ToImmutableDictionary()
+            );
+        }
+
+        // Phase 1: roof slope drives both the mean-roof-height rule and the
+        // roof surface normals; reject unusable geometry up front.
+        double slopeDeg = request.RoofSlopeDegrees;
+        if (!double.IsFinite(slopeDeg) || slopeDeg < 0 || slopeDeg >= 90)
+        {
+            issues.Add(new CalculationIssue("INVALID_ROOF_SLOPE", CalculationIssueSeverity.Error, "Geometry", "Roof slope must be finite and in [0, 90) degrees."));
+            return new EngineeringCalculationRun(
+                "calc-asce-blocked-geom-" + Guid.NewGuid().ToString("N")[..8],
+                DateTimeOffset.UtcNow, request, DataProvenance.Unverified, false, false, false, false, false,
+                "BLOCKED / INVALID GEOMETRY", profile.ToImmutable(), surfaces.ToImmutable(), traces.ToImmutable(), issues.ToImmutable(), computed.ToImmutableDictionary()
             );
         }
 
@@ -108,7 +130,12 @@ public sealed class Asce7_22CalculationStrategy : IWindCalculationStrategy
             []
         ));
 
-        double h = request.RidgeHeightM > 0 && request.EaveHeightM > 0 ? (request.EaveHeightM + request.RidgeHeightM) / 2.0 : request.ReferenceHeightM;
+        // ASCE 7-22 Section 26.2 mean roof height: for roof angles <= 10 deg
+        // the mean roof height is the eave height; above 10 deg it is the
+        // average of eave and ridge heights.
+        double h = request.RidgeHeightM > 0 && request.EaveHeightM > 0
+            ? (slopeDeg <= 10.0 ? request.EaveHeightM : (request.EaveHeightM + request.RidgeHeightM) / 2.0)
+            : request.ReferenceHeightM;
         if (h <= 0)
         {
             issues.Add(new CalculationIssue("INVALID_HEIGHT", CalculationIssueSeverity.Error, "Geometry", "Mean roof height must be strictly positive."));
@@ -167,22 +194,27 @@ public sealed class Asce7_22CalculationStrategy : IWindCalculationStrategy
             );
         }
 
-        bool isNegIp = request.Options.TryGetValue("InternalPressure", out var ipOpt) && ipOpt.Contains("NEG", StringComparison.OrdinalIgnoreCase);
-        double activeGcpi = isNegIp ? -Math.Abs(gcpi) : Math.Abs(gcpi);
-        double pi = qh * activeGcpi;
-        computed["pi"] = pi;
+        // Phase 1 envelope: BOTH internal-pressure signs are computed for
+        // every surface. The legacy Options["InternalPressure"] text flag no
+        // longer selects a single case.
+        double gcpiAbs = Math.Abs(gcpi);
+        double piPos = qh * gcpiAbs;
+        double piNeg = -piPos;
+        computed["pi"] = piPos;
+        computed["pi_pos"] = piPos;
+        computed["pi_neg"] = piNeg;
 
         traces.Add(new CalculationTraceNode(
             "TR-ASCE-04",
             "Internal Pressure",
             "pi",
-            "qh * (GCpi)",
-            $"{qh:F2} * ({activeGcpi:F2})",
-            $"{pi:F2} Pa",
-            pi,
+            "qh * (+/-GCpi)",
+            $"{qh:F2} * (+/-{gcpiAbs:F2})",
+            $"+{piPos:F2} Pa / {piNeg:F2} Pa",
+            piPos,
             "Pa",
             "ASCE 7-22 Section 26.13",
-            "Internal pressure acting normal to interior building surfaces.",
+            "Internal pressure acting normal to interior building surfaces. Both signs are evaluated per surface; each surface reports its governing (larger absolute) net pressure and carries both case values.",
             ["TR-ASCE-03"],
             []
         ));
@@ -190,11 +222,17 @@ public sealed class Asce7_22CalculationStrategy : IWindCalculationStrategy
         void AddSurface(string id, string desc, double q_surf, double cp, Vec3 normal)
         {
             double p_ext = q_surf * g * cp;
-            double p_net = p_ext - pi;
+            double netPos = p_ext - piPos;
+            double netNeg = p_ext - piNeg;
+            bool negGoverns = Math.Abs(netNeg) > Math.Abs(netPos);
+            double p_net = negGoverns ? netNeg : netPos;
+            double activeGcpi = negGoverns ? -gcpiAbs : gcpiAbs;
+            double pi = negGoverns ? piNeg : piPos;
             Vec3 forceVec = EngineeringMath.GlobalForce(p_net, normal);
 
             surfaces.Add(new SurfacePressureResult(
-                id, desc, cp, p_ext, activeGcpi, pi, p_net, normal, forceVec
+                id, desc, cp, p_ext, activeGcpi, pi, p_net, normal, forceVec,
+                netPos, netNeg, negGoverns ? "NEGATIVE" : "POSITIVE"
             ));
 
             traces.Add(new CalculationTraceNode(
@@ -207,17 +245,23 @@ public sealed class Asce7_22CalculationStrategy : IWindCalculationStrategy
                 p_net,
                 "Pa",
                 "ASCE 7-22 Section 27.3.1 (Eq. 27.3-1)",
-                $"{desc}: positive indicates inward acting pressure.",
+                $"{desc}: positive indicates inward acting pressure. Envelope: +GCpi net {netPos:F2} Pa; -GCpi net {netNeg:F2} Pa; governing case {(negGoverns ? "NEGATIVE" : "POSITIVE")}.",
                 ["TR-ASCE-03", "TR-ASCE-04"],
                 []
             ));
         }
 
+        // Phase 1: roof normals derive from the actual roof slope, not a
+        // hard-coded 36.9 deg vector.
+        double slopeRad = slopeDeg * Math.PI / 180.0;
+        Vec3 roofWindwardNormal = new Vec3(0, -Math.Sin(slopeRad), Math.Cos(slopeRad)).Unit();
+        Vec3 roofLeewardNormal = new Vec3(0, Math.Sin(slopeRad), Math.Cos(slopeRad)).Unit();
+
         AddSurface("WindwardWall", "Windward Wall (MWFRS)", qh, cp_ww, new Vec3(-1, 0, 0));
         AddSurface("LeewardWall", "Leeward Wall (MWFRS)", qh, cp_lw, new Vec3(1, 0, 0));
         AddSurface("SideWall", "Side Wall (MWFRS)", qh, cp_side, new Vec3(0, 1, 0));
-        AddSurface("RoofWindward", "Roof Windward Slope", qh, cp_rw, new Vec3(0, -0.6, 0.8).Unit());
-        AddSurface("RoofLeeward", "Roof Leeward Slope", qh, cp_rl, new Vec3(0, 0.6, 0.8).Unit());
+        AddSurface("RoofWindward", "Roof Windward Slope", qh, cp_rw, roofWindwardNormal);
+        AddSurface("RoofLeeward", "Roof Leeward Slope", qh, cp_rl, roofLeewardNormal);
 
         DataProvenance prov = request.ExplicitCoefficients.Values.Any(c => c.Provenance == DataProvenance.SyntheticDemoFixture)
             ? DataProvenance.SyntheticDemoFixture
@@ -244,6 +288,49 @@ public sealed class Asce7_22CalculationStrategy : IWindCalculationStrategy
         );
     }
 
+    /// <summary>
+    /// Phase 1 validation of the supplied |GCpi| against the typed enclosure
+    /// classification (ASCE 7-22 Table 26.13-1: enclosed +/-0.18, partially
+    /// enclosed +/-0.55, open 0). Values are validation rules confirmed by the
+    /// project owner, not licensed table data loaded into the repo. An
+    /// unrecognised classification warns instead of blocking, because the
+    /// engine cannot know which row applies.
+    /// </summary>
+    private static bool ValidateGcpiAgainstEnclosure(
+        EngineeringCalculationRequest request,
+        double gcpi,
+        ImmutableArray<CalculationIssue>.Builder issues)
+    {
+        string cls = request.EnclosureClassification ?? "";
+        double? expected = null;
+        if (cls.Contains("Partially", StringComparison.OrdinalIgnoreCase)) expected = 0.55;
+        else if (cls.Contains("Open", StringComparison.OrdinalIgnoreCase)) expected = 0.0;
+        else if (cls.Contains("Enclosed", StringComparison.OrdinalIgnoreCase)) expected = 0.18;
+
+        if (expected is null)
+        {
+            issues.Add(new CalculationIssue(
+                "GCPI_ENCLOSURE_UNRECOGNISED",
+                CalculationIssueSeverity.Warning,
+                "Internal Pressure Coefficient",
+                $"Enclosure classification '{cls}' is not recognised; |GCpi| could not be validated against ASCE 7-22 Table 26.13-1."
+            ));
+            return true;
+        }
+
+        if (Math.Abs(Math.Abs(gcpi) - expected.Value) > 0.005)
+        {
+            issues.Add(new CalculationIssue(
+                "GCPI_ENCLOSURE_MISMATCH",
+                CalculationIssueSeverity.Error,
+                "Internal Pressure Coefficient",
+                $"|GCpi| = {Math.Abs(gcpi):F2} does not match enclosure classification '{cls}'; ASCE 7-22 Table 26.13-1 requires {expected.Value:F2}. Calculation blocked."
+            ));
+            return false;
+        }
+        return true;
+    }
+
     private static bool TryGetRequiredCoeff(
         EngineeringCalculationRequest req,
         string name,
@@ -251,11 +338,31 @@ public sealed class Asce7_22CalculationStrategy : IWindCalculationStrategy
         string reference,
         ImmutableArray<CalculationTraceNode>.Builder traces,
         ImmutableArray<CalculationIssue>.Builder issues,
-        out double value)
+        out double value,
+        double? minExclusive = null,
+        double? minInclusive = null,
+        double? maxInclusive = null,
+        string? rangeRule = null)
     {
         if (req.ExplicitCoefficients.TryGetValue(name, out var coeff))
         {
             value = coeff.Value;
+            // Phase 1: a present-but-invalid coefficient blocks exactly like a
+            // missing one. NaN/Infinity or an out-of-range value must never
+            // flow into computed pressures.
+            if (!double.IsFinite(value)
+                || (minExclusive.HasValue && !(value > minExclusive.Value))
+                || (minInclusive.HasValue && !(value >= minInclusive.Value))
+                || (maxInclusive.HasValue && !(value <= maxInclusive.Value)))
+            {
+                issues.Add(new CalculationIssue(
+                    $"INVALID_COEFF_{name}",
+                    CalculationIssueSeverity.Error,
+                    "Explicit Factor Input",
+                    $"Coefficient '{name}' ({description}) has invalid value {value}. Required: {(rangeRule ?? "a finite value")}. Reference: {reference}."
+                ));
+                return false;
+            }
             traces.Add(new CalculationTraceNode(
                 $"TR-ASCE-COEFF-{name}",
                 "Explicit Coefficient Input",

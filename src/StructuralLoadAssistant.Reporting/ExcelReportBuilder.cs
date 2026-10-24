@@ -485,7 +485,8 @@ public sealed class ExcelReportBuilder
         if (calcRun != null)
         {
             var activeDir = calcRun.Request.WindDirection.ToString();
-            var activeIp = calcRun.Request.Options.TryGetValue("InternalPressure", out var ip) ? ip : "IP_POS";
+            // The request's legacy InternalPressure option is a state label
+            // only; Phase 1 runs envelope both cases (see matrix rows below).
             var activeLs = calcRun.Request.LimitState.ToString();
             bool hasQ = calcRun.ComputedQuantities.TryGetValue("qh", out var qh) || calcRun.ComputedQuantities.TryGetValue("q_des", out qh);
             bool blocked = !calcRun.NumericalComputationPossible || !hasQ;
@@ -497,7 +498,11 @@ public sealed class ExcelReportBuilder
             {
                 foreach (var p in ips)
                 {
-                    bool isActive = d == activeDir && p == activeIp;
+                    // Phase 1: one run now envelopes BOTH internal-pressure
+                    // cases, so for the active direction both IP rows are
+                    // computed by this run (activeIp only records which case
+                    // the legacy state label names).
+                    bool isActive = d == activeDir;
                     if (isActive && blocked)
                     {
                         // A blocked run computed nothing: never present 0.00 Pa
@@ -506,13 +511,17 @@ public sealed class ExcelReportBuilder
                     }
                     else if (isActive)
                     {
-                        var maxSurf = calcRun.SurfaceResults.OrderByDescending(s => Math.Abs(s.NetPressurePa)).FirstOrDefault();
+                        bool posCase = p == "IP_POS";
+                        var maxSurf = calcRun.SurfaceResults
+                            .OrderByDescending(s => Math.Abs(posCase ? s.NetPressurePositiveInternalPa : s.NetPressureNegativeInternalPa))
+                            .FirstOrDefault();
+                        double maxNet = maxSurf == null ? 0 : (posCase ? maxSurf.NetPressurePositiveInternalPa : maxSurf.NetPressureNegativeInternalPa);
                         // "VERIFIED" is reserved for runs an independent engineer
                         // has actually reviewed; a self-computed run is not verified.
                         string status = calcRun.IndependentEngineerReviewed
                             ? "CALCULATED & VERIFIED"
                             : "CALCULATED - NOT INDEPENDENTLY VERIFIED";
-                        Row(d, p, activeLs, $"{qh:F2} Pa", maxSurf != null ? $"{maxSurf.Description} ({maxSurf.NetPressurePa:F2} Pa)" : "Evaluated", status, 0);
+                        Row(d, p, activeLs, $"{qh:F2} Pa", maxSurf != null ? $"{maxSurf.Description} ({maxNet:F2} Pa)" : "Evaluated", status, 0);
                     }
                     else
                     {

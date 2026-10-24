@@ -66,7 +66,14 @@ public sealed record SurfacePressureResult(
     double InternalPressurePa,
     double NetPressurePa,
     Vec3 OutwardNormal,
-    Vec3 GlobalPressureVectorPa);
+    Vec3 GlobalPressureVectorPa,
+    // Phase 1 both-sign internal-pressure envelope (Option A): the primary
+    // Internal*/NetPressurePa values above are the GOVERNING case (larger
+    // absolute net pressure); both case values are carried here so the
+    // envelope is auditable without doubling the surface list.
+    double NetPressurePositiveInternalPa = 0,
+    double NetPressureNegativeInternalPa = 0,
+    string GoverningInternalPressureCase = "");
 
 public sealed record EngineeringCalculationRun(
     string Id,

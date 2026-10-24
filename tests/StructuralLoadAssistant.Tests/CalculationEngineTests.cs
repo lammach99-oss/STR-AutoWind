@@ -45,7 +45,14 @@ public class CalculationEngineTests
         Assert.False(run.IndependentEngineerReviewed);
         Assert.Equal("SYNTHETIC EXAMPLE - NOT FOR DESIGN", run.QualificationStatus);
         Assert.Equal(833.68, run.ComputedQuantities["qh"], 2);
-        Assert.Equal(416.84, Assert.Single(run.SurfaceResults, s => s.SurfaceOrZoneId == "WindwardWall").NetPressurePa, 2);
+        // Phase 1 envelope: the hand-calculated +GCpi case (416.84) is carried
+        // as the positive-internal case; the governing (primary) value is the
+        // -GCpi case, 716.96. Leeward is governed by the +GCpi case (-504.38).
+        var asceWw = Assert.Single(run.SurfaceResults, s => s.SurfaceOrZoneId == "WindwardWall");
+        Assert.Equal(416.84, asceWw.NetPressurePositiveInternalPa, 2);
+        Assert.Equal(716.96, asceWw.NetPressureNegativeInternalPa, 2);
+        Assert.Equal(716.96, asceWw.NetPressurePa, 2);
+        Assert.Equal("NEGATIVE", asceWw.GoverningInternalPressureCase);
         Assert.Equal(-504.38, Assert.Single(run.SurfaceResults, s => s.SurfaceOrZoneId == "LeewardWall").NetPressurePa, 2);
     }
 
@@ -67,7 +74,14 @@ public class CalculationEngineTests
         var run = strategy.Execute(req);
         Assert.True(run.NumericalComputationPossible);
         Assert.Equal(1096.54, run.ComputedQuantities["q_des"], 2);
-        Assert.Equal(548.27, Assert.Single(run.SurfaceResults, s => s.SurfaceOrZoneId == "WindwardWall").NetPressurePa, 2);
+        // Phase 1 envelope: +Cpi case 548.27 is the hand-calculated value;
+        // the governing (primary) windward value is the -Cpi case, 986.88.
+        // RoofWindward is governed by the +Cpi case (-1206.19, unchanged).
+        var asnzWw = Assert.Single(run.SurfaceResults, s => s.SurfaceOrZoneId == "WindwardWall");
+        Assert.Equal(548.27, asnzWw.NetPressurePositiveInternalPa, 2);
+        Assert.Equal(986.88, asnzWw.NetPressureNegativeInternalPa, 2);
+        Assert.Equal(986.88, asnzWw.NetPressurePa, 2);
+        Assert.Equal("NEGATIVE", asnzWw.GoverningInternalPressureCase);
         Assert.Equal(-1206.19, Assert.Single(run.SurfaceResults, s => s.SurfaceOrZoneId == "RoofWindward").NetPressurePa, 2);
     }
 }
