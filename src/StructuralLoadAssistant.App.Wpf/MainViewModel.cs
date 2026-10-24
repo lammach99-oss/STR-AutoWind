@@ -525,5 +525,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         Refresh();
     }
 
+        public EngineeringCalculationRun? CurrentEngineeringRun { get; private set; }
+    public void SetEngineeringRun(EngineeringCalculationRun? run) { CurrentEngineeringRun = run; Refresh(); }
     public void ExportDetailedReport(string path) { RequireDemo(); var model = Session.BuildReport(Definition()); var builder = new DetailedReportBuilder(); string ext = Path.GetExtension(path).ToLowerInvariant(); if (ext == ".xlsx") { File.WriteAllBytes(path, builder.BuildExcel(model, CurrentEngineeringRun)); } else if (ext == ".pdf") { File.WriteAllBytes(path, builder.BuildPdf(model, CurrentEngineeringRun)); } else if (ext == ".html") { File.WriteAllText(path, builder.BuildHtml(model, CurrentEngineeringRun), System.Text.Encoding.UTF8); } else if (ext == ".json") { File.WriteAllText(path, builder.BuildJson(model, CurrentEngineeringRun), System.Text.Encoding.UTF8); } else { File.WriteAllText(path, builder.BuildMarkdown(model, CurrentEngineeringRun), System.Text.Encoding.UTF8); } Status = $"Exported detailed report to {path}"; Refresh(); }
 }
