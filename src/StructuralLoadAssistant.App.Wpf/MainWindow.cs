@@ -279,9 +279,9 @@ public sealed partial class MainWindow : Window
         var p = Stack(); p.Children.Add(Text("Report builder / immutable stored snapshots", 22));
         p.Children.Add(Text("Source: current synthetic calculation; current optional simulated assignment and readback are included automatically."));
         p.Children.Add(Row(Check("Facade", "IncludeFacade"), Check("Roof", "IncludeRoof"), Check("Wall", "IncludeWall")));
-        p.Children.Add(Row(Button("Preview current report", vm.PreviewReport), Button("Save immutable report", vm.SaveReport), Button("Export Markdown / HTML", () => {
-            var dialog = new SaveFileDialog { Filter = "Markdown (*.md)|*.md|HTML (*.html)|*.html", FileName = "structural-demo.md" };
-            if (dialog.ShowDialog(this) == true) vm.ExportReport(dialog.FileName);
+        p.Children.Add(Row(Button("Preview current report", vm.PreviewReport), Button("Save immutable report", vm.SaveReport), Button("Export PDF / HTML / MD / JSON", () => {
+            var dialog = new SaveFileDialog { Filter = "PDF (*.pdf)|*.pdf|HTML (*.html)|*.html|Markdown (*.md)|*.md|JSON (*.json)|*.json", FileName = "wind-load-audit.pdf" };
+            if (dialog.ShowDialog(this) == true) vm.ExportDetailedReport(dialog.FileName);
         })));
         var stored = new ComboBox { Width = 470, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 5, 10, 5) }; stored.SetBinding(ItemsControl.ItemsSourceProperty, "ReportIds"); stored.SetBinding(ComboBox.SelectedItemProperty, new Binding("SelectedReport") { Mode = BindingMode.TwoWay });
         p.Children.Add(Row(stored, Button("Open stored report ID", vm.OpenReport)));
