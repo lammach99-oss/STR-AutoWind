@@ -1,3 +1,4 @@
+using StructuralLoadAssistant.App.Wpf.Controls;
 using System.Collections;
 using System.Windows;
 using System.Windows.Controls;
@@ -17,6 +18,7 @@ public sealed partial class MainWindow : Window
     private readonly Canvas roof = new() { Width = 540, Height = 420, Background = Brushes.WhiteSmoke };
     private readonly Roof3DViewport roof3D = new() { Width = 540, Height = 420 };
     private readonly RoofZoneEditor zoneEditor;
+    private readonly WindPdfViewer windPdfViewer = new() { Height = 580, Margin = new Thickness(0, 10, 0, 10) };
     public TabControl Tabs { get; } = new();
     public MainWindow(MainViewModel viewModel)
     {
@@ -35,7 +37,7 @@ public sealed partial class MainWindow : Window
         AddPage("Facade", FacadePage()); AddPage("Roof", RoofPage()); AddPage("Wall", WallPage()); AddPage("Report", ReportPage());
         roof3D.ShellClicked += id => vm.SelectShell(id);
         zoneEditor.SelectionChanged+=DrawRoof;
-        vm.Refreshed += DrawRoof; DrawRoof();
+        vm.Refreshed += () => { DrawRoof(); UpdatePdfViewer(); }; DrawRoof(); UpdatePdfViewer();
         Closing += (_, e) =>
         {
             try { vm.ProtectUnsavedDraft(); }
@@ -128,14 +130,24 @@ public sealed partial class MainWindow : Window
         p.Children.Add(Text("Selected CSI model: FAKE CSI / fictional-building. Stored reports are immutable snapshots; opening a database reloads the synthetic workspace and exposes its stored report IDs."));
         p.Children.Add(Button("Load simulated model + crossing-shell fixture", () => vm.LoadFixture())); return p;
     }
+    private void UpdatePdfViewer()
+    {
+        if (vm.CurrentEngineeringRun != null && !string.IsNullOrEmpty(vm.CurrentPdfPath) && System.IO.File.Exists(vm.CurrentPdfPath))
+        {
+            if (windPdfViewer.CurrentHash != vm.CurrentEngineeringRun.ContentHash)
+            {
+                try { windPdfViewer.LoadPdf(vm.CurrentPdfPath, vm.CurrentEngineeringRun.ContentHash); } catch { }
+            }
+        }
+    }
+
     private UIElement WindPage()
     {
         var p = Stack(); p.Children.Add(Text("Wind calculation / standards gate", 22)); p.Children.Add(Combo("Edition", vm.Editions));
         p.Children.Add(Button("Load Demo Pressure Fixture", () => vm.LoadFixture())); p.Children.Add(BoundText("ManifestSummary"));
         p.Children.Add(Text("Engineering inputs (locked until verified datasets are installed): wind speed [m/s], terrain / exposure, ground datum [m], importance / risk, directionality, building geometry, enclosure / internal pressure."));
         p.Children.Add(Row(Button("Validate engineering input", vm.ValidateEngineeringInput), Button("Calculate", vm.CalculateEngineeringRun), Button("Save engineering run", vm.SaveEngineeringRun))); p.Children.Add(BoundText("CurrentEngineeringRunSummary"));
-        p.Children.Add(Text("Source pressure profile — elevation [m], net pressure [Pa]")); p.Children.Add(Table("Session.Calculation.Profile"));
-        p.Children.Add(Text("Calculation trace / provenance")); p.Children.Add(Table("Session.Calculation.Trace", 160)); return p;
+        p.Children.Add(windPdfViewer); return p;
     }
     private UIElement CsiPage()
     {

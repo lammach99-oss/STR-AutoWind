@@ -543,9 +543,36 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         Refresh();
     }
 
-        public EngineeringCalculationRun? CurrentEngineeringRun { get; private set; }
+    public EngineeringCalculationRun? CurrentEngineeringRun { get; private set; }
     public EngineeringCalculationRequest? CurrentCalculationRequest { get; set; }
-    public void SetEngineeringRun(EngineeringCalculationRun? run) { CurrentEngineeringRun = run; Refresh(); }
+    public string? CurrentPdfPath { get; private set; }
+    public WindPdfReportDocument? CurrentPdfDocument { get; private set; }
+
+    public void SetEngineeringRun(EngineeringCalculationRun? run)
+    {
+        CurrentEngineeringRun = run;
+        if (run != null && run.NumericalComputationPossible)
+        {
+            try
+            {
+                var model = Session.BuildReport(Definition());
+                CurrentPdfDocument = WindPdfReportDocumentBuilder.Build(model, run);
+                if (WindPdfRenderService.IsRendererAvailable)
+                {
+                    string pdfPath = Path.Combine(Path.GetTempPath(), $"wind_run_{run.Id}_{run.ContentHash[..8]}.pdf");
+                    new WindPdfRenderService().RenderDocument(CurrentPdfDocument, pdfPath);
+                    CurrentPdfPath = pdfPath;
+                }
+            }
+            catch { }
+        }
+        else
+        {
+            CurrentPdfPath = null;
+            CurrentPdfDocument = null;
+        }
+        Refresh();
+    }
     public void SetCalculationRequest(EngineeringCalculationRequest? req) { CurrentCalculationRequest = req; Refresh(); }
 
     public string CurrentEngineeringRunSummary => CurrentEngineeringRun is null
@@ -581,6 +608,26 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
         CurrentEngineeringRun = strategy.Execute(CurrentCalculationRequest);
         ReportText = new DetailedReportBuilder().BuildMarkdown(Session.BuildReport(Definition()), CurrentEngineeringRun);
+        if (CurrentEngineeringRun.NumericalComputationPossible)
+        {
+            try
+            {
+                var model = Session.BuildReport(Definition());
+                CurrentPdfDocument = WindPdfReportDocumentBuilder.Build(model, CurrentEngineeringRun);
+                if (WindPdfRenderService.IsRendererAvailable)
+                {
+                    string pdfPath = Path.Combine(Path.GetTempPath(), $"wind_run_{CurrentEngineeringRun.Id}_{CurrentEngineeringRun.ContentHash[..8]}.pdf");
+                    new WindPdfRenderService().RenderDocument(CurrentPdfDocument, pdfPath);
+                    CurrentPdfPath = pdfPath;
+                }
+            }
+            catch { }
+        }
+        else
+        {
+            CurrentPdfPath = null;
+            CurrentPdfDocument = null;
+        }
         Status = CurrentEngineeringRun.NumericalComputationPossible
             ? $"Calculated engineering run {CurrentEngineeringRun.Id} ({CurrentEngineeringRun.ContentHash[..8]})"
             : $"Calculation blocked: {CurrentEngineeringRun.QualificationStatus}";
@@ -602,13 +649,17 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         if (CurrentEngineeringRun == null)
             throw new InvalidOperationException("No engineering calculation run selected. Calculate or select an engineering calculation run before exporting detailed reports.");
         var model = Session.BuildReport(Definition());
-        var builder = new DetailedReportBuilder();
-        // Exported report product (2026-10-24 decision): summary PDF only, in the
-        // governing standard's units. The full step-by-step calculation stays in
-        // this UX (ReportText); it is not exported in any format.
         path = Path.ChangeExtension(path, ".pdf");
-        File.WriteAllBytes(path, builder.BuildSummaryPdf(model, CurrentEngineeringRun));
-        Status = $"Exported summary report (PDF) to {path}";
+        CurrentPdfDocument ??= WindPdfReportDocumentBuilder.Build(model, CurrentEngineeringRun);
+        if (WindPdfRenderService.IsRendererAvailable)
+        {
+            new WindPdfRenderService().RenderDocument(CurrentPdfDocument, path);
+        }
+        else
+        {
+            File.WriteAllBytes(path, new DetailedReportBuilder().BuildSummaryPdf(model, CurrentEngineeringRun));
+        }
+        Status = $"Exported detailed report (PDF) to {path}";
         Refresh();
     }
 }
