@@ -841,19 +841,11 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         ct.ThrowIfCancellationRequested();
         long version=_currentRequestId;
         string source=(audit?CurrentAuditPdfPath:CurrentPdfPath)??throw new InvalidOperationException("Detailed calculation PDF unavailable");
-        string destination=Path.GetFullPath(Path.ChangeExtension(path,".pdf"));
-        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-        string staged=destination+"."+Guid.NewGuid().ToString("N")+".tmp";
-        try
+        var snapshot=new WorksheetExportSnapshot(source,(audit?renderedAuditHash:renderedPdfHash)!,CurrentEngineeringRun!.ContentHash,CurrentPdfDocument!.ReportDocumentHash,renderedModelHash!,renderedRequestHash!,CurrentReportState.ToString());
+        await WorksheetPdfExport.PublishAsync(snapshot,Path.ChangeExtension(path,".pdf"),()=>
         {
-            await Task.Run(()=>File.Copy(source,staged,true),ct);
-            ct.ThrowIfCancellationRequested();ValidateWorksheetExport();
-            if(PdfHash(staged)!=(audit?renderedAuditHash:renderedPdfHash))throw new InvalidOperationException("PDF changed during export");
+            ValidateWorksheetExport();
             if(version!=_currentRequestId)throw new InvalidOperationException("Report changed during export");
-            File.Move(staged,destination,true);
-            string hash=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(await File.ReadAllBytesAsync(destination,ct)));
-            await File.WriteAllTextAsync(destination+".integrity.json",System.Text.Json.JsonSerializer.Serialize(new {PdfSha256=hash,RunHash=CurrentEngineeringRun!.ContentHash,DocumentHash=CurrentPdfDocument!.ReportDocumentHash,ModelFingerprint=renderedModelHash,RequestHash=renderedRequestHash,Status=CurrentReportState.ToString(),NormativeQualified=false,CanMutateCsi=false}),ct);
-        }
-        finally {if(File.Exists(staged))File.Delete(staged);}
+        },ct);
     }
 }

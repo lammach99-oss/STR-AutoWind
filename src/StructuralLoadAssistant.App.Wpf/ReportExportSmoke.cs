@@ -117,6 +117,14 @@ public sealed partial class MainWindow
         if(vm.CurrentAuditPdfPath==null||!File.Exists(vm.CurrentAuditPdfPath))throw new InvalidOperationException("Separate audit PDF missing");
         await vm.ExportWorksheetPdfAsync(Path.Combine(outputDir,"ASNZ_2021_FlatWorkbook_Review_MAIN.pdf"));
         await vm.ExportWorksheetPdfAsync(Path.Combine(outputDir,"ASNZ_2021_FlatWorkbook_Review_Detailed_Audit.pdf"),audit:true);
+        string failureTarget=Path.Combine(outputDir,"sidecar-failure.pdf");
+        byte[] priorPdf=System.Text.Encoding.ASCII.GetBytes("%PDF-prior-valid-output");
+        await File.WriteAllBytesAsync(failureTarget,priorPdf);
+        Directory.CreateDirectory(failureTarget+".integrity.json");
+        bool sidecarFailed=false;
+        try {await vm.ExportWorksheetPdfAsync(failureTarget);}catch(IOException){sidecarFailed=true;}catch(UnauthorizedAccessException){sidecarFailed=true;}
+        if(!sidecarFailed||!File.ReadAllBytes(failureTarget).SequenceEqual(priorPdf))
+            throw new InvalidOperationException("Sidecar publication failure replaced the prior PDF");
         string originalPdf=vm.CurrentPdfPath!;
         byte[] originalBytes=await File.ReadAllBytesAsync(originalPdf);
         await File.AppendAllTextAsync(originalPdf,"tampered");
@@ -148,4 +156,9 @@ public sealed partial class MainWindow
             throw new InvalidOperationException("Blocked diagnostic must remain Blocked with available PDF; actual="+vm.CurrentReportState);
         await vm.ExportWorksheetPdfAsync(Path.Combine(outputDir,"ASNZ_2021_Blocked_Diagnostic_MAIN.pdf"));
         if(vm.CurrentReportState!=MainViewModel.WindReportState.Blocked)throw new InvalidOperationException("Diagnostic export changed blocked status");
+        vm.SetCalculationRequest(req with {RoofForm="Flat",RoofSlopeDegrees=14});
+        await vm.CalculateEngineeringRunAsync();
+        if(vm.CurrentReportState!=MainViewModel.WindReportState.Blocked||vm.CurrentEngineeringRun!.AsNz2021Cases.Any(c=>c.NetPa.HasValue))
+            throw new InvalidOperationException("Unsupported roof method published calculated pressures or Ready state");
+        await vm.ExportWorksheetPdfAsync(Path.Combine(outputDir,"ASNZ_2021_Unsupported_Geometry.pdf"));
     }}

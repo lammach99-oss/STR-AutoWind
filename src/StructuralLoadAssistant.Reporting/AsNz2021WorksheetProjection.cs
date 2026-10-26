@@ -23,9 +23,9 @@ public sealed partial class AsNz2021WorkbookPdfRenderer
         double? Input(string k)=>req.ExplicitCoefficients.TryGetValue(k,out var e)?e.Value:null;
         void Factor(string address,string k,int span=1)=>Number(address,Input(k),span:span,origin:req.ExplicitCoefficients.TryGetValue(k,out var e)?e.Provenance.ToString():"INPUT_REQUIRED",trace:"INPUT-"+k);
         AsNz2021Case? Result(WindDirection d,LimitState state,string surface,int c=0,int z=0)=>run.AsNz2021Cases.FirstOrDefault(r=>r.Direction==d&&r.LimitState==state&&r.Surface==surface&&r.RoofCase==c&&r.Zone==z&&r.Id.EndsWith("Positive"));
-        string Sym(string value)=>MathLabel(value).Replace("Mz,cat","M<sub>z,cat</sub>").Replace("Md","M<sub>d</sub>").Replace("Mc","M<sub>c</sub>").Replace("Ms","M<sub>s</sub>").Replace("Mt","M<sub>t</sub>").Replace("Kl","K<sub>ℓ</sub>").Replace("Ka","K<sub>a</sub>").Replace("Kc","K<sub>c,e</sub>").Replace("Kp","K<sub>p</sub>");
+        string Sym(string value)=>MathLabel(value).Replace("Mz_cat","M<sub>z,cat</sub>").Replace("Mz,cat","M<sub>z,cat</sub>").Replace("Md","M<sub>d</sub>").Replace("Mc","M<sub>c</sub>").Replace("Ms","M<sub>s</sub>").Replace("Mt","M<sub>t</sub>").Replace("Kl","K<sub>ℓ</sub>").Replace("Ka","K<sub>a</sub>").Replace("Kc","K<sub>c,e</sub>").Replace("Kp","K<sub>p</sub>");
         Put("A5","LOAD CALCULATION",9,"WORKBOOK_LAYOUT",css:"title");Text("J5","Project Code:",2);Text("L5",doc.Project.Id,3);
-        Text("A6","Project:",2);Text("C6",doc.Project.Name,7);Text("J6","Calc. by:",2);Text("L6",req.Options.GetValueOrDefault("Author","Not supplied"),2);Text("N6","Rev");
+        Text("A6","Project:",2);Text("C6",doc.Project.Name,7);Text("J6","Calc. by:",2);Text("L6",req.Options.GetValueOrDefault("Author","Not supplied"),2);Text("N6","Rev",css:"small");
         Text("A7","Address:",2);Text("C7",req.Options.GetValueOrDefault("SiteAddress","Site / jurisdiction pending"),7);Text("J7","Checked by:",2);Text("L7","NOT APPROVED",2);Text("N7",req.Options.GetValueOrDefault("Revision","—"));
         Text("A8","Item:",2);Text("C8","Wind load to building calculation",7);Text("J8","Date:",2);Text("L8",run.CreatedAt.ToString("yyyy-MM-dd"),3);
         Text("A10","Design code & reference",14,"section");Text("A11",req.StandardEdition+" — Structural design actions, Part 2: Wind actions",14);
@@ -37,9 +37,9 @@ public sealed partial class AsNz2021WorkbookPdfRenderer
         {Put("A"+row,label+"<sub>R"+(state==LimitState.Uls?"u":"s")+"</sub> =",4,"WORKBOOK_LAYOUT");Factor("E"+row,"R_"+state);Text("F"+row,"Years",3);Factor("K"+row,"VR_"+state);Text("L"+row,"m/s",2);}
         string[] factorKeys=["Md_0","Mc","Ms","Mt","Mz_cat"];
         string[] factorLabels=["Wind direction multiplier","Climate change multiplier","Shielding multiplier","Topographic multiplier","Terrain/Height multiplier"];
-        for(int i=0;i<5;i++){int row=24+i;Text("A"+row,factorLabels[i],9);Put("J"+row,Sym(i==0?"Md =":factorKeys[i]+" ="),1,"WORKBOOK_LAYOUT");Factor("K"+row,factorKeys[i]);Text("L"+row,i==0?"β=0° input":i==4?"Table 4.1":"",3);}
+        for(int i=0;i<5;i++){int row=24+i;Text("A"+row,factorLabels[i],8);Put("I"+row,Sym(i==0?"Md =":factorKeys[i]+" ="),2,"WORKBOOK_LAYOUT");Factor("K"+row,factorKeys[i]);Text("L"+row,i==0?"β=0° input":i==4?"Table 4.1":"",3);}
         foreach(var (row,state) in new[]{(29,LimitState.Uls),(30,LimitState.Sls)})
-        {Text("A"+row,"Site wind speed — "+state.ToString().ToUpperInvariant(),6);Put("G"+row,"V<sub>sit,β</sub> = V<sub>R</sub>M<sub>d</sub>M<sub>z,cat</sub>M<sub>s</sub>M<sub>t</sub>M<sub>c</sub>",4,"CALCULATED");Number("K"+row,run.ComputedQuantities.TryGetValue($"Vsit_{state}_0",out var v)?v:null,trace:$"Vsit_{state}_0");Text("L"+row,"m/s",2);Text("N"+row,"β=0°");}
+        {Text("A"+row,"Site wind speed — "+state.ToString().ToUpperInvariant(),6);Put("G"+row,"V<sub>sit,β</sub> = V<sub>R</sub>M<sub>d</sub>M<sub>z,cat</sub>M<sub>s</sub>M<sub>t</sub>M<sub>c</sub>",4,"CALCULATED");Number("K"+row,run.ComputedQuantities.TryGetValue($"Vsit_{state}_0",out var v)?v:null,trace:$"Vsit_{state}_0");Text("L"+row,"m/s");Text("M"+row,"β=0°",2);}
         foreach(var (row,key,label) in new[]{(31,"Cdyn","Dynamic response factor, Cdyn ="),(32,"rho","Density of air, pair ="),(33,"Kp","Porous cladding factor, Kp =")})
         {Put("A"+row,Sym(label),9,"WORKBOOK_LAYOUT");Factor("K"+row,key=="Kp"?$"{x}_Windward_0_0_Kp":key);Text("L"+row,key=="rho"?"kg/m³":"",3);}
         foreach(var (row,state) in new[]{(34,LimitState.Uls),(35,LimitState.Sls)})
@@ -51,15 +51,15 @@ public sealed partial class AsNz2021WorkbookPdfRenderer
             string A(int r)=>"A"+Offset(r);
             Text(A(38),$"2.1. Wind {axis} calculation — {direction} (θ={(direction==WindDirection.PositiveX?"0":direction==WindDirection.NegativeX?"180":direction==WindDirection.PositiveY?"90":"270")}°)",14,"section");
             foreach(var (row,key,label) in new[]{(39,"Kl","Local pressure factor, Kl ="),(40,"Ka","Area reduction factor, Ka ="),(41,"Kce","Combination factor, Kc =")})
-            {Put(A(row),Sym(label),9,"WORKBOOK_LAYOUT");Factor("J"+Offset(row),$"{direction}_Windward_0_0_{key}");Text("K"+Offset(row),"windward input",4);}
+            {Put(A(row),Sym(label),9,"WORKBOOK_LAYOUT");Factor("J"+Offset(row),$"{direction}_Windward_0_0_{key}",2);Text("L"+Offset(row),"windward input",3);}
             Text(A(42),"Parapet height, hₚ =",9);Put("J"+Offset(42),E(req.Options.GetValueOrDefault("ParapetHeightM","INPUT REQUIRED")),1,"OWNER_INPUT");Text("K"+Offset(42),"m",2);
             void Wall(int row,string surface,string title)
             {
                 Text(A(row),title,14,"section");int cp=row==43?44:50;
-                if(row==48){Text(A(49),"Ratio d/b =",9);Number("J"+Offset(49),direction is WindDirection.PositiveX or WindDirection.NegativeX?req.BuildingLengthM/req.BuildingWidthM:req.BuildingWidthM/req.BuildingLengthM);}
-                Put(A(cp),"External pressure coefficient, C<sub>p,e</sub> =",9,"WORKBOOK_LAYOUT");Number("J"+Offset(cp),Result(direction,LimitState.Uls,surface)?.Cpe,trace:$"INPUT-{direction}_{surface}_0_0_Cpe");Text("K"+Offset(cp),"EXPLICIT¹",4);
-                Put(A(cp+1),"C<sub>shp,e</sub> = C<sub>p,e</sub>K<sub>a</sub>K<sub>c,e</sub>K<sub>ℓ</sub>K<sub>p</sub>",9,"CALCULATED");Number("J"+Offset(cp+1),Result(direction,LimitState.Uls,surface)?.ExternalShape);Text("K"+Offset(cp+1),"Eq 5.2(2)",4);
-                foreach(var state in new[]{LimitState.Uls,LimitState.Sls}){int r=Offset(cp+(state==LimitState.Uls?2:3));Put("A"+r,"p<sub>e</sub> = ½ρ<sub>air</sub>V<sub>des,θ</sub>²C<sub>shp,e</sub>C<sub>dyn</sub>",9,"CALCULATED");Number("J"+r,Result(direction,state,surface)?.ExternalPa/1000,trace:Result(direction,state,surface)?.Id??"");Text("K"+r,"kN/m²",2);Text("M"+r,state.ToString().ToUpperInvariant(),2);}
+                if(row==48){Text(A(49),"Ratio d/b =",9);Number("J"+Offset(49),direction is WindDirection.PositiveX or WindDirection.NegativeX?req.BuildingLengthM/req.BuildingWidthM:req.BuildingWidthM/req.BuildingLengthM,span:2);}
+                Put(A(cp),"External pressure coefficient, C<sub>p,e</sub> =",9,"WORKBOOK_LAYOUT");Number("J"+Offset(cp),Result(direction,LimitState.Uls,surface)?.Cpe,span:2,trace:$"INPUT-{direction}_{surface}_0_0_Cpe");Text("L"+Offset(cp),"EXPLICIT¹",3);
+                Put(A(cp+1),"C<sub>shp,e</sub> = C<sub>p,e</sub>K<sub>a</sub>K<sub>c,e</sub>K<sub>ℓ</sub>K<sub>p</sub>",9,"CALCULATED");Number("J"+Offset(cp+1),Result(direction,LimitState.Uls,surface)?.ExternalShape,span:2);Text("L"+Offset(cp+1),"Eq 5.2(2)",3);
+                foreach(var state in new[]{LimitState.Uls,LimitState.Sls}){int r=Offset(cp+(state==LimitState.Uls?2:3));Put("A"+r,"p<sub>e</sub> = ½ρ<sub>air</sub>V<sub>des,θ</sub>²C<sub>shp,e</sub>C<sub>dyn</sub>",9,"CALCULATED");Number("J"+r,Result(direction,state,surface)?.ExternalPa/1000,span:2,trace:Result(direction,state,surface)?.Id??"");Text("L"+r,"kN/m²",css:"unit");Text("M"+r,state.ToString().ToUpperInvariant(),2);}
             }
             Wall(43,"Windward","2.1.1. Windward wall");Wall(48,"Leeward","2.1.2. Leeward wall");
             Text(A(54),"2.1.3. Sideward wall",14,"section");
@@ -79,7 +79,7 @@ public sealed partial class AsNz2021WorkbookPdfRenderer
     public string BuildHtml(WindPdfReportDocument document)
     {
         var run=document.CalculationRun??throw new ArgumentException("Run required");
-        var sb=new StringBuilder("<!doctype html><html><head><meta charset='utf-8'><style>@page{size:A4;margin:9mm 10mm}body{font:9pt Arial;color:#111;margin:0}section{break-after:page}section:last-child{break-after:auto}table{width:100%;table-layout:fixed;border-collapse:collapse}td{height:4.0mm;padding:1px 2px;vertical-align:middle;overflow-wrap:break-word}sub{font-size:75%}.number{color:#003f9c;text-align:right}.section{color:#003b76;font-weight:bold}.title{font-size:14pt;font-weight:bold}.zone,.zone-head{border:0.5pt solid #222}.zone-head{text-align:center;font-weight:bold}.small{font-size:7.5pt;overflow-wrap:anywhere}footer{margin-top:3mm;border-top:0.5pt solid #888;font-size:7pt;overflow-wrap:anywhere}.status{font-size:8pt;color:#8a3100;margin:2mm 0}h2{font-size:10pt;color:#003b76;margin:2mm 0}</style></head><body>");
+        var sb=new StringBuilder("<!doctype html><html><head><meta charset='utf-8'><style>@page{size:A4;margin:9mm 10mm}body{font:9pt Arial;color:#111;margin:0}section{break-after:page}section:last-child{break-after:auto}table{width:100%;table-layout:fixed;border-collapse:collapse}td{height:4.0mm;padding:1px 2px;vertical-align:middle;overflow-wrap:break-word}sub{font-size:75%}.unit{white-space:nowrap}.number{color:#003f9c;text-align:right;white-space:nowrap}.section{color:#003b76;font-weight:bold}.title{font-size:14pt;font-weight:bold}.zone,.zone-head{border:0.5pt solid #222}.zone-head{text-align:center;font-weight:bold}.small{font-size:7.5pt;overflow-wrap:anywhere}footer{margin-top:3mm;border-top:0.5pt solid #888;font-size:7pt;overflow-wrap:anywhere}.status{font-size:8pt;color:#8a3100;margin:2mm 0}h2{font-size:10pt;color:#003b76;margin:2mm 0}</style></head><body>");
         void Sheet(WindDirection x,WindDirection y,int from,int to,string title)
         {
             var cells=ProjectCells(document,x,y);sb.Append($"<section><div class='status'>{E(run.QualificationStatus)} · NO CSI WRITES · {E(run.Request.Options.GetValueOrDefault("FixturePurpose","EXPLICIT-INPUT REVIEW MODE ONLY"))}</div><h2>{E(title)}</h2><table><colgroup>");

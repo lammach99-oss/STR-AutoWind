@@ -40,8 +40,10 @@ public static class AsNz2021ReviewCalculation
         }
         bool geometryOk = request.StandardEdition == "AS/NZS 1170.2:2021" && Enum.IsDefined(request.LimitState) && Enum.IsDefined(request.WindDirection) && new[] { request.BuildingLengthM, request.BuildingWidthM, request.ReferenceHeightM }.All(v => double.IsFinite(v) && v > 0)
             && double.IsFinite(request.WindAngleDegrees) && double.IsFinite(request.RoofSlopeDegrees) && request.RoofSlopeDegrees >= 0 && request.RoofSlopeDegrees < 90
-            && (request.RoofForm.Equals("Monoslope", StringComparison.OrdinalIgnoreCase) || request.RoofForm.Equals("Monopitch", StringComparison.OrdinalIgnoreCase) || request.RoofForm.Equals("Flat", StringComparison.OrdinalIgnoreCase));
+            && request.EaveHeightM > request.GroundElevationM && request.RidgeHeightM >= request.EaveHeightM
+            && AsNz2021MethodDecision.Evaluate(request.RoofForm,request.RoofSlopeDegrees,0,0,request.ReferenceHeightM/request.BuildingLengthM,request.BuildingLengthM/request.BuildingWidthM,"UNKNOWN","UNKNOWN",1,[]).ReviewGeometrySupported;
         if (!geometryOk) issues.Add(new("UNSUPPORTED_GEOMETRY", CalculationIssueSeverity.Error, "Geometry", "Only explicit rectangular flat/monoslope geometry is supported. Ground datum, roof plane and applicability require engineer review."));
+        issues.Add(new("GEOMETRY_REVIEW_REQUIRED", CalculationIssueSeverity.Warning,"Geometry","Supplied footprint, average height, pitch and roof run require engineering adjudication; no physical roof plane or full-span pitch/rise verified."));
         double mz = Input("Mz_cat"), ms = Input("Ms"), mt = Input("Mt"), mc = Input("Mc"), rho = Input("rho"), dyn = Input("Cdyn");
         double slopeBearing = Input("SlopeBearing", false);
         foreach (var state in new[] { LimitState.Uls, LimitState.Sls })
@@ -74,7 +76,8 @@ public static class AsNz2021ReviewCalculation
                     foreach (string sign in new[] { "Positive", "Negative" })
                     {
                         double cpi = outside ? double.NaN : Input("Cpi_" + sign, false);
-                        bool valid = geometryOk && new[] { speed,rho,dyn,cpe,ka,kce,kl,kp,cpi,kci,kv,slopeBearing,period }.All(double.IsFinite);
+                        var method = AsNz2021MethodDecision.Evaluate(request.RoofForm,request.RoofSlopeDegrees,slopeBearing,bearing,request.ReferenceHeightM/depth,depth/breadth,request.Options.GetValueOrDefault("Jurisdiction","UNKNOWN"),request.Options.GetValueOrDefault("RegionCode","UNKNOWN"),period,request.SelectedAmendments);
+                        bool valid = geometryOk && method.ReviewGeometrySupported && new[] { speed,rho,dyn,cpe,ka,kce,kl,kp,cpi,kci,kv,slopeBearing,period }.All(double.IsFinite);
                         if (valid && ((sign == "Positive" && cpi < 0) || (sign == "Negative" && cpi > 0))) valid = false;
                         var p = valid ? AsNz2021MatrixEngine.Pressure(speed,rho,dyn,cpe,ka,kce,kl,kp,cpi,kci,kv) : (double.NaN,double.NaN,double.NaN);
                         string id = $"{state}_{prefix}_{sign}";
@@ -85,7 +88,7 @@ public static class AsNz2021ReviewCalculation
                             "AS/NZS 1170.2:2021 Cl 2.2, 2.3, 2.4(1), 5.2(1)/(2); surface applicability and selected coefficients require review")
                         {
                             PressureBasisPa=valid?0.5*rho*speed*speed*dyn:null,
-                            MethodDecision=AsNz2021MethodDecision.Evaluate(request.RoofForm,request.RoofSlopeDegrees,slopeBearing,bearing,request.ReferenceHeightM/depth,depth/breadth,request.Options.GetValueOrDefault("Jurisdiction","UNKNOWN"),request.Options.GetValueOrDefault("RegionCode","UNKNOWN"),period,request.SelectedAmendments),
+                            MethodDecision=method,
                             FactorEvidence=request.ExplicitCoefficients.Where(e=>e.Key.StartsWith(prefix+"_")||e.Key=="Cpi_"+sign||e.Key is "rho" or "Cdyn").ToImmutableDictionary()
                         });
                         if (valid) traces.Add(new(id,"Surface pressure",id,"pe = 0.5 rho Vdes² Cpe Ka Kce Kl Kp Cdyn; pi = 0.5 rho Vdes² Cpi Kci Kv Cdyn; pn = pe - pi",

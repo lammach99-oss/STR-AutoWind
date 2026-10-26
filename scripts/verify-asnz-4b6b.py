@@ -1,7 +1,7 @@
-import json,csv,zipfile,xml.etree.ElementTree as E,re
+import sys,json,csv,zipfile,xml.etree.ElementTree as E,re
 from pathlib import Path
 from pypdf import PdfReader
-root=Path('artifacts/4b6b');z=zipfile.ZipFile(root/'workbook.xlsm');ns={'s':'http://schemas.openxmlformats.org/spreadsheetml/2006/main'};sheet=E.fromstring(z.read('xl/worksheets/sheet2.xml'));src={c.attrib['r']:c for c in sheet.findall('.//s:c',ns)}
+root=Path(sys.argv[1] if len(sys.argv)>1 else 'artifacts/4b6b');z=zipfile.ZipFile(root/'workbook.xlsm');ns={'s':'http://schemas.openxmlformats.org/spreadsheetml/2006/main'};sheet=E.fromstring(z.read('xl/worksheets/sheet2.xml'));src={c.attrib['r']:c for c in sheet.findall('.//s:c',ns)}
 legacy=json.loads((root/'ASNZ_2021_FlatWorkbook_Review.json').read_text());explicit=json.loads((root/'ASNZ_2021_Explicit_Review.json').read_text());rows=[]
 def add(cell,field,get,unit=''):
  c=src[cell];v=float(c.find('s:v',ns).text);formula=c.find('s:f',ns)
