@@ -28,5 +28,36 @@ public static class AsNzMatrixFixture
         }
         return new("matrix-project","AS/NZS 1170.2:2021",[],AsNz2021ReviewCalculation.Procedure,LimitState.Uls,WindDirection.PositiveX,0,"Monoslope","Enclosed",40,3.5,11.44,17.8,3.2,3.8,14,0,"TC2",b.ToImmutable(),new Dictionary<string,string> { ["Region"] = workbookComparison ? "D maximum — illustrative comparison; site applicability unverified" : "SYNTHETIC", ["ParapetHeightM"] = "0" }.ToImmutableDictionary());
     }
+
+    // Values transcribed from OWNER workbook cached cells for arithmetic comparison only.
+    // This is not a standards table, lookup or production default.
+    public static EngineeringCalculationRequest LegacyWorkbookComparison()
+    {
+        var req=Request(true);var b=req.ExplicitCoefficients.ToBuilder();
+        double[] side=[-0.65,-0.5,-0.3,-0.2],roof1=[-0.9,-0.9,-0.5,-0.3,-0.2],roof2=[-0.4,-0.4,0,0.1,0.2];
+        foreach(var direction in Enum.GetValues<WindDirection>())
+        {
+            bool x=direction is WindDirection.PositiveX or WindDirection.NegativeX;
+            void Set(string surface,int c,int z,double value,string cell)
+            {
+                string key=$"{direction}_{surface}_{c}_{z}_Cpe";
+                b[key]=b[key] with {Value=value,Document="Owner AS.NZS_Wind load.xlsm / Flat roof",ClauseOrTable=cell,SourceNotes="LEGACY WORKBOOK COMPARISON / NOT A QUALIFIED STANDARDS LOOKUP"};
+            }
+            Set("Windward",0,0,0.8,x?"J44":"J88");Set("Leeward",0,0,x?-0.3:-0.3888111888111888,x?"J50":"J94");
+            for(int z=0;z<4;z++)foreach(string face in new[]{"SideLeft","SideRight"})Set(face,0,z,side[z],"F"+((x?57:101)+z));
+            for(int z=0;z<5;z++){Set("Roof",1,z,roof1[z],"F"+((x?67:111)+z));Set("Roof",2,z,roof2[z],"F"+((x?76:120)+z));}
+        }
+        return req with { ExplicitCoefficients=b.ToImmutable(),Options=req.Options.SetItem("FixturePurpose","LEGACY WORKBOOK COMPARISON / NOT A QUALIFIED STANDARDS LOOKUP").SetItem("RegionCode","D maximum (comparison)") };
+    }
+    public static EngineeringCalculationRequest VariedExplicitReview()
+    {
+        var req=Request(true);var b=req.ExplicitCoefficients.ToBuilder();
+        foreach(var key in b.Keys.ToArray())
+        {
+            if(key.StartsWith("Md_")) {int bearing=int.Parse(key[3..]);b[key]=b[key] with {Value=0.72+bearing/900.0};}
+            if(key.EndsWith("_Cpe")) {int zone=int.Parse(key.Split('_')[3]);double direction=key.StartsWith("Negative")?0.08:0; b[key]=b[key] with {Value=b[key].Value+0.025*zone+direction,SourceNotes="Independent arithmetic stress fixture; explicit synthetic selection; NOT NORMATIVE"};}
+        }
+        return req with {WindAngleDegrees=22.5,ExplicitCoefficients=b.ToImmutable(),Options=req.Options.SetItem("FixturePurpose","2021 EXPLICIT REVIEW / SYNTHETIC FACTORS / APPLICABILITY UNVERIFIED")};
+    }
 }
 

@@ -106,7 +106,7 @@ public sealed partial class MainWindow
     public async Task RunAsNzWorksheetSmokeAsync(string outputDir)
     {
         vm.Edition = "AS/NZS 1170.2:2021";
-        var request = StructuralLoadAssistant.Csi.Fake.AsNzMatrixFixture.Request(workbookComparison:true) with { ProjectId = vm.Session.Project.Id };
+        var request = StructuralLoadAssistant.Csi.Fake.AsNzMatrixFixture.LegacyWorkbookComparison() with { ProjectId = vm.Session.Project.Id };
         vm.SetCalculationRequest(request);
         await vm.CalculateEngineeringRunAsync();
         if (vm.CurrentReportState != MainViewModel.WindReportState.Ready || vm.CurrentEngineeringRun?.AsNz2021Cases.Length != 320)
@@ -114,6 +114,21 @@ public sealed partial class MainWindow
         if (vm.CurrentPdfDocument?.CalculationRun?.ContentHash != vm.CurrentEngineeringRun.ContentHash)
             throw new InvalidOperationException("AS/NZS PDF provenance mismatch");
         File.Copy(vm.CurrentPdfPath!, Path.Combine(outputDir,"ASNZ_2021_FlatWorkbook_Comparison_Review.pdf"));
+        if(vm.CurrentAuditPdfPath==null||!File.Exists(vm.CurrentAuditPdfPath))throw new InvalidOperationException("Separate audit PDF missing");
+        await vm.ExportWorksheetPdfAsync(Path.Combine(outputDir,"ASNZ_2021_FlatWorkbook_Review_MAIN.pdf"));
+        await vm.ExportWorksheetPdfAsync(Path.Combine(outputDir,"ASNZ_2021_FlatWorkbook_Review_Detailed_Audit.pdf"),audit:true);
+        string originalPdf=vm.CurrentPdfPath!;
+        byte[] originalBytes=await File.ReadAllBytesAsync(originalPdf);
+        await File.AppendAllTextAsync(originalPdf,"tampered");
+        bool tamperedBlocked=false;
+        try { await vm.ExportWorksheetPdfAsync(Path.Combine(outputDir,"tampered.pdf")); }
+        catch(InvalidOperationException){tamperedBlocked=true;}
+        await File.WriteAllBytesAsync(originalPdf,originalBytes);
+        if(!tamperedBlocked)throw new InvalidOperationException("Changed PDF bytes exported without integrity rejection");
+        vm.CurrentCalculationRequest=request with {BuildingWidthM=19};
+        bool staleBlocked=false;try{await vm.ExportWorksheetPdfAsync(Path.Combine(outputDir,"stale.pdf"));}catch(InvalidOperationException){staleBlocked=true;}
+        if(!staleBlocked)throw new InvalidOperationException("Stale request exported a PDF");
+        vm.SetCalculationRequest(request);await vm.CalculateEngineeringRunAsync();
         File.WriteAllText(Path.Combine(outputDir,"request.json"), SnapshotJson.Serialize(request));
         File.WriteAllText(Path.Combine(outputDir,"run.json"), SnapshotJson.Serialize(vm.CurrentEngineeringRun));
         vm.SetCalculationRequest(request with { BuildingLengthM = 12 });
@@ -123,4 +138,14 @@ public sealed partial class MainWindow
         vm.SetCalculationRequest(request);
         await vm.CalculateEngineeringRunAsync();
         await Dispatcher.InvokeAsync(() => { UpdateLayout(); }, DispatcherPriority.ApplicationIdle);
+    }    public async Task RunAsNzBlockedSmokeAsync(string outputDir)
+    {
+        vm.Edition="AS/NZS 1170.2:2021";
+        var req=StructuralLoadAssistant.Csi.Fake.AsNzMatrixFixture.Request(true) with {ProjectId=vm.Session.Project.Id};
+        vm.SetCalculationRequest(req with {ExplicitCoefficients=req.ExplicitCoefficients.Remove("Mc")});
+        await vm.CalculateEngineeringRunAsync();
+        if(vm.CurrentReportState!=MainViewModel.WindReportState.Blocked || vm.CurrentPdfPath==null)
+            throw new InvalidOperationException("Blocked diagnostic must remain Blocked with available PDF; actual="+vm.CurrentReportState);
+        await vm.ExportWorksheetPdfAsync(Path.Combine(outputDir,"ASNZ_2021_Blocked_Diagnostic_MAIN.pdf"));
+        if(vm.CurrentReportState!=MainViewModel.WindReportState.Blocked)throw new InvalidOperationException("Diagnostic export changed blocked status");
     }}

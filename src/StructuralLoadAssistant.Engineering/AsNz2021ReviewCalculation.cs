@@ -5,7 +5,12 @@ namespace StructuralLoadAssistant.Engineering;
 public sealed record AsNz2021Case(string Id, WindDirection Direction, LimitState LimitState, string Surface,
     int RoofCase, int Zone, double? FromM, double? ToM, double BearingDegrees, double? DesignSpeed,
     double? Cpe, double? ExternalShape, double? InternalShape, double? ExternalPa, double? InternalPa,
-    double? NetPa, Vec3? OutwardNormal, Vec3? PressureVectorPa, string Status, string SourceReference);
+    double? NetPa, Vec3? OutwardNormal, Vec3? PressureVectorPa, string Status, string SourceReference)
+{
+    public AsNz2021MethodDecision? MethodDecision {get;init;}
+    public ImmutableDictionary<string,CoefficientInputEvidence> FactorEvidence {get;init;}=ImmutableDictionary<string,CoefficientInputEvidence>.Empty;
+    public double? PressureBasisPa {get;init;}
+}
 
 public static class AsNz2021ReviewCalculation
 {
@@ -43,13 +48,19 @@ public static class AsNz2021ReviewCalculation
         {
             double vr = Input("VR_" + state), period = Input("R_" + state);
             double[] site = Enumerable.Range(0, 8).Select(i => vr * Input("Md_" + i * 45) * mz * ms * mt * mc).ToArray();
-            for (int i = 0; i < 8; i++) if (double.IsFinite(site[i])) quantities[$"Vsit_{state}_{i * 45}"] = site[i];
+            for (int i = 0; i < 8; i++) if (double.IsFinite(site[i])) {
+                string id=$"Vsit_{state}_{i*45}"; quantities[id]=site[i];
+                traces.Add(new(id,"Site speed",id,"VR Md Mz,cat Ms Mt Mc",$"{vr:R} × {Input("Md_"+i*45):R} × {mz:R} × {ms:R} × {mt:R} × {mc:R}",$"{site[i]:R} m/s",site[i],"m/s","AS/NZS 1170.2:2021 Eq 2.2","Explicit supplied regional and direction inputs",["INPUT-VR_"+state,"INPUT-Md_"+i*45,"INPUT-Mz_cat","INPUT-Ms","INPUT-Mt","INPUT-Mc"],[]));
+            }
             foreach (var direction in Enum.GetValues<WindDirection>())
             {
                 double theta = direction switch { WindDirection.PositiveX => 0, WindDirection.PositiveY => 90, WindDirection.NegativeX => 180, _ => 270 };
                 double bearing = ((request.WindAngleDegrees + theta) % 360 + 360) % 360;
                 double speed = site.All(v => double.IsFinite(v) && v > 0) ? AsNz2021MatrixEngine.DesignSpeed(site, bearing, state) : double.NaN;
-                if (double.IsFinite(speed)) quantities[$"Vdes_{state}_{direction}"] = speed;
+                if (double.IsFinite(speed)) {
+                    string id=$"Vdes_{state}_{direction}";quantities[id]=speed;
+                    traces.Add(new(id,"Design speed",id,"max interpolated Vsit in θ ±45°; ULS >=30 m/s",$"bearing {bearing:R}°, sector [{bearing-45:R},{bearing+45:R}], eight Vsit operands [{string.Join(",",site.Select(v=>v.ToString("R")))}]",$"{speed:R} m/s",speed,"m/s","AS/NZS 1170.2:2021 Cl 2.3","Sector boundary interpolation and cardinal maxima; orientation relative true North",Enumerable.Range(0,8).Select(i=>$"Vsit_{state}_{i*45}").ToImmutableArray(),[]));
+                }
                 double depth = direction is WindDirection.PositiveX or WindDirection.NegativeX ? request.BuildingLengthM : request.BuildingWidthM;
                 double breadth = direction is WindDirection.PositiveX or WindDirection.NegativeX ? request.BuildingWidthM : request.BuildingLengthM;
                 Vec3 along = direction switch { WindDirection.PositiveX => new(1,0,0), WindDirection.NegativeX => new(-1,0,0), WindDirection.PositiveY => new(0,1,0), _ => new(0,-1,0) };
@@ -67,14 +78,20 @@ public static class AsNz2021ReviewCalculation
                         if (valid && ((sign == "Positive" && cpi < 0) || (sign == "Negative" && cpi > 0))) valid = false;
                         var p = valid ? AsNz2021MatrixEngine.Pressure(speed,rho,dyn,cpe,ka,kce,kl,kp,cpi,kci,kv) : (double.NaN,double.NaN,double.NaN);
                         string id = $"{state}_{prefix}_{sign}";
-                        string status = outside ? "NOT_APPLICABLE" : valid ? "CALCULATED / ENGINEER REVIEW" : "INPUT_REQUIRED";
+                        string status = outside ? "NOT_APPLICABLE" : valid ? "EXPLICIT REVIEW ARITHMETIC / APPLICABILITY UNVERIFIED" : "INPUT_REQUIRED";
                         double? Finite(double v) => double.IsFinite(v) ? v : null;
                         rows.Add(new(id,direction,state,surface,roofCase,zone,Finite(from),Finite(to),bearing,Finite(speed),Finite(cpe),Finite(cpe*ka*kce*kl*kp),Finite(cpi*kci*kv),
                             Finite(p.Item1),Finite(p.Item2),Finite(p.Item3), valid ? normal : null,valid ? new Vec3(-p.Item3*normal.X,-p.Item3*normal.Y,-p.Item3*normal.Z) : null,status,
-                            "AS/NZS 1170.2:2021 Cl 2.2, 2.3, 2.4(1), 5.2(1)/(2); surface applicability and selected coefficients require review"));
+                            "AS/NZS 1170.2:2021 Cl 2.2, 2.3, 2.4(1), 5.2(1)/(2); surface applicability and selected coefficients require review")
+                        {
+                            PressureBasisPa=valid?0.5*rho*speed*speed*dyn:null,
+                            MethodDecision=AsNz2021MethodDecision.Evaluate(request.RoofForm,request.RoofSlopeDegrees,slopeBearing,bearing,request.ReferenceHeightM/depth,depth/breadth,request.Options.GetValueOrDefault("Jurisdiction","UNKNOWN"),request.Options.GetValueOrDefault("RegionCode","UNKNOWN"),period,request.SelectedAmendments),
+                            FactorEvidence=request.ExplicitCoefficients.Where(e=>e.Key.StartsWith(prefix+"_")||e.Key=="Cpi_"+sign||e.Key is "rho" or "Cdyn").ToImmutableDictionary()
+                        });
                         if (valid) traces.Add(new(id,"Surface pressure",id,"pe = 0.5 rho Vdes² Cpe Ka Kce Kl Kp Cdyn; pi = 0.5 rho Vdes² Cpi Kci Kv Cdyn; pn = pe - pi",
                             $"pe = 0.5 × {rho:R} × {speed:R}² × {cpe:R} × {ka:R} × {kce:R} × {kl:R} × {kp:R} × {dyn:R}; pi = 0.5 × {rho:R} × {speed:R}² × {cpi:R} × {kci:R} × {kv:R} × {dyn:R}; pn = {p.Item1:R} - ({p.Item2:R})",
-                            $"{p.Item3:R} Pa",p.Item3,"Pa","AS/NZS 1170.2:2021 Eqs 2.4(1), 5.2(1)/(2)","Explicit-input review arithmetic; positive net acts inward.",[],[]));
+                            $"{p.Item3:R} Pa",p.Item3,"Pa","AS/NZS 1170.2:2021 Eqs 2.4(1), 5.2(1)/(2)","Explicit-input review arithmetic; positive net acts inward. Selected coefficient applicability is not qualified.",
+                            new[]{ $"Vdes_{state}_{direction}","INPUT-rho","INPUT-Cdyn","INPUT-Cpi_"+sign }.Concat(new[]{"Cpe","Ka","Kce","Kl","Kp","Kci","Kv"}.Select(f=>"INPUT-"+prefix+"_"+f)).ToImmutableArray(),[]));
                     }
                 }
                 Surface("Windward",0,0,0,depth,new(-along.X,-along.Y,0));
@@ -89,7 +106,7 @@ public static class AsNz2021ReviewCalculation
                 for (int c=1;c<=2;c++) for (int z=0;z<5;z++) Surface("Roof",c,z,Math.Min(depth,roof[z]),Math.Min(depth,roof[z+1]),roofNormal);
             }
         }
-        bool success = !issues.Any(i => i.Severity == CalculationIssueSeverity.Error) && rows.Any(r => r.Status.StartsWith("CALCULATED")) && rows.All(r => r.Status != "INPUT_REQUIRED");
+        bool success = !issues.Any(i => i.Severity == CalculationIssueSeverity.Error) && rows.Any(r => r.NetPa.HasValue) && rows.All(r => r.Status != "INPUT_REQUIRED");
         bool synthetic = request.ExplicitCoefficients.Values.Any(e => e.Provenance == DataProvenance.SyntheticDemoFixture);
         return new("asnz-matrix-"+Guid.NewGuid().ToString("N"),DateTimeOffset.UtcNow,request,
             synthetic ? DataProvenance.SyntheticDemoFixture : DataProvenance.Unverified,success,false,false,false,false,

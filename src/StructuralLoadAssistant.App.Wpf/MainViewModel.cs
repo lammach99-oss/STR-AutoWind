@@ -245,6 +245,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         ZoneEditor.Editable=false;
         var revision = modeRevision;
         await inspection.RefreshAsync();
+        InvalidateWindReport("CSI scan geometry refreshed");
         if (revision != modeRevision) return;
 
         if (PhysicalQualification != null && (inspection.Scan is null || inspection.Outcome != CsiScanOutcome.Succeeded || PhysicalQualification.ScanFingerprint != inspection.Scan.Model.GeometryFingerprint || PhysicalQualification.ModelId != inspection.Scan.Model.ModelId || PhysicalQualification.SoftwareProduct != inspection.Scan.Model.Product || PhysicalQualification.SoftwareVersion != inspection.Scan.Model.Version || (PhysicalQualification.ProcessId.HasValue && inspection.Connection?.ProcessId.HasValue == true && PhysicalQualification.ProcessId != inspection.Connection.ProcessId))) { PhysicalQualification = null; }
@@ -548,6 +549,13 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     public WindReportState CurrentReportState { get; private set; } = WindReportState.Idle;
     public string? CurrentReportError { get; private set; }
     private long _currentRequestId = 0;
+    private CancellationTokenSource? reportCancellation;
+    public string? CurrentAuditPdfPath { get; private set; }
+    private string? renderedRequestHash;
+    private string? renderedModelHash;
+    private string? renderedPdfHash;
+    private string? renderedAuditHash;
+    private static string PdfHash(string path)=>Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path)));
     public EngineeringCalculationRun? CurrentEngineeringRun { get; private set; }
     public EngineeringCalculationRequest? CurrentCalculationRequest { get; set; }
     public string? CurrentPdfPath { get; private set; }
@@ -555,7 +563,9 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
     public void InvalidateWindReport(string? reason = null)
     {
+        reportCancellation?.Cancel();
         System.Threading.Interlocked.Increment(ref _currentRequestId);
+        CurrentAuditPdfPath = null; renderedRequestHash = null; renderedModelHash = null; renderedPdfHash=null; renderedAuditHash=null;
         CurrentPdfPath = null;
         CurrentPdfDocument = null;
         CurrentReportError = null;
@@ -607,6 +617,36 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         ? "No engineering run selected. Calculate or load an engineering calculation run."
         : $"Selected Engineering Run: {CurrentEngineeringRun.Id} | Hash: {CurrentEngineeringRun.ContentHash[..8]} | Standard: {CurrentEngineeringRun.Request.StandardEdition} | State: {CurrentEngineeringRun.Request.WindDirection} | Nodes: {CurrentEngineeringRun.TraceNodes.Length} | Status: {CurrentEngineeringRun.QualificationStatus}";
 
+
+    public string OverrideLength { get; set; }="";
+    public string OverrideWidth { get; set; }="";
+    public string OverridePeak { get; set; }="";
+    public string OverrideEave { get; set; }="";
+    public string OverridePitch { get; set; }="";
+    public string OverrideGround { get; set; }="";
+    public string OverrideReason { get; set; }="";
+    public string GeometryReviewSummary { get; private set; }="MODEL_GEOMETRY_REVIEW_REQUIRED / no scan evidence imported";
+    private Application.AsNzGeometryCandidates? reviewGeometry;
+    public void ReadGeometryCandidates()
+    {
+        var scan=inspection.Scan??throw new InvalidOperationException("A current CSI read-only selection is required");
+        double? ground=double.TryParse(OverrideGround,NumberStyles.Float,CultureInfo.InvariantCulture,out var g)?g:null;
+        reviewGeometry=Application.AsNzReadOnlyGeometryReview.FromSnapshot(scan.Model,ground,OverrideReason,OverrideReason);
+        GeometryReviewSummary=reviewGeometry.Status+"\n"+string.Join("\n",reviewGeometry.Evidence)+$"\nCandidate length {reviewGeometry.LengthM}, width {reviewGeometry.WidthM}, peak {reviewGeometry.PeakHeightM}, average {reviewGeometry.AverageHeightM}, pitch {reviewGeometry.PitchDegrees}";
+        Refresh();
+    }
+    public void ApplyGeometryOverride()
+    {
+        RequireDemo();
+        var req=CurrentCalculationRequest??throw new InvalidOperationException("Load an explicit review request first");
+        if(string.IsNullOrWhiteSpace(OverrideReason))throw new InvalidOperationException("Engineer override reason / datum evidence required");
+        double Read(string text)=>double.TryParse(text,NumberStyles.Float,CultureInfo.InvariantCulture,out var v)&&double.IsFinite(v)?v:throw new InvalidOperationException("Enter finite metric geometry values");
+        double length=Read(OverrideLength),width=Read(OverrideWidth),peak=Read(OverridePeak),eave=Read(OverrideEave),pitch=Read(OverridePitch),ground=Read(OverrideGround);
+        if(length<=0||width<=0||peak<eave||eave<=ground||pitch<0||pitch>=90)throw new InvalidOperationException("Inconsistent roof geometry override");
+        var options=req.Options.SetItem("GeometrySource","OWNER_OVERRIDE").SetItem("GeometryOverrideReason",OverrideReason).SetItem("GeometryReviewStatus","MODEL_GEOMETRY_REVIEW_REQUIRED");
+        if(reviewGeometry!=null)options=options.SetItem("ReadOnlyScanEvidence",SnapshotJson.Serialize(reviewGeometry));
+        SetCalculationRequest(req with {BuildingLengthM=length,BuildingWidthM=width,RidgeHeightM=peak,EaveHeightM=eave,GroundElevationM=ground,ReferenceHeightM=(peak+eave)/2-ground,RoofSlopeDegrees=pitch,Options=options});
+    }
     public void ValidateEngineeringInput()
     {
         RequireDemo();
@@ -630,6 +670,11 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             throw new InvalidOperationException("No explicit engineering calculation inputs configured. Configure or supply an explicit engineering calculation request.");
         }
 
+        reportCancellation?.Cancel();
+        using var activeCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        reportCancellation = activeCancellation;
+        ct = activeCancellation.Token;
+        CurrentAuditPdfPath = null;
         long reqId = System.Threading.Interlocked.Increment(ref _currentRequestId);
         CurrentReportState = WindReportState.Calculating;
         CurrentReportError = null;
@@ -686,14 +731,31 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             string pdfPath = Path.Combine(Path.GetTempPath(), $"wind_run_{run.Id}_{run.ContentHash[..8]}.pdf");
             string html = await Task.Run(() => new WindWorkbookHtmlReportBuilder().BuildHtml(doc), ct);
             await new WindPdfRenderService().RenderHtmlToPdfAsync(html, pdfPath, ct);
+            string? auditPath = null;
+            if(req.ProcedureName == AsNz2021ReviewCalculation.Procedure)
+            {
+                auditPath = Path.ChangeExtension(pdfPath,null)+"_Detailed_Audit.pdf";
+                string auditHtml = await Task.Run(()=>new AsNz2021WorkbookPdfRenderer().BuildAuditHtml(doc),ct);
+                await new WindPdfRenderService().RenderHtmlToPdfAsync(auditHtml,auditPath,ct);
+            }
 
             ct.ThrowIfCancellationRequested();
             if (System.Threading.Interlocked.Read(ref _currentRequestId) != reqId) return;
 
+            string mainHash=await Task.Run(()=>PdfHash(pdfPath),ct);
+            string? auditHash=auditPath==null?null:await Task.Run(()=>PdfHash(auditPath),ct);
+            ct.ThrowIfCancellationRequested();
+            if(System.Threading.Interlocked.Read(ref _currentRequestId)!=reqId)return;
             CurrentPdfDocument = doc;
             CurrentPdfPath = pdfPath;
-            CurrentReportState = WindReportState.Ready;
-            Status = $"Calculated and rendered engineering run {run.Id} ({run.ContentHash[..8]})";
+            CurrentAuditPdfPath = auditPath;
+            renderedPdfHash=mainHash;
+            renderedAuditHash=auditHash;
+            renderedRequestHash = SnapshotJson.Hash(req);
+            renderedModelHash = model.Model.GeometryFingerprint;
+            CurrentReportState = run.NumericalComputationPossible ? WindReportState.Ready : WindReportState.Blocked;
+            CurrentReportError = run.NumericalComputationPossible ? null : run.QualificationStatus;
+            Status = run.NumericalComputationPossible ? $"Calculated review PDF {run.Id} — NOT QUALIFIED FOR DESIGN" : "Blocked report generated — calculation inputs required";
         }
         catch (OperationCanceledException)
         {
@@ -714,10 +776,12 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         }
         finally
         {
+            if(ReferenceEquals(reportCancellation,activeCancellation)) reportCancellation=null;
             Refresh();
         }
     }
 
+    public void CancelWindReport() => InvalidateWindReport("Cancelled by user");
     public void CalculateEngineeringRun()
     {
         _ = CalculateEngineeringRunAsync();
@@ -737,6 +801,11 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         RequireDemo();
         if (CurrentEngineeringRun == null)
             throw new InvalidOperationException("No engineering calculation run selected. Calculate or select an engineering calculation run before exporting detailed reports.");
+        if(CurrentEngineeringRun.Request.ProcedureName == AsNz2021ReviewCalculation.Procedure)
+        {
+            ValidateWorksheetExport();
+            throw new InvalidOperationException("Use asynchronous worksheet PDF export for the current main/audit document.");
+        }
         var model = Session.BuildReport(Definition());
         path = Path.ChangeExtension(path, ".pdf");
         CurrentPdfDocument ??= WindPdfReportDocumentBuilder.Build(model, CurrentEngineeringRun);
@@ -750,5 +819,41 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         }
         Status = $"Exported detailed report (PDF) to {path}";
         Refresh();
+    }
+
+    private void ValidateWorksheetExport()
+    {
+        if(CurrentEngineeringRun==null || CurrentPdfDocument==null || CurrentPdfPath==null || !File.Exists(CurrentPdfPath)
+            || CurrentReportState is not (WindReportState.Ready or WindReportState.Blocked)
+            || PdfHash(CurrentPdfPath)!=renderedPdfHash
+            || (CurrentAuditPdfPath!=null && (!File.Exists(CurrentAuditPdfPath)||PdfHash(CurrentAuditPdfPath)!=renderedAuditHash))
+            || CurrentCalculationRequest==null || SnapshotJson.Hash(CurrentCalculationRequest)!=renderedRequestHash
+            || SnapshotJson.Hash(CurrentEngineeringRun.Request)!=renderedRequestHash
+            || CurrentPdfDocument.RunContentHash!=CurrentEngineeringRun.ContentHash
+            || Session.Model.GeometryFingerprint!=renderedModelHash
+            || CurrentPdfDocument.Project.Id!=Session.Project.Id
+            || CurrentPdfDocument.ReportDocumentHash!=WindPdfReportDocumentBuilder.Build(Session.BuildReport(Definition()),CurrentEngineeringRun).ReportDocumentHash)
+            throw new InvalidOperationException("Worksheet PDF is stale or unavailable. Recalculate the current request and model.");
+    }
+    public async Task ExportWorksheetPdfAsync(string path,bool audit=false,CancellationToken ct=default)
+    {
+        ValidateWorksheetExport();
+        ct.ThrowIfCancellationRequested();
+        long version=_currentRequestId;
+        string source=(audit?CurrentAuditPdfPath:CurrentPdfPath)??throw new InvalidOperationException("Detailed calculation PDF unavailable");
+        string destination=Path.GetFullPath(Path.ChangeExtension(path,".pdf"));
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        string staged=destination+"."+Guid.NewGuid().ToString("N")+".tmp";
+        try
+        {
+            await Task.Run(()=>File.Copy(source,staged,true),ct);
+            ct.ThrowIfCancellationRequested();ValidateWorksheetExport();
+            if(PdfHash(staged)!=(audit?renderedAuditHash:renderedPdfHash))throw new InvalidOperationException("PDF changed during export");
+            if(version!=_currentRequestId)throw new InvalidOperationException("Report changed during export");
+            File.Move(staged,destination,true);
+            string hash=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(await File.ReadAllBytesAsync(destination,ct)));
+            await File.WriteAllTextAsync(destination+".integrity.json",System.Text.Json.JsonSerializer.Serialize(new {PdfSha256=hash,RunHash=CurrentEngineeringRun!.ContentHash,DocumentHash=CurrentPdfDocument!.ReportDocumentHash,ModelFingerprint=renderedModelHash,RequestHash=renderedRequestHash,Status=CurrentReportState.ToString(),NormativeQualified=false,CanMutateCsi=false}),ct);
+        }
+        finally {if(File.Exists(staged))File.Delete(staged);}
     }
 }

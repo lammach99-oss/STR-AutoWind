@@ -138,7 +138,7 @@ public sealed partial class MainWindow : Window
             {
                 try
                 {
-                    string status = vm.CurrentEngineeringRun.OwnerEngineerReviewed ? "Reviewed" : "Pending Review";
+                    string status = vm.CurrentReportState == MainViewModel.WindReportState.Blocked ? "BLOCKED — diagnostic only / NOT FOR DESIGN" : "Explicit review / NOT QUALIFIED FOR DESIGN";
                     windPdfViewer.LoadPdf(vm.CurrentPdfPath, vm.CurrentEngineeringRun.ContentHash, vm.CurrentPdfDocument?.ReportDocumentHash, status);
                 }
                 catch { }
@@ -163,7 +163,18 @@ public sealed partial class MainWindow : Window
             vm.Edition = request.StandardEdition;
             vm.SetCalculationRequest(request with { ProjectId = vm.Session.Project.Id });
         })));
+        var overrides=Stack();
+        overrides.Children.Add(Text("Engineer geometry override — metres, degrees; reason and natural ground evidence required"));
+        overrides.Children.Add(Row(Text("Length X"),Input("OverrideLength",70),Text("Width Y"),Input("OverrideWidth",70),Text("Peak Z"),Input("OverridePeak",70),Text("Eave Z"),Input("OverrideEave",70),Text("Pitch"),Input("OverridePitch",70),Text("Ground Z"),Input("OverrideGround",70)));
+        overrides.Children.Add(Row(Text("Reason / evidence"),Input("OverrideReason",650),Button("Apply review override",vm.ApplyGeometryOverride)));
+        p.Children.Add(new Expander {Header="Input / geometry override",Content=overrides,IsExpanded=false});
         p.Children.Add(Row(Button("Validate engineering input", vm.ValidateEngineeringInput), Button("Calculate", vm.CalculateEngineeringRun), Button("Save engineering run", vm.SaveEngineeringRun))); p.Children.Add(BoundText("CurrentEngineeringRunSummary"));
+        p.Children.Add(Row(Button("Cancel calculation / rendering",vm.CancelWindReport),Button("Open detailed calculation PDF",()=> {
+            if(vm.CurrentAuditPdfPath==null)throw new InvalidOperationException("No current audit PDF");
+            windPdfViewer.LoadPdf(vm.CurrentAuditPdfPath,vm.CurrentEngineeringRun!.ContentHash,vm.CurrentPdfDocument?.ReportDocumentHash,vm.CurrentReportState==MainViewModel.WindReportState.Blocked?"BLOCKED diagnostic":"Detailed audit / NOT FOR DESIGN");
+        }),Button("Open main worksheet PDF",()=> {
+            if(vm.CurrentPdfPath!=null)windPdfViewer.LoadPdf(vm.CurrentPdfPath,vm.CurrentEngineeringRun!.ContentHash,vm.CurrentPdfDocument?.ReportDocumentHash,"Worksheet review / NOT FOR DESIGN");
+        })));
         p.Children.Add(windPdfViewer); return p;
     }
     private UIElement CsiPage()
@@ -180,6 +191,8 @@ public sealed partial class MainWindow : Window
         p.Children.Add(BoundText("CsiSummary"));
         p.Children.Add(Text("Issues / unsupported reads / return codes")); p.Children.Add(Table("ReadIssues", 95));
         p.Children.Add(Row(DefinitionList("PATTERNS", "Patterns"), DefinitionList("Analysis CASES", "Cases"), DefinitionList("COMBINATIONS", "Combinations")));
+        p.Children.Add(Row(Text("Natural ground Z [m]"),Input("OverrideGround",100),Text("Datum / selected roof evidence"),Input("OverrideReason",450),Button("Inspect AS/NZS roof candidates",vm.ReadGeometryCandidates,false)));
+        p.Children.Add(BoundText("GeometryReviewSummary"));
         p.Children.Add(Text("Stories [SI metres]")); p.Children.Add(Table("Stories", 80));
         p.Children.Add(Text("Selected frames — endpoint XYZ [m]")); p.Children.Add(Table("FrameRows", 105));
         p.Children.Add(Text("Selected shells — vertices XYZ [m], Local 3 axis, outward normal status")); p.Children.Add(Table("ShellRows", 110));
@@ -310,7 +323,7 @@ public sealed partial class MainWindow : Window
         p.Children.Add(Row(Check("Facade", "IncludeFacade"), Check("Roof", "IncludeRoof"), Check("Wall", "IncludeWall")));
         p.Children.Add(Row(Button("Preview current report", vm.PreviewReport), Button("Save immutable report", vm.SaveReport), Button("Export calculation report (PDF)", () => {
             var dialog = new SaveFileDialog { Filter = "PDF (*.pdf)|*.pdf", FileName = "wind-load-summary.pdf" };
-            if (dialog.ShowDialog(this) == true) vm.ExportDetailedReport(dialog.FileName);
+            if (dialog.ShowDialog(this) == true) { if(vm.CurrentEngineeringRun?.Request.ProcedureName==AsNz2021ReviewCalculation.Procedure) _ = vm.RunAsync(()=>vm.ExportWorksheetPdfAsync(dialog.FileName)); else vm.ExportDetailedReport(dialog.FileName); }
         })));
         var stored = new ComboBox { Width = 470, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 5, 10, 5) }; stored.SetBinding(ItemsControl.ItemsSourceProperty, "ReportIds"); stored.SetBinding(ComboBox.SelectedItemProperty, new Binding("SelectedReport") { Mode = BindingMode.TwoWay });
         p.Children.Add(Row(stored, Button("Open stored report ID", vm.OpenReport)));
