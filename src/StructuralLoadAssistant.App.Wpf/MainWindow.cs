@@ -134,10 +134,19 @@ public sealed partial class MainWindow : Window
     {
         if (vm.CurrentEngineeringRun != null && !string.IsNullOrEmpty(vm.CurrentPdfPath) && System.IO.File.Exists(vm.CurrentPdfPath))
         {
-            if (windPdfViewer.CurrentHash != vm.CurrentEngineeringRun.ContentHash)
+            if (windPdfViewer.CurrentRunHash != vm.CurrentEngineeringRun.ContentHash)
             {
-                try { windPdfViewer.LoadPdf(vm.CurrentPdfPath, vm.CurrentEngineeringRun.ContentHash); } catch { }
+                try
+                {
+                    string status = vm.CurrentEngineeringRun.OwnerEngineerReviewed ? "Reviewed" : "Pending Review";
+                    windPdfViewer.LoadPdf(vm.CurrentPdfPath, vm.CurrentEngineeringRun.ContentHash, vm.CurrentPdfDocument?.ReportDocumentHash, status);
+                }
+                catch { }
             }
+        }
+        else
+        {
+            windPdfViewer.Clear();
         }
     }
 
@@ -291,7 +300,7 @@ public sealed partial class MainWindow : Window
         var p = Stack(); p.Children.Add(Text("Report builder / immutable stored snapshots", 22));
         p.Children.Add(Text("Source: current synthetic calculation; current optional simulated assignment and readback are included automatically.")); p.Children.Add(BoundText("CurrentEngineeringRunSummary"));
         p.Children.Add(Row(Check("Facade", "IncludeFacade"), Check("Roof", "IncludeRoof"), Check("Wall", "IncludeWall")));
-        p.Children.Add(Row(Button("Preview current report", vm.PreviewReport), Button("Save immutable report", vm.SaveReport), Button("Export summary report (PDF)", () => {
+        p.Children.Add(Row(Button("Preview current report", vm.PreviewReport), Button("Save immutable report", vm.SaveReport), Button("Export calculation report (PDF)", () => {
             var dialog = new SaveFileDialog { Filter = "PDF (*.pdf)|*.pdf", FileName = "wind-load-summary.pdf" };
             if (dialog.ShowDialog(this) == true) vm.ExportDetailedReport(dialog.FileName);
         })));

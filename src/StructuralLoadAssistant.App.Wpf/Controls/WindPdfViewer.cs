@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Security.Cryptography;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -9,11 +10,10 @@ namespace StructuralLoadAssistant.App.Wpf.Controls;
 
 /// <summary>
 /// Professional WPF Embedded PDF Viewer control with toolbar controls:
-/// - Page navigation
-/// - Zoom In / Out / Reset
+/// - Page navigation &amp; zoom
 /// - Print
 /// - Save As PDF
-/// - Content Hash & Verification Status display
+/// - Content Hash &amp; Real File Hash &amp; Review Status display
 ///
 /// Hosts Microsoft WebView2 browser control targeting the local generated PDF file.
 /// Provides graceful fallback panel if WebView2 runtime is initializing or unavailable.
@@ -24,15 +24,25 @@ public sealed class WindPdfViewer : DockPanel
     private readonly TextBlock _statusText;
     private readonly TextBlock _zoomText;
     private readonly Border _contentHost;
+    private readonly Button _btnPrint;
+    private readonly Button _btnSave;
+    private readonly Button _btnZoomIn;
+    private readonly Button _btnZoomOut;
+    private readonly Button _btnZoomReset;
     private Microsoft.Web.WebView2.Wpf.WebView2? _webView;
     private TextBlock? _fallbackText;
 
     private string? _currentPdfPath;
-    private string? _currentHash;
+    private string? _currentRunHash;
+    private string? _currentDocHash;
+    private string? _currentFileSha256;
     private double _zoomFactor = 1.0;
 
     public string? CurrentPdfPath => _currentPdfPath;
-    public string? CurrentHash => _currentHash;
+    public string? CurrentRunHash => _currentRunHash;
+    public string? CurrentDocHash => _currentDocHash;
+    public string? CurrentFileSha256 => _currentFileSha256;
+    public string? CurrentHash => _currentRunHash;
 
     public WindPdfViewer()
     {
@@ -42,27 +52,27 @@ public sealed class WindPdfViewer : DockPanel
         _toolbar = new ToolBar { Height = 36 };
         DockPanel.SetDock(_toolbar, Dock.Top);
 
-        var btnPrint = new Button { Content = "Print", Padding = new Thickness(10, 4, 10, 4), Margin = new Thickness(2) };
-        btnPrint.Click += (_, _) => Print();
-        _toolbar.Items.Add(btnPrint);
+        _btnPrint = new Button { Content = "Print", Padding = new Thickness(10, 4, 10, 4), Margin = new Thickness(2), IsEnabled = false };
+        _btnPrint.Click += (_, _) => Print();
+        _toolbar.Items.Add(_btnPrint);
 
-        var btnSave = new Button { Content = "Save PDF As...", Padding = new Thickness(10, 4, 10, 4), Margin = new Thickness(2) };
-        btnSave.Click += (_, _) => SaveAs();
-        _toolbar.Items.Add(btnSave);
+        _btnSave = new Button { Content = "Save PDF As...", Padding = new Thickness(10, 4, 10, 4), Margin = new Thickness(2), IsEnabled = false };
+        _btnSave.Click += (_, _) => SaveAs();
+        _toolbar.Items.Add(_btnSave);
 
         _toolbar.Items.Add(new Separator());
 
-        var btnZoomIn = new Button { Content = "Zoom +", Padding = new Thickness(8, 4, 8, 4), Margin = new Thickness(2) };
-        btnZoomIn.Click += (_, _) => ZoomIn();
-        _toolbar.Items.Add(btnZoomIn);
+        _btnZoomIn = new Button { Content = "Zoom +", Padding = new Thickness(8, 4, 8, 4), Margin = new Thickness(2), IsEnabled = false };
+        _btnZoomIn.Click += (_, _) => ZoomIn();
+        _toolbar.Items.Add(_btnZoomIn);
 
-        var btnZoomOut = new Button { Content = "Zoom -", Padding = new Thickness(8, 4, 8, 4), Margin = new Thickness(2) };
-        btnZoomOut.Click += (_, _) => ZoomOut();
-        _toolbar.Items.Add(btnZoomOut);
+        _btnZoomOut = new Button { Content = "Zoom -", Padding = new Thickness(8, 4, 8, 4), Margin = new Thickness(2), IsEnabled = false };
+        _btnZoomOut.Click += (_, _) => ZoomOut();
+        _toolbar.Items.Add(_btnZoomOut);
 
-        var btnZoomReset = new Button { Content = "100%", Padding = new Thickness(8, 4, 8, 4), Margin = new Thickness(2) };
-        btnZoomReset.Click += (_, _) => ZoomReset();
-        _toolbar.Items.Add(btnZoomReset);
+        _btnZoomReset = new Button { Content = "100%", Padding = new Thickness(8, 4, 8, 4), Margin = new Thickness(2), IsEnabled = false };
+        _btnZoomReset.Click += (_, _) => ZoomReset();
+        _toolbar.Items.Add(_btnZoomReset);
 
         _zoomText = new TextBlock
         {
@@ -120,16 +130,66 @@ public sealed class WindPdfViewer : DockPanel
         }
     }
 
-    public void LoadPdf(string pdfPath, string contentHash)
+    public void Clear()
+    {
+        _currentPdfPath = null;
+        _currentRunHash = null;
+        _currentDocHash = null;
+        _currentFileSha256 = null;
+
+        _btnPrint.IsEnabled = false;
+        _btnSave.IsEnabled = false;
+        _btnZoomIn.IsEnabled = false;
+        _btnZoomOut.IsEnabled = false;
+        _btnZoomReset.IsEnabled = false;
+
+        _statusText.Text = "No calculation PDF loaded";
+
+        if (_webView != null)
+        {
+            try
+            {
+                _webView.Source = new Uri("about:blank");
+            }
+            catch { }
+        }
+    }
+
+    public void LoadPdf(string pdfPath, string runContentHash, string? docHash = null, string reviewStatus = "Pending Review")
     {
         if (!File.Exists(pdfPath))
-            throw new FileNotFoundException($"PDF file not found at {pdfPath}", pdfPath);
+        {
+            Clear();
+            _statusText.Text = $"PDF not found at {pdfPath}";
+            return;
+        }
+
+        byte[] bytes = File.ReadAllBytes(pdfPath);
+        if (bytes.Length < 4 || System.Text.Encoding.ASCII.GetString(bytes, 0, 4) != "%PDF")
+        {
+            Clear();
+            _statusText.Text = "Corrupt or invalid PDF file (missing %PDF header)";
+            return;
+        }
+
+        using var sha = SHA256.Create();
+        string fileHash = Convert.ToHexString(sha.ComputeHash(bytes)).ToLowerInvariant();
 
         _currentPdfPath = pdfPath;
-        _currentHash = contentHash;
+        _currentRunHash = runContentHash;
+        _currentDocHash = docHash ?? runContentHash;
+        _currentFileSha256 = fileHash;
 
-        string hashShort = contentHash.Length > 8 ? contentHash[..8] : contentHash;
-        _statusText.Text = $"Verified PDF Loaded &bull; Hash: {hashShort} &bull; {new FileInfo(pdfPath).Length / 1024} KB";
+        string runShort = runContentHash.Length > 8 ? runContentHash[..8] : runContentHash;
+        string fileShort = fileHash.Length > 8 ? fileHash[..8] : fileHash;
+
+        _statusText.Text = $"PDF ready - run: {runShort} - file: {fileShort} - {reviewStatus} ({bytes.Length / 1024} KB)";
+
+        _btnPrint.IsEnabled = true;
+        _btnSave.IsEnabled = true;
+        _btnZoomIn.IsEnabled = true;
+        _btnZoomOut.IsEnabled = true;
+        _btnZoomReset.IsEnabled = true;
 
         if (_webView != null)
         {
@@ -140,7 +200,7 @@ public sealed class WindPdfViewer : DockPanel
             }
             catch (Exception ex)
             {
-                _statusText.Text = $"Loaded PDF ({hashShort}) - View error: {ex.Message}";
+                _statusText.Text = $"Loaded PDF ({runShort}) - View error: {ex.Message}";
             }
         }
     }
@@ -182,7 +242,6 @@ public sealed class WindPdfViewer : DockPanel
 
         try
         {
-            // Shell print command for standard Windows PDF handler
             var psi = new System.Diagnostics.ProcessStartInfo
             {
                 FileName = _currentPdfPath,

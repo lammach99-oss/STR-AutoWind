@@ -36,7 +36,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             if (mode == value) return;
             ProtectUnsavedDraft();
             mode = value; modeRevision++; inspection.Clear(); ClearZoneEditor(); Session.LoadDemoFixture(Edition); SelectedShell = IsDemo ? "R1" : "";
-            expectedBaseRevision = 0; HasUnsavedChanges = false; PhysicalQualification = null; CurrentEngineeringRun = null; CurrentCalculationRequest = null;
+            expectedBaseRevision = 0; HasUnsavedChanges = false; PhysicalQualification = null; CurrentEngineeringRun = null; CurrentCalculationRequest = null; InvalidateWindReport();
             SelectedZone = IsDemo ? "Edge" : "Unmapped"; SelectedPattern = IsDemo ? "WX_POS_IP_POS" : "";
             ReportText = IsDemo ? "Preview the current synthetic calculation." : EngineeringBlock; SelectedReport = null;
             Issues = []; ProposedLoads = []; FacadePairRows = []; LowerFrame = ""; UpperFrame = "";
@@ -97,7 +97,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             if (edition == value) return;
             edition = value;
             CurrentEngineeringRun = null;
-            CurrentCalculationRequest = null;
+            CurrentCalculationRequest = null; InvalidateWindReport();
             if (IsDemo)
             {
                 Session.LoadDemoFixture(edition, true, CurrentActiveState);
@@ -106,7 +106,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         }
     }
     public string[] Editions { get; } = ["ASCE/SEI 7-22", "AS/NZS 1170.2:2021"];
-    public WindDirection Direction { get; set; } = WindDirection.PositiveX;
+    private WindDirection _direction = WindDirection.PositiveX;
+    public WindDirection Direction { get => _direction; set { if (_direction == value) return; _direction = value; InvalidateWindReport(); Refresh(); } }
     public string InternalPressure { get; set; } = "IP_POS";
     public string RoofCase { get; set; } = "RoofCase1";
     public string User { get; set; } = Environment.UserName;
@@ -313,8 +314,8 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     {
         if (!IsDemo) throw new InvalidOperationException("Real CSI Read-Only blocks all demo calculations, approvals and assignments. " + EngineeringBlock);
     }
-    public void OpenProject() { RequireDemo(); var opened = new DemoSession(DatabasePath); opened.LoadDemoFixture(Edition); Session = opened; SelectedShell = "R1"; CurrentEngineeringRun = null; CurrentCalculationRequest = null; }
-    public void LoadFixture(bool crossing = true) { RequireDemo(); Session.LoadDemoFixture(Edition, crossing); SelectedShell = "R1"; Issues = []; ProposedLoads = []; CurrentEngineeringRun = null; CurrentCalculationRequest = null; }
+    public void OpenProject() { RequireDemo(); var opened = new DemoSession(DatabasePath); opened.LoadDemoFixture(Edition); Session = opened; SelectedShell = "R1"; CurrentEngineeringRun = null; CurrentCalculationRequest = null; InvalidateWindReport(); }
+    public void LoadFixture(bool crossing = true) { RequireDemo(); Session.LoadDemoFixture(Edition, crossing); SelectedShell = "R1"; Issues = []; ProposedLoads = []; CurrentEngineeringRun = null; CurrentCalculationRequest = null; InvalidateWindReport(); }
     private WindState currentActiveState = new(WindDirection.PositiveX, "IP_POS", "RoofCase1", LimitState.Uls);
     private int expectedBaseRevision;
     private string? editorDatabasePath;
@@ -323,7 +324,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
     public void LoadSelectedState()
     {
         CurrentEngineeringRun = null;
-        CurrentCalculationRequest = null;
+        CurrentCalculationRequest = null; InvalidateWindReport();
         if (IsDemo)
         {
             currentActiveState = new(Direction, InternalPressure, RoofCase, LimitState.Uls);
@@ -543,14 +544,29 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         Refresh();
     }
 
+    public enum WindReportState { Idle, Validating, Calculating, Rendering, Ready, Blocked, Failed, Cancelled }
+    public WindReportState CurrentReportState { get; private set; } = WindReportState.Idle;
+    public string? CurrentReportError { get; private set; }
+    private long _currentRequestId = 0;
     public EngineeringCalculationRun? CurrentEngineeringRun { get; private set; }
     public EngineeringCalculationRequest? CurrentCalculationRequest { get; set; }
     public string? CurrentPdfPath { get; private set; }
     public WindPdfReportDocument? CurrentPdfDocument { get; private set; }
 
+    public void InvalidateWindReport(string? reason = null)
+    {
+        System.Threading.Interlocked.Increment(ref _currentRequestId);
+        CurrentPdfPath = null;
+        CurrentPdfDocument = null;
+        CurrentReportError = null;
+        CurrentReportState = reason == null ? WindReportState.Idle : WindReportState.Cancelled;
+        Refresh();
+    }
+
     public void SetEngineeringRun(EngineeringCalculationRun? run)
     {
         CurrentEngineeringRun = run;
+        InvalidateWindReport();
         if (run != null && run.NumericalComputationPossible)
         {
             try
@@ -562,14 +578,24 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
                     string pdfPath = Path.Combine(Path.GetTempPath(), $"wind_run_{run.Id}_{run.ContentHash[..8]}.pdf");
                     new WindPdfRenderService().RenderDocument(CurrentPdfDocument, pdfPath);
                     CurrentPdfPath = pdfPath;
+                    CurrentReportState = WindReportState.Ready;
+                }
+                else
+                {
+                    CurrentReportState = WindReportState.Blocked;
+                    CurrentReportError = "Offline Chromium renderer (Microsoft Edge) is not available.";
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                CurrentReportState = WindReportState.Failed;
+                CurrentReportError = ex.Message;
+            }
         }
-        else
+        else if (run != null)
         {
-            CurrentPdfPath = null;
-            CurrentPdfDocument = null;
+            CurrentReportState = WindReportState.Blocked;
+            CurrentReportError = run.QualificationStatus;
         }
         Refresh();
     }
@@ -594,7 +620,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         Refresh();
     }
 
-    public void CalculateEngineeringRun()
+    public async Task CalculateEngineeringRunAsync(System.Threading.CancellationToken ct = default)
     {
         RequireDemo();
         if (CurrentCalculationRequest == null)
@@ -602,36 +628,98 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             throw new InvalidOperationException("No explicit engineering calculation inputs configured. Configure or supply an explicit engineering calculation request.");
         }
 
-        IWindCalculationStrategy strategy = CurrentCalculationRequest.StandardEdition.Contains("AS/NZS", StringComparison.OrdinalIgnoreCase)
-            ? new AsNz1170_2_2021CalculationStrategy()
-            : new Asce7_22CalculationStrategy();
-
-        CurrentEngineeringRun = strategy.Execute(CurrentCalculationRequest);
-        ReportText = new DetailedReportBuilder().BuildMarkdown(Session.BuildReport(Definition()), CurrentEngineeringRun);
-        if (CurrentEngineeringRun.NumericalComputationPossible)
-        {
-            try
-            {
-                var model = Session.BuildReport(Definition());
-                CurrentPdfDocument = WindPdfReportDocumentBuilder.Build(model, CurrentEngineeringRun);
-                if (WindPdfRenderService.IsRendererAvailable)
-                {
-                    string pdfPath = Path.Combine(Path.GetTempPath(), $"wind_run_{CurrentEngineeringRun.Id}_{CurrentEngineeringRun.ContentHash[..8]}.pdf");
-                    new WindPdfRenderService().RenderDocument(CurrentPdfDocument, pdfPath);
-                    CurrentPdfPath = pdfPath;
-                }
-            }
-            catch { }
-        }
-        else
-        {
-            CurrentPdfPath = null;
-            CurrentPdfDocument = null;
-        }
-        Status = CurrentEngineeringRun.NumericalComputationPossible
-            ? $"Calculated engineering run {CurrentEngineeringRun.Id} ({CurrentEngineeringRun.ContentHash[..8]})"
-            : $"Calculation blocked: {CurrentEngineeringRun.QualificationStatus}";
+        long reqId = System.Threading.Interlocked.Increment(ref _currentRequestId);
+        CurrentReportState = WindReportState.Calculating;
+        CurrentReportError = null;
+        CurrentPdfPath = null;
+        CurrentPdfDocument = null;
+        Status = "Calculating wind engineering run in background...";
         Refresh();
+
+        var req = CurrentCalculationRequest;
+        var model = Session.BuildReport(Definition());
+
+        try
+        {
+            ct.ThrowIfCancellationRequested();
+            var run = await Task.Run(() =>
+            {
+                IWindCalculationStrategy strategy = req.StandardEdition.Contains("AS/NZS", StringComparison.OrdinalIgnoreCase)
+                    ? new AsNz1170_2_2021CalculationStrategy()
+                    : new Asce7_22CalculationStrategy();
+                return strategy.Execute(req);
+            }, ct);
+
+            if (System.Threading.Interlocked.Read(ref _currentRequestId) != reqId) return;
+
+            CurrentEngineeringRun = run;
+            ReportText = new DetailedReportBuilder().BuildMarkdown(model, run);
+
+            if (!run.NumericalComputationPossible)
+            {
+                CurrentReportState = WindReportState.Blocked;
+                CurrentReportError = run.QualificationStatus;
+                Status = $"Calculation blocked: {run.QualificationStatus}";
+                Refresh();
+                return;
+            }
+
+            CurrentReportState = WindReportState.Rendering;
+            Status = "Rendering calculation report PDF in background...";
+            Refresh();
+
+            var doc = WindPdfReportDocumentBuilder.Build(model, run);
+            ct.ThrowIfCancellationRequested();
+
+            if (!WindPdfRenderService.IsRendererAvailable)
+            {
+                if (System.Threading.Interlocked.Read(ref _currentRequestId) != reqId) return;
+                CurrentReportState = WindReportState.Failed;
+                CurrentReportError = "Headless Chromium renderer is not available on this system.";
+                Status = "PDF rendering failed: Edge/Chromium renderer unavailable.";
+                Refresh();
+                return;
+            }
+
+            string pdfPath = Path.Combine(Path.GetTempPath(), $"wind_run_{run.Id}_{run.ContentHash[..8]}.pdf");
+            await Task.Run(() =>
+            {
+                new WindPdfRenderService().RenderDocument(doc, pdfPath);
+            }, ct);
+
+            if (System.Threading.Interlocked.Read(ref _currentRequestId) != reqId) return;
+
+            CurrentPdfDocument = doc;
+            CurrentPdfPath = pdfPath;
+            CurrentReportState = WindReportState.Ready;
+            Status = $"Calculated and rendered engineering run {run.Id} ({run.ContentHash[..8]})";
+        }
+        catch (OperationCanceledException)
+        {
+            if (System.Threading.Interlocked.Read(ref _currentRequestId) == reqId)
+            {
+                CurrentReportState = WindReportState.Cancelled;
+                Status = "Calculation cancelled.";
+            }
+        }
+        catch (Exception ex)
+        {
+            if (System.Threading.Interlocked.Read(ref _currentRequestId) == reqId)
+            {
+                CurrentReportState = WindReportState.Failed;
+                CurrentReportError = ex.Message;
+                Status = $"Calculation error: {ex.Message}";
+            }
+        }
+        finally
+        {
+            Refresh();
+        }
+    }
+
+    public void CalculateEngineeringRun()
+    {
+        _ = CalculateEngineeringRunAsync();
     }
 
     public void SaveEngineeringRun()

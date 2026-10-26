@@ -47,7 +47,7 @@ public sealed partial class MainWindow
         Check(vm.Status.Contains("explicit coefficients"), "Validation with request must report explicit coefficients loaded");
 
         // 3. Calculate engineering run
-        vm.CalculateEngineeringRun();
+        await vm.CalculateEngineeringRunAsync();
         await Idle();
         Check(vm.CurrentEngineeringRun != null, "Engineering run must not be null after calculation");
         var run = vm.CurrentEngineeringRun!;

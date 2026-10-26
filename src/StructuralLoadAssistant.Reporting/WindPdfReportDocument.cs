@@ -10,6 +10,7 @@ namespace StructuralLoadAssistant.Reporting;
 /// Immutable, typed presentation projection for wind calculation PDF reporting.
 /// Holds the canonical engineering calculation run, model snapshots, layout profiles,
 /// output units, and verification metadata needed for deterministic workbook-style reporting.
+/// Distinguishes calculation run content hash from report document hash.
 /// </summary>
 public sealed record WindPdfReportDocument(
     string ReportId,
@@ -35,7 +36,26 @@ public sealed record WindPdfReportDocument(
     string QualificationStatus)
 {
     [System.Text.Json.Serialization.JsonIgnore]
-    public string ContentHash => CalculationRun?.ContentHash ?? SnapshotJson.Hash(this);
+    public string RunContentHash => CalculationRun?.ContentHash ?? "NO_RUN";
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string ReportDocumentHash => SnapshotJson.Hash(new
+    {
+        ReportId,
+        Project,
+        Manifest,
+        RunHash = RunContentHash,
+        ModelGeometry = ModelSnapshot.GeometryFingerprint,
+        FacadeRows,
+        WallRows,
+        Definition,
+        Options,
+        LayoutProfile,
+        UnitProfile
+    });
+
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string ContentHash => ReportDocumentHash;
 }
 
 public static class WindPdfReportDocumentBuilder

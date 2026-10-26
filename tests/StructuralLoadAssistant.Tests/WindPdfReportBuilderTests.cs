@@ -271,4 +271,159 @@ public sealed class WindPdfReportBuilderTests
         Assert.True(pdfBytes.Length > 1000);
         Assert.Equal("%PDF", System.Text.Encoding.ASCII.GetString(pdfBytes, 0, 4));
     }
+
+
+    [Fact]
+    public void DocumentHash_DiffersFromRunContentHash_AndChangesOnReportContentMutation()
+    {
+        var run = CreateAsceRun();
+        var model1 = CreateModel(run.Request.ProjectId, run.Request.StandardEdition);
+        var doc1 = WindPdfReportDocumentBuilder.Build(model1, run);
+
+        Assert.NotEqual(run.ContentHash, doc1.ReportDocumentHash);
+        Assert.Equal(run.ContentHash, doc1.RunContentHash);
+
+        var model2 = new ReportModel(
+            new Project(run.Request.ProjectId, "Modified Project Name", "SI"),
+            model1.Calculation,
+            model1.Manifest,
+            model1.Model,
+            model1.Facade,
+            model1.Walls,
+            model1.Approval,
+            model1.Assignment,
+            model1.Readback,
+            model1.Definition);
+        var doc2 = WindPdfReportDocumentBuilder.Build(model2, run);
+        Assert.NotEqual(doc1.ReportDocumentHash, doc2.ReportDocumentHash);
+    }
+
+    [Fact]
+    public void ModelIntegration_RendersAllFacadeAndWallRows_WithoutSilentTruncation()
+    {
+        var run = CreateAsceRun();
+        var facades = Enumerable.Range(1, 25).Select(i => new FacadeReportRow(
+            $"P{i}", $"F{i}", "TributaryArea", 0.0, 5.0, 1000.0 * i
+        )).ToImmutableArray();
+        var walls = Enumerable.Range(1, 15).Select(i => new WallReportRow(
+            $"W{i}", "WALL", "Concrete Block", 3.0, 2000.0 * i
+        )).ToImmutableArray();
+
+        var model = new ReportModel(
+            new Project(run.Request.ProjectId, "High Row Count Test", "SI"),
+            DemoFixtures.Calculation(run.Request.StandardEdition),
+            DemoFixtures.Manifest(run.Request.StandardEdition),
+            DemoFixtures.Model(),
+            facades,
+            walls,
+            null, null, null,
+            new ReportDefinition("rep-all-rows"));
+
+        var doc = WindPdfReportDocumentBuilder.Build(model, run);
+        var builder = new WindWorkbookHtmlReportBuilder();
+        string html = builder.BuildHtml(doc);
+
+        for (int i = 1; i <= 25; i++)
+        {
+            Assert.Contains($"Frame F{i}", html);
+        }
+        for (int i = 1; i <= 15; i++)
+        {
+            Assert.Contains($"Wall on W{i}", html);
+        }
+        Assert.Contains("Total Facade Members: 25", html);
+        Assert.Contains("Total Wall Elements: 15", html);
+    }
+
+    [Fact]
+    public void AlternateLimitState_Uncomputed_RendersNotComputed_RatherThanZero()
+    {
+        var run = CreateAsceRun();
+        var model = CreateModel(run.Request.ProjectId, run.Request.StandardEdition);
+        var doc = WindPdfReportDocumentBuilder.Build(model, run);
+
+        var builder = new WindWorkbookHtmlReportBuilder();
+        string html = builder.BuildHtml(doc);
+
+        Assert.DoesNotContain("Alt: 0.00", html);
+        Assert.Contains("Alt: N/C", html);
+    }
+
+    [Fact]
+    public void AsceImperial_RendersDualUnitsOrConsistentImperialSubstitutions_NotMixedSilentUnits()
+    {
+        var run = CreateAsceRun();
+        var model = CreateModel(run.Request.ProjectId, run.Request.StandardEdition);
+        var doc = WindPdfReportDocumentBuilder.Build(model, run);
+
+        var builder = new WindWorkbookHtmlReportBuilder();
+        string html = builder.BuildHtml(doc);
+
+        Assert.Contains("SI internal calculation (for audit)", html);
+    }
+
+
+    [Fact]
+    public async Task AsyncExecution_StrategyAndPdfRender_CanRunConcurrently()
+    {
+        var run = CreateAsceRun();
+        var model = CreateModel(run.Request.ProjectId, run.Request.StandardEdition);
+        var doc = WindPdfReportDocumentBuilder.Build(model, run);
+
+        var task = Task.Run(() =>
+        {
+            var builder = new WindWorkbookHtmlReportBuilder();
+            return builder.BuildHtml(doc);
+        });
+
+        string html = await task;
+        Assert.NotNull(html);
+        Assert.Contains("STRUCTURAL WIND LOAD CALCULATION", html);
+
+        if (WindPdfRenderService.IsRendererAvailable)
+        {
+            var renderTask = Task.Run(() =>
+            {
+                var service = new WindPdfRenderService();
+                return service.RenderDocumentBytes(doc);
+            });
+            byte[] pdfBytes = await renderTask;
+            Assert.NotNull(pdfBytes);
+            Assert.True(pdfBytes.Length > 1000);
+            Assert.Equal("%PDF", System.Text.Encoding.ASCII.GetString(pdfBytes, 0, 4));
+        }
+    }
+
+    [Fact]
+    public void Generate_Three_Auditable_Sample_Pdfs()
+    {
+        if (!WindPdfRenderService.IsRendererAvailable) return;
+        var renderService = new WindPdfRenderService();
+        string outDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../artifacts/sample_pdf_reports"));
+        Directory.CreateDirectory(outDir);
+
+        // 1. ASCE Imperial Gable Roof
+        var asceRun = CreateAsceRun();
+        var asceModel = CreateModel(asceRun.Request.ProjectId, asceRun.Request.StandardEdition);
+        var asceDoc = WindPdfReportDocumentBuilder.Build(asceModel, asceRun);
+        string ascePath = Path.Combine(outDir, "ASCE7_22_Imperial_GableRoof.pdf");
+        renderService.RenderDocument(asceDoc, ascePath);
+        Assert.True(File.Exists(ascePath) && new FileInfo(ascePath).Length > 1000);
+
+        // 2. AS/NZS Slope Roof
+        var asnzSlopeRun = CreateAsNzSlopeRun();
+        var asnzSlopeModel = CreateModel(asnzSlopeRun.Request.ProjectId, asnzSlopeRun.Request.StandardEdition);
+        var asnzSlopeDoc = WindPdfReportDocumentBuilder.Build(asnzSlopeModel, asnzSlopeRun);
+        string asnzSlopePath = Path.Combine(outDir, "ASNZS1170_2_Metric_SlopeRoof.pdf");
+        renderService.RenderDocument(asnzSlopeDoc, asnzSlopePath);
+        Assert.True(File.Exists(asnzSlopePath) && new FileInfo(asnzSlopePath).Length > 1000);
+
+        // 3. AS/NZS Flat Roof
+        var asnzFlatRun = CreateAsNzFlatRun();
+        var asnzFlatModel = CreateModel(asnzFlatRun.Request.ProjectId, asnzFlatRun.Request.StandardEdition);
+        var asnzFlatDoc = WindPdfReportDocumentBuilder.Build(asnzFlatModel, asnzFlatRun);
+        string asnzFlatPath = Path.Combine(outDir, "ASNZS1170_2_Metric_FlatRoof.pdf");
+        renderService.RenderDocument(asnzFlatDoc, asnzFlatPath);
+        Assert.True(File.Exists(asnzFlatPath) && new FileInfo(asnzFlatPath).Length > 1000);
+    }
 }

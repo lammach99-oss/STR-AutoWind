@@ -14,9 +14,9 @@ namespace StructuralLoadAssistant.Reporting;
 /// Professional A4 Workbook-Style HTML Report Builder adapted from AnchorDesignReportBuilder.vb.
 /// Generates deterministic, fully offline, escaped HTML/CSS/SVG documents matching the owner's
 /// Excel calculation workbooks:
-/// - AsceImperial: Hawaii Housing / ASCE 'Windload (Imperial)' (A1:P225)
-/// - AsNzSlopeRoof: AS/NZS 'Slope Roof' (A1:N103)
-/// - AsNzFlatRoof: AS/NZS 'Flat roof' (A1:N124)
+/// - AsceImperial: ASCE 7-22 'Windload (Imperial)'
+/// - AsNzSlopeRoof: AS/NZS 1170.2:2021 'Slope Roof'
+/// - AsNzFlatRoof: AS/NZS 1170.2:2021 'Flat roof'
 ///
 /// Features:
 /// - Reusable 5-column .calc-box calculation steps table (Description, Symbol, Value, Equation / Logic, Code Ref)
@@ -265,7 +265,7 @@ public sealed class WindWorkbookHtmlReportBuilder
         sb.AppendLine("    .badge-review { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }");
         sb.AppendLine("    .badge-blocked { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }");
         sb.AppendLine("    /* Footers & Page Breaks */");
-        sb.AppendLine("    .page-break { page-break-before: always; break-before: page; margin-top: 15px; }");
+        sb.AppendLine("    .page-break { break-before: auto; }");
         sb.AppendLine("    .report-footer {");
         sb.AppendLine("      border-top: 1px solid #e2e8f0;");
         sb.AppendLine("      padding-top: 6px;");
@@ -280,7 +280,6 @@ public sealed class WindWorkbookHtmlReportBuilder
 
     private static void AppendTopHeaderBlock(StringBuilder sb, WindPdfReportDocument doc)
     {
-        var run = doc.CalculationRun;
         string rev = doc.Options.Revision;
         string author = doc.Options.Author;
         string reviewer = doc.Options.OwnerReviewer;
@@ -331,7 +330,7 @@ public sealed class WindWorkbookHtmlReportBuilder
         double vSpeed = req?.BasicWindSpeed ?? 0.0;
         string speedDisplay = units.Speed(vSpeed);
         string limitState = req?.LimitState.ToString().ToUpperInvariant() ?? "ULS";
-        string direction = req != null ? $"{req.WindDirection} (θ = {req.WindAngleDegrees:F0}°)" : "WX+";
+        string direction = req != null ? $"{req.WindDirection} (theta = {req.WindAngleDegrees:F0} deg)" : "WX+";
         string meanRoofH = req != null ? units.Length(req.ReferenceHeightM) : units.Length(9.0);
 
         string maxP = "-";
@@ -350,7 +349,7 @@ public sealed class WindWorkbookHtmlReportBuilder
         sb.AppendLine("    <div class='metric-card'>");
         sb.AppendLine("      <div class='label'>Active Direction</div>");
         sb.AppendLine($"      <div class='value'>{E(direction)}</div>");
-        sb.AppendLine($"      <div class='sub'>Roof Form: {E(req?.RoofForm ?? "Gable")} ({req?.RoofSlopeDegrees:F1}°)</div>");
+        sb.AppendLine($"      <div class='sub'>Roof Form: {E(req?.RoofForm ?? "Gable")} ({req?.RoofSlopeDegrees:F1} deg)</div>");
         sb.AppendLine("    </div>");
         sb.AppendLine("    <div class='metric-card'>");
         sb.AppendLine("      <div class='label'>Mean Roof Height</div>");
@@ -376,6 +375,7 @@ public sealed class WindWorkbookHtmlReportBuilder
         double H_eave = req?.EaveHeightM ?? 6.0;
         double slope = req?.RoofSlopeDegrees ?? 15.0;
         string dirStr = req?.WindDirection.ToString() ?? "PositiveX";
+        bool isFlat = (req?.RoofForm != null && req.RoofForm.Contains("Flat", StringComparison.OrdinalIgnoreCase)) || slope <= 1.0;
 
         string lStr = units.Length(L);
         string bStr = units.Length(B);
@@ -386,7 +386,7 @@ public sealed class WindWorkbookHtmlReportBuilder
 
         // 1. Plan View SVG with Wind Vector
         sb.AppendLine("    <div class='diagram-box'>");
-        sb.AppendLine("      <h4>Building Plan &amp; Wind Vector (XY View)</h4>");
+        sb.AppendLine("      <h4>Building Plan &amp; Wind Vector (XY View) [SCHEMATIC - NOT TO SCALE]</h4>");
         sb.AppendLine("      <svg width='100%' height='130' viewBox='0 0 320 130' xmlns='http://www.w3.org/2000/svg'>");
         sb.AppendLine("        <rect width='100%' height='100%' fill='#f8fafc' rx='4'/>");
         sb.AppendLine("        <!-- Building Outline -->");
@@ -414,36 +414,52 @@ public sealed class WindWorkbookHtmlReportBuilder
             sb.AppendLine("        <line x1='295' y1='67' x2='242' y2='67' stroke='#2563eb' stroke-width='2.5'/>");
             sb.AppendLine("        <polygon points='242,63 232,67 242,71' fill='#2563eb'/>");
             sb.AppendLine("        <text x='265' y='60' font-size='8.5' font-weight='bold' fill='#2563eb' text-anchor='middle'>Wind -X</text>");
+            sb.AppendLine("        <text x='235' y='25' font-size='7' fill='#16a34a' font-weight='bold'>Windward Wall</text>");
+            sb.AppendLine("        <text x='86' y='25' font-size='7' fill='#dc2626' font-weight='bold'>Leeward Wall</text>");
         }
         else if (dirStr.Contains("PositiveY", StringComparison.OrdinalIgnoreCase))
         {
             sb.AppendLine("        <line x1='160' y1='120' x2='160' y2='110' stroke='#2563eb' stroke-width='2.5'/>");
             sb.AppendLine("        <polygon points='156,110 160,105 164,110' fill='#2563eb'/>");
             sb.AppendLine("        <text x='160' y='128' font-size='8.5' font-weight='bold' fill='#2563eb' text-anchor='middle'>Wind +Y</text>");
+            sb.AppendLine("        <text x='160' y='116' font-size='7' fill='#16a34a' font-weight='bold' text-anchor='middle'>Windward Wall</text>");
+            sb.AppendLine("        <text x='160' y='25' font-size='7' fill='#dc2626' font-weight='bold' text-anchor='middle'>Leeward Wall</text>");
         }
         else
         {
             sb.AppendLine("        <line x1='160' y1='5' x2='160' y2='25' stroke='#2563eb' stroke-width='2.5'/>");
             sb.AppendLine("        <polygon points='156,25 160,30 164,25' fill='#2563eb'/>");
             sb.AppendLine("        <text x='160' y='12' font-size='8.5' font-weight='bold' fill='#2563eb' text-anchor='middle'>Wind -Y</text>");
+            sb.AppendLine("        <text x='160' y='25' font-size='7' fill='#16a34a' font-weight='bold' text-anchor='middle'>Windward Wall</text>");
+            sb.AppendLine("        <text x='160' y='116' font-size='7' fill='#dc2626' font-weight='bold' text-anchor='middle'>Leeward Wall</text>");
         }
 
         sb.AppendLine("      </svg>");
         sb.AppendLine("    </div>");
 
-        // 2. Elevation View SVG with Roof Slope
+        // 2. Elevation View SVG with Roof Profile
         sb.AppendLine("    <div class='diagram-box'>");
-        sb.AppendLine("      <h4>Building Elevation &amp; Roof Profile</h4>");
+        sb.AppendLine("      <h4>Building Elevation &amp; Roof Profile [SCHEMATIC - NOT TO SCALE]</h4>");
         sb.AppendLine("      <svg width='100%' height='130' viewBox='0 0 320 130' xmlns='http://www.w3.org/2000/svg'>");
         sb.AppendLine("        <rect width='100%' height='100%' fill='#f8fafc' rx='4'/>");
         sb.AppendLine("        <!-- Ground Line -->");
         sb.AppendLine("        <line x1='20' y1='105' x2='300' y2='105' stroke='#64748b' stroke-width='1.5' stroke-dasharray='4,2'/>");
         sb.AppendLine("        <text x='25' y='116' font-size='6.5' fill='#64748b'>GROUND DATUM</text>");
-        sb.AppendLine("        <!-- Building Walls & Roof Polygon -->");
-        sb.AppendLine("        <polygon points='70,105 70,60 160,35 250,60 250,105' fill='#e2e8f0' stroke='#1e293b' stroke-width='1.5'/>");
-        sb.AppendLine("        <!-- Dimension Markers -->");
-        sb.AppendLine($"        <text x='62' y='85' font-size='7.5' font-weight='bold' fill='#64748b' text-anchor='end'>h_eave={E(heStr)}</text>");
-        sb.AppendLine($"        <text x='160' y='28' font-size='7.5' font-weight='bold' fill='#0f172a' text-anchor='middle'>Ridge h={E(hStr)} (Slope {slope:F1}°)</text>");
+
+        if (isFlat)
+        {
+            sb.AppendLine("        <!-- Flat Roof Building Polygon -->");
+            sb.AppendLine("        <polygon points='70,105 70,55 250,55 250,105' fill='#e2e8f0' stroke='#1e293b' stroke-width='1.5'/>");
+            sb.AppendLine($"        <text x='160' y='45' font-size='7.5' font-weight='bold' fill='#0f172a' text-anchor='middle'>Flat Roof h={E(hStr)} (Slope {slope:F1} deg)</text>");
+        }
+        else
+        {
+            sb.AppendLine("        <!-- Gable Roof Building Polygon -->");
+            sb.AppendLine("        <polygon points='70,105 70,60 160,35 250,60 250,105' fill='#e2e8f0' stroke='#1e293b' stroke-width='1.5'/>");
+            sb.AppendLine($"        <text x='62' y='85' font-size='7.5' font-weight='bold' fill='#64748b' text-anchor='end'>h_eave={E(heStr)}</text>");
+            sb.AppendLine($"        <text x='160' y='28' font-size='7.5' font-weight='bold' fill='#0f172a' text-anchor='middle'>Ridge h={E(hStr)} (Slope {slope:F1} deg)</text>");
+        }
+
         sb.AppendLine("        <!-- Windward Pressure Arrows (Push) -->");
         sb.AppendLine("        <line x1='30' y1='75' x2='65' y2='75' stroke='#16a34a' stroke-width='1.5'/>");
         sb.AppendLine("        <polygon points='65,72 70,75 65,78' fill='#16a34a'/>");
@@ -477,8 +493,10 @@ public sealed class WindWorkbookHtmlReportBuilder
         sb.AppendLine("        <thead><tr><th class='col-desc'>Standard / Reference Document</th><th class='col-sym'>Designation</th><th class='col-val'>Status</th><th class='col-eq'>Notes / Edition</th><th class='col-ref'>Clause</th></tr></thead>");
         sb.AppendLine("        <tbody>");
         sb.AppendLine($"          <tr><td class='col-desc'>Governing Wind Standard</td><td class='col-sym'>ASCE 7</td><td class='col-val'>{E(doc.Manifest.Status.ToString())}</td><td class='col-eq'>{E(doc.Manifest.Edition)}</td><td class='col-ref'>Ch. 26-27</td></tr>");
-        sb.AppendLine($"          <tr><td class='col-desc'>Standard Supplements</td><td class='col-sym'>Supplements</td><td class='col-val'>Applied</td><td class='col-eq'>{E(string.Join(", ", doc.Manifest.Revisions))}</td><td class='col-ref'>Supp. 1-3</td></tr>");
-        sb.AppendLine($"          <tr><td class='col-desc'>Wind Procedure Selection</td><td class='col-sym'>Procedure</td><td class='col-val'>{E(req?.ProcedureName ?? "Directional Procedure")}</td><td class='col-eq'>Enclosed Building</td><td class='col-ref'>Part 1</td></tr>");
+
+        string suppStatus = doc.LicensedSourceQualified ? "Verified" : "Applicability review pending";
+        sb.AppendLine($"          <tr><td class='col-desc'>Standard Supplements</td><td class='col-sym'>Supplements</td><td class='col-val'>{E(suppStatus)}</td><td class='col-eq'>{E(string.Join(", ", doc.Manifest.Revisions))}</td><td class='col-ref'>Supp. 1-3</td></tr>");
+        sb.AppendLine($"          <tr><td class='col-desc'>Wind Procedure Selection</td><td class='col-sym'>Procedure</td><td class='col-val'>{E(req?.ProcedureName ?? "Directional Procedure")}</td><td class='col-eq'>{E(req?.EnclosureClassification ?? "Enclosed Building")}</td><td class='col-ref'>Part 1</td></tr>");
         sb.AppendLine("        </tbody>");
         sb.AppendLine("      </table>");
         sb.AppendLine("    </div>");
@@ -503,21 +521,22 @@ public sealed class WindWorkbookHtmlReportBuilder
         double g = req?.ExplicitCoefficients.GetValueOrDefault("G")?.Value ?? 0.85;
         double gcpi = req?.ExplicitCoefficients.GetValueOrDefault("GCpi")?.Value ?? 0.18;
 
-        sb.AppendLine($"          <tr><td class='col-desc'>Basic Wind Speed</td><td class='col-sym'>V</td><td class='col-val'>{E(units.Speed(vSpeed))}</td><td class='col-eq'>3-s gust speed</td><td class='col-ref'>Fig. 26.5-1</td></tr>");
+        sb.AppendLine($"          <tr><td class='col-desc'>Basic Wind Speed</td><td class='col-sym'>V</td><td class='col-val'>{E(units.Speed(vSpeed))}</td><td class='col-eq'>3-s gust speed ({vSpeed:F2} m/s)</td><td class='col-ref'>Fig. 26.5-1</td></tr>");
         sb.AppendLine($"          <tr><td class='col-desc'>Wind Directionality Factor</td><td class='col-sym'>K<sub>d</sub></td><td class='col-val'>{F(kd, 3)}</td><td class='col-eq'>Main Wind Force Resisting System</td><td class='col-ref'>Table 26.6-1</td></tr>");
-        sb.AppendLine($"          <tr><td class='col-desc'>Exposure Category</td><td class='col-sym'>Exposure</td><td class='col-val'>{E(req?.ExposureOrTerrain ?? "C")}</td><td class='col-eq'>Open terrain with scattered obstructions</td><td class='col-ref'>Sec. 26.7</td></tr>");
-        sb.AppendLine($"          <tr><td class='col-desc'>Topographic Factor</td><td class='col-sym'>K<sub>zt</sub></td><td class='col-val'>{F(kzt, 3)}</td><td class='col-eq'>(1 + K1*K2*K3)^2</td><td class='col-ref'>Sec. 26.8</td></tr>");
-        sb.AppendLine($"          <tr><td class='col-desc'>Ground Elevation Factor</td><td class='col-sym'>K<sub>e</sub></td><td class='col-val'>{F(ke, 3)}</td><td class='col-eq'>e^(-0.0000362 * z_g)</td><td class='col-ref'>Table 26.9-1</td></tr>");
+        sb.AppendLine($"          <tr><td class='col-desc'>Exposure Category</td><td class='col-sym'>Exposure</td><td class='col-val'>{E(req?.ExposureOrTerrain ?? "C")}</td><td class='col-eq'>Terrain exposure category</td><td class='col-ref'>Sec. 26.7</td></tr>");
+        sb.AppendLine($"          <tr><td class='col-desc'>Topographic Factor</td><td class='col-sym'>K<sub>zt</sub></td><td class='col-val'>{F(kzt, 3)}</td><td class='col-eq'>Topographic multiplier factor</td><td class='col-ref'>Sec. 26.8</td></tr>");
+        sb.AppendLine($"          <tr><td class='col-desc'>Ground Elevation Factor</td><td class='col-sym'>K<sub>e</sub></td><td class='col-val'>{F(ke, 3)}</td><td class='col-eq'>Elevation adjustment factor</td><td class='col-ref'>Table 26.9-1</td></tr>");
         sb.AppendLine($"          <tr><td class='col-desc'>Velocity Pressure Exposure Coeff</td><td class='col-sym'>K<sub>z</sub> / K<sub>h</sub></td><td class='col-val'>{F(kh, 3)}</td><td class='col-eq'>Evaluated at mean roof height h</td><td class='col-ref'>Table 26.10-1</td></tr>");
         sb.AppendLine($"          <tr><td class='col-desc'>Gust-Effect Factor</td><td class='col-sym'>G</td><td class='col-val'>{F(g, 3)}</td><td class='col-eq'>Rigid building assumption</td><td class='col-ref'>Sec. 26.11</td></tr>");
-        sb.AppendLine($"          <tr><td class='col-desc'>Internal Pressure Coefficient</td><td class='col-sym'>GC<sub>pi</sub></td><td class='col-val'>&plusmn;{F(gcpi, 2)}</td><td class='col-eq'>Enclosed building</td><td class='col-ref'>Table 26.13-1</td></tr>");
+        sb.AppendLine($"          <tr><td class='col-desc'>Internal Pressure Coefficient</td><td class='col-sym'>GC<sub>pi</sub></td><td class='col-val'>&plusmn;{F(gcpi, 2)}</td><td class='col-eq'>{E(req?.EnclosureClassification ?? "Enclosed building")}</td><td class='col-ref'>Table 26.13-1</td></tr>");
 
         if (run != null)
         {
-            var qzNode = run.TraceNodes.FirstOrDefault(n => n.NodeId.Contains("VelocityPressure") || n.NodeId.Contains("qh"));
+            var qzNode = run.TraceNodes.FirstOrDefault(n => n.NodeId.Contains("VelocityPressure") || n.NodeId.Contains("qh") || n.NodeId == "TR-ASCE-03");
             if (qzNode != null)
             {
-                sb.AppendLine($"          <tr style='background:#ecfdf5;'><td class='col-desc'><strong>Velocity Pressure at Height h</strong></td><td class='col-sym'><strong>q<sub>h</sub></strong></td><td class='col-val'><strong>{E(units.Pressure(qzNode.NumericValue))}</strong></td><td class='col-eq'>{E(qzNode.SubstitutedEquation)}</td><td class='col-ref'>Eq. 26.10-1</td></tr>");
+                string eqDisplay = $"[SI internal calculation (for audit): {qzNode.SubstitutedEquation} = {qzNode.NumericValue:F2} Pa -> {units.Pressure(qzNode.NumericValue)}]";
+                sb.AppendLine($"          <tr style='background:#ecfdf5;'><td class='col-desc'><strong>Velocity Pressure at Height h</strong></td><td class='col-sym'><strong>q<sub>h</sub></strong></td><td class='col-val'><strong>{E(units.Pressure(qzNode.NumericValue))}</strong></td><td class='col-eq'>{E(eqDisplay)}</td><td class='col-ref'>Eq. 26.10-1</td></tr>");
             }
         }
 
@@ -542,7 +561,9 @@ public sealed class WindWorkbookHtmlReportBuilder
             foreach (var sp in run.SurfaceResults)
             {
                 string pNet = units.Pressure(sp.NetPressurePa);
-                string pAlt = units.Pressure(sp.AlternateLimitStateNetPressurePa);
+                string pAlt = Math.Abs(sp.AlternateLimitStateNetPressurePa) > 1e-6
+                    ? units.Pressure(sp.AlternateLimitStateNetPressurePa)
+                    : "N/C";
                 string action = sp.NetPressurePa >= 0 ? "Pressure (Inward)" : "Suction (Outward)";
                 string badgeClass = sp.NetPressurePa >= 0 ? "badge badge-pass" : "badge badge-review";
 
@@ -572,7 +593,7 @@ public sealed class WindWorkbookHtmlReportBuilder
         var req = run?.Request;
         var units = doc.UnitProfile;
 
-        // SECTION 1: Basic Parameters
+        // SECTION 1: Basic Parameters & Multipliers
         sb.AppendLine("  <div class='calc-box'>");
         sb.AppendLine("    <div class='calc-box-header'>");
         sb.AppendLine("      <span class='section-title'>1. BASIC PARAMETERS &amp; REGIONAL MULTIPLIERS</span>");
@@ -595,14 +616,14 @@ public sealed class WindWorkbookHtmlReportBuilder
         sb.AppendLine($"          <tr><td class='col-desc'>Terrain/Height Multiplier</td><td class='col-sym'>M<sub>z,cat</sub></td><td class='col-val'>{F(mz_cat, 3)}</td><td class='col-eq'>Terrain Category 2 / Height z</td><td class='col-ref'>Table 4.1</td></tr>");
         sb.AppendLine($"          <tr><td class='col-desc'>Shielding Multiplier</td><td class='col-sym'>M<sub>s</sub></td><td class='col-val'>{F(ms, 3)}</td><td class='col-eq'>Shielding parameter</td><td class='col-ref'>Sec. 4.3</td></tr>");
         sb.AppendLine($"          <tr><td class='col-desc'>Topographic Multiplier</td><td class='col-sym'>M<sub>t</sub></td><td class='col-val'>{F(mt, 3)}</td><td class='col-eq'>Hill / Escarpment factor</td><td class='col-ref'>Sec. 4.4</td></tr>");
-        sb.AppendLine($"          <tr><td class='col-desc'>Internal Pressure Coefficient</td><td class='col-sym'>C<sub>pi</sub></td><td class='col-val'>&plusmn;{F(cpi, 2)}</td><td class='col-eq'>Standard enclosure</td><td class='col-ref'>Table 5.1</td></tr>");
+        sb.AppendLine($"          <tr><td class='col-desc'>Internal Pressure Coefficient</td><td class='col-sym'>C<sub>pi</sub></td><td class='col-val'>&plusmn;{F(cpi, 2)}</td><td class='col-eq'>{E(req?.EnclosureClassification ?? "Standard enclosure")}</td><td class='col-ref'>Table 5.1</td></tr>");
 
         if (run != null)
         {
             var vdesNode = run.TraceNodes.FirstOrDefault(n => n.NodeId.Contains("SiteWindSpeed") || n.NodeId.Contains("Vdes"));
             if (vdesNode != null)
             {
-                sb.AppendLine($"          <tr style='background:#ecfdf5;'><td class='col-desc'><strong>Site Design Wind Speed</strong></td><td class='col-sym'><strong>V<sub>des,θ</sub></strong></td><td class='col-val'><strong>{E(units.Speed(vdesNode.NumericValue))}</strong></td><td class='col-eq'>{E(vdesNode.SubstitutedEquation)}</td><td class='col-ref'>Eq. 2.2</td></tr>");
+                sb.AppendLine($"          <tr style='background:#ecfdf5;'><td class='col-desc'><strong>Site Design Wind Speed</strong></td><td class='col-sym'><strong>V<sub>des,theta</sub></strong></td><td class='col-val'><strong>{E(units.Speed(vdesNode.NumericValue))}</strong></td><td class='col-eq'>{E(vdesNode.SubstitutedEquation)}</td><td class='col-ref'>Eq. 2.2</td></tr>");
             }
         }
 
@@ -627,7 +648,9 @@ public sealed class WindWorkbookHtmlReportBuilder
             foreach (var sp in run.SurfaceResults)
             {
                 string pNet = units.Pressure(sp.NetPressurePa);
-                string pAlt = units.Pressure(sp.AlternateLimitStateNetPressurePa);
+                string pAlt = Math.Abs(sp.AlternateLimitStateNetPressurePa) > 1e-6
+                    ? units.Pressure(sp.AlternateLimitStateNetPressurePa)
+                    : "N/C";
                 string action = sp.NetPressurePa >= 0 ? "Pressure (Inward)" : "Suction (Outward)";
                 string badgeClass = sp.NetPressurePa >= 0 ? "badge badge-pass" : "badge badge-review";
 
@@ -677,7 +700,7 @@ public sealed class WindWorkbookHtmlReportBuilder
         sb.AppendLine($"          <tr><td class='col-desc'>Regional Wind Speed (500-yr ULS)</td><td class='col-sym'>V<sub>R</sub></td><td class='col-val'>{E(units.Speed(vSpeed))}</td><td class='col-eq'>Wind Region / ARI</td><td class='col-ref'>Table 3.1</td></tr>");
         sb.AppendLine($"          <tr><td class='col-desc'>Wind Direction Multiplier</td><td class='col-sym'>M<sub>d</sub></td><td class='col-val'>{F(md, 3)}</td><td class='col-eq'>Cardinal direction factor</td><td class='col-ref'>Sec. 3.3</td></tr>");
         sb.AppendLine($"          <tr><td class='col-desc'>Terrain/Height Multiplier</td><td class='col-sym'>M<sub>z,cat</sub></td><td class='col-val'>{F(mz_cat, 3)}</td><td class='col-eq'>Terrain Category 2 / Height z</td><td class='col-ref'>Table 4.1</td></tr>");
-        sb.AppendLine("          <tr><td class='col-desc'>Building Roof Pitch</td><td class='col-sym'>α</td><td class='col-val'>0.0° (Flat Roof)</td><td class='col-eq'>Slope &le; 1.0° classification</td><td class='col-ref'>Table 5.3(A)</td></tr>");
+        sb.AppendLine("          <tr><td class='col-desc'>Building Roof Pitch</td><td class='col-sym'>alpha</td><td class='col-val'>0.0 deg (Flat Roof)</td><td class='col-eq'>Slope &le; 1.0 deg classification</td><td class='col-ref'>Table 5.3(A)</td></tr>");
 
         sb.AppendLine("        </tbody>");
         sb.AppendLine("      </table>");
@@ -700,7 +723,9 @@ public sealed class WindWorkbookHtmlReportBuilder
             foreach (var sp in run.SurfaceResults)
             {
                 string pNet = units.Pressure(sp.NetPressurePa);
-                string pAlt = units.Pressure(sp.AlternateLimitStateNetPressurePa);
+                string pAlt = Math.Abs(sp.AlternateLimitStateNetPressurePa) > 1e-6
+                    ? units.Pressure(sp.AlternateLimitStateNetPressurePa)
+                    : "N/C";
                 string action = sp.NetPressurePa >= 0 ? "Pressure" : "Suction (Uplift)";
                 string badgeClass = sp.NetPressurePa >= 0 ? "badge badge-pass" : "badge badge-review";
 
@@ -733,19 +758,19 @@ public sealed class WindWorkbookHtmlReportBuilder
             sb.AppendLine("  <div class='calc-box'>");
             sb.AppendLine("    <div class='calc-box-header'>");
             sb.AppendLine("      <span class='section-title'>STRUCTURAL MODEL LOAD INTEGRATION &amp; TRIBUTARY LOADS</span>");
-            sb.AppendLine("      <span class='section-ref'>Frame Segment Loads &amp; Wall Gravity Actions</span>");
+            sb.AppendLine($"      <span class='section-ref'>Total Facade Members: {doc.FacadeRows.Length} &bull; Total Wall Elements: {doc.WallRows.Length}</span>");
             sb.AppendLine("    </div>");
             sb.AppendLine("    <div class='calc-box-content'>");
             sb.AppendLine("      <table class='calc-table'>");
             sb.AppendLine("        <thead><tr><th class='col-desc'>Element / Member</th><th class='col-sym'>Type</th><th class='col-val'>Distributed Load</th><th class='col-eq'>Span / Fraction</th><th class='col-ref'>Method</th></tr></thead>");
             sb.AppendLine("        <tbody>");
 
-            foreach (var f in doc.FacadeRows.Take(12))
+            foreach (var f in doc.FacadeRows)
             {
                 sb.AppendLine($"          <tr><td class='col-desc'>Frame {E(f.Frame)} ({E(f.Panel)})</td><td class='col-sym'>Facade</td><td class='col-val'>{E(units.LineLoad(f.LineLoadNPerM))}</td><td class='col-eq'>{units.Length(f.StartM)} to {units.Length(f.EndM)}</td><td class='col-ref'>{E(f.Method)}</td></tr>");
             }
 
-            foreach (var w in doc.WallRows.Take(6))
+            foreach (var w in doc.WallRows)
             {
                 sb.AppendLine($"          <tr><td class='col-desc'>Wall on {E(w.Frame)}</td><td class='col-sym'>Gravity</td><td class='col-val'>{E(units.LineLoad(w.GravityNPerM))}</td><td class='col-eq'>Height {units.Length(w.HeightM)}</td><td class='col-ref'>{E(w.WallType)}</td></tr>");
             }
@@ -809,7 +834,8 @@ public sealed class WindWorkbookHtmlReportBuilder
         sb.AppendLine("      <div style='display:grid;grid-template-columns:1fr 1fr;gap:15px;font-size:8pt;'>");
         sb.AppendLine("        <div>");
         sb.AppendLine($"          <p><strong>Report Document ID:</strong> {E(doc.ReportId)}</p>");
-        sb.AppendLine($"          <p><strong>Calculation Run Content Hash:</strong> <code>{E(doc.ContentHash)}</code></p>");
+        sb.AppendLine($"          <p><strong>Calculation Run Content Hash:</strong> <code>{E(doc.RunContentHash)}</code></p>");
+        sb.AppendLine($"          <p><strong>Report Document Hash:</strong> <code>{E(doc.ReportDocumentHash)}</code></p>");
         sb.AppendLine($"          <p><strong>CSI Model Snapshot Fingerprint:</strong> <code>{E(doc.ModelSnapshot.GeometryFingerprint)}</code></p>");
         sb.AppendLine("        </div>");
         sb.AppendLine("        <div>");
@@ -822,7 +848,7 @@ public sealed class WindWorkbookHtmlReportBuilder
         sb.AppendLine("  </div>");
 
         sb.AppendLine("  <div class='report-footer'>");
-        sb.AppendLine($"    <div>Structural Load Assistant &bull; Hash: {E(doc.ContentHash[..Math.Min(16, doc.ContentHash.Length)])}</div>");
+        sb.AppendLine($"    <div>Structural Load Assistant &bull; Doc Hash: {E(doc.ReportDocumentHash[..Math.Min(16, doc.ReportDocumentHash.Length)])}</div>");
         sb.AppendLine($"    <div>Governing Standard: {E(doc.Manifest.Edition)} &bull; {E(doc.UnitProfile.SystemName)}</div>");
         sb.AppendLine("    <div>ENGINEER REVIEW - NOT FOR CONSTRUCTION</div>");
         sb.AppendLine("  </div>");
