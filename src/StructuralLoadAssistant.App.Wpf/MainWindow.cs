@@ -155,6 +155,14 @@ public sealed partial class MainWindow : Window
         var p = Stack(); p.Children.Add(Text("Wind calculation / standards gate", 22)); p.Children.Add(Combo("Edition", vm.Editions));
         p.Children.Add(Button("Load Demo Pressure Fixture", () => vm.LoadFixture())); p.Children.Add(BoundText("ManifestSummary"));
         p.Children.Add(Text("Engineering inputs (locked until verified datasets are installed): wind speed [m/s], terrain / exposure, ground datum [m], importance / risk, directionality, building geometry, enclosure / internal pressure."));
+        p.Children.Add(Button("Load explicit AS/NZS review request…", () => vm.Run(() => {
+            var dialog = new OpenFileDialog { Filter = "Calculation request (*.json)|*.json" };
+            if (dialog.ShowDialog(this) != true) return;
+            var request = System.Text.Json.JsonSerializer.Deserialize<EngineeringCalculationRequest>(System.IO.File.ReadAllText(dialog.FileName)) ?? throw new InvalidOperationException("Invalid calculation request");
+            if (request.ProcedureName != AsNz2021ReviewCalculation.Procedure) throw new InvalidOperationException("Expected explicit AS/NZS matrix request");
+            vm.Edition = request.StandardEdition;
+            vm.SetCalculationRequest(request with { ProjectId = vm.Session.Project.Id });
+        })));
         p.Children.Add(Row(Button("Validate engineering input", vm.ValidateEngineeringInput), Button("Calculate", vm.CalculateEngineeringRun), Button("Save engineering run", vm.SaveEngineeringRun))); p.Children.Add(BoundText("CurrentEngineeringRunSummary"));
         p.Children.Add(windPdfViewer); return p;
     }
@@ -306,6 +314,6 @@ public sealed partial class MainWindow : Window
         })));
         var stored = new ComboBox { Width = 470, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 5, 10, 5) }; stored.SetBinding(ItemsControl.ItemsSourceProperty, "ReportIds"); stored.SetBinding(ComboBox.SelectedItemProperty, new Binding("SelectedReport") { Mode = BindingMode.TwoWay });
         p.Children.Add(Row(stored, Button("Open stored report ID", vm.OpenReport)));
-        var preview = new TextBox { IsReadOnly = true, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 520, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, FontFamily = new FontFamily("Consolas"), Padding = new Thickness(12) }; preview.SetBinding(TextBox.TextProperty, new Binding("ReportText") { Mode = BindingMode.OneWay }); p.Children.Add(preview); return p;
+        var preview = new TextBox { IsReadOnly = true, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 520, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, FontFamily = new FontFamily("Consolas"), Padding = new Thickness(12) }; preview.SetBinding(VisibilityProperty, new Binding("ShowLegacyReportPreview") { Converter = new BooleanToVisibilityConverter() }); preview.SetBinding(TextBox.TextProperty, new Binding("ReportText") { Mode = BindingMode.OneWay }); p.Children.Add(preview); return p;
     }
 }

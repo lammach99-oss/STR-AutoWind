@@ -599,7 +599,9 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
         }
         Refresh();
     }
-    public void SetCalculationRequest(EngineeringCalculationRequest? req) { CurrentCalculationRequest = req; Refresh(); }
+    public void SetCalculationRequest(EngineeringCalculationRequest? req) { CurrentCalculationRequest = req; CurrentEngineeringRun = null; InvalidateWindReport(); }
+
+    public bool ShowLegacyReportPreview => CurrentEngineeringRun?.Request.ProcedureName != AsNz2021ReviewCalculation.Procedure;
 
     public string CurrentEngineeringRunSummary => CurrentEngineeringRun is null
         ? "No engineering run selected. Calculate or load an engineering calculation run."
@@ -655,7 +657,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             CurrentEngineeringRun = run;
             ReportText = new DetailedReportBuilder().BuildMarkdown(model, run);
 
-            if (!run.NumericalComputationPossible)
+            if (!run.NumericalComputationPossible && run.Request.ProcedureName != AsNz2021ReviewCalculation.Procedure)
             {
                 CurrentReportState = WindReportState.Blocked;
                 CurrentReportError = run.QualificationStatus;
@@ -682,11 +684,10 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             }
 
             string pdfPath = Path.Combine(Path.GetTempPath(), $"wind_run_{run.Id}_{run.ContentHash[..8]}.pdf");
-            await Task.Run(() =>
-            {
-                new WindPdfRenderService().RenderDocument(doc, pdfPath);
-            }, ct);
+            string html = await Task.Run(() => new WindWorkbookHtmlReportBuilder().BuildHtml(doc), ct);
+            await new WindPdfRenderService().RenderHtmlToPdfAsync(html, pdfPath, ct);
 
+            ct.ThrowIfCancellationRequested();
             if (System.Threading.Interlocked.Read(ref _currentRequestId) != reqId) return;
 
             CurrentPdfDocument = doc;

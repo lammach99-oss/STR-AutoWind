@@ -48,8 +48,8 @@ public sealed class WindPdfReportBuilderTests
         var asnz = new AsNz1170_2_2021CalculationStrategy();
         var b = ImmutableDictionary.CreateBuilder<string, CoefficientInputEvidence>();
         void Add(string k, double v) => b.Add(k, new CoefficientInputEvidence(k, v, "dimensionless", DataProvenance.SyntheticDemoFixture, "Synthetic", "Table 1", "Illustrative review fixture", DateTimeOffset.UtcNow));
-        Add("Md", 1.0); Add("Mz_cat", 0.91); Add("Ms", 1.0); Add("Mt", 1.0); Add("Cpi", 0.20);
-        Add("Cpe_Windward", 0.7); Add("Cpe_Leeward", -0.3); Add("Cpe_Side", -0.65); Add("Cpe_Roof_Upwind", -0.9); Add("Cpe_Roof_Downwind", -0.5);
+        Add("Md", 1.0); Add("Mc", 1.0); Add("Mz_cat", 0.91); Add("Ms", 1.0); Add("Mt", 1.0); Add("Cpi", 0.20);
+        Add("Cpe_Windward", 0.7); Add("Cpe_Leeward", -0.3); Add("Cpe_Side", -0.65); Add("Cpe_Roof_Windward", -0.9); Add("Cpe_Roof_Leeward", -0.5);
 
         var req = new EngineeringCalculationRequest(
             "PRJ-ASNZ-SLOPE", "AS/NZS 1170.2:2021", ImmutableArray.Create("Amendment 1"),
@@ -57,7 +57,9 @@ public sealed class WindPdfReportBuilderTests
             45.0, 10.0, 30.0, 20.0, 6.0, 9.0, 15.0, 0.0, "TC2", b.ToImmutable(),
             new Dictionary<string, string> { ["InternalPressure"] = "IP_POS", ["OwnerReviewed"] = "false" }.ToImmutableDictionary());
 
-        return asnz.Execute(req);
+        var run = asnz.Execute(req);
+        Assert.True(run.NumericalComputationPossible, run.QualificationStatus);
+        return run;
     }
 
     private static EngineeringCalculationRun CreateAsNzFlatRun()
@@ -65,8 +67,8 @@ public sealed class WindPdfReportBuilderTests
         var asnz = new AsNz1170_2_2021CalculationStrategy();
         var b = ImmutableDictionary.CreateBuilder<string, CoefficientInputEvidence>();
         void Add(string k, double v) => b.Add(k, new CoefficientInputEvidence(k, v, "dimensionless", DataProvenance.SyntheticDemoFixture, "Synthetic", "Table 1", "Illustrative review fixture", DateTimeOffset.UtcNow));
-        Add("Md", 1.0); Add("Mz_cat", 0.91); Add("Ms", 1.0); Add("Mt", 1.0); Add("Cpi", 0.20);
-        Add("Cpe_Windward", 0.7); Add("Cpe_Leeward", -0.3); Add("Cpe_Side", -0.65); Add("Cpe_Roof_Zone1", -0.9); Add("Cpe_Roof_Zone2", -0.5); Add("Cpe_Roof_Zone3", -0.3);
+        Add("Md", 1.0); Add("Mc", 1.0); Add("Mz_cat", 0.91); Add("Ms", 1.0); Add("Mt", 1.0); Add("Cpi", 0.20);
+        Add("Cpe_Windward", 0.7); Add("Cpe_Leeward", -0.3); Add("Cpe_Side", -0.65); Add("Cpe_Roof_Zone1", -0.9); Add("Cpe_Roof_Zone2", -0.5); Add("Cpe_Roof_Zone3", -0.3); Add("Cpe_Roof_Windward", -0.9); Add("Cpe_Roof_Leeward", -0.5);
 
         var req = new EngineeringCalculationRequest(
             "PRJ-ASNZ-FLAT", "AS/NZS 1170.2:2021", ImmutableArray.Create("Amendment 1"),
@@ -74,7 +76,9 @@ public sealed class WindPdfReportBuilderTests
             45.0, 10.0, 30.0, 20.0, 6.0, 6.0, 0.0, 0.0, "TC2", b.ToImmutable(),
             new Dictionary<string, string> { ["InternalPressure"] = "IP_POS", ["OwnerReviewed"] = "false" }.ToImmutableDictionary());
 
-        return asnz.Execute(req);
+        var run = asnz.Execute(req);
+        Assert.True(run.NumericalComputationPossible, run.QualificationStatus);
+        return run;
     }
 
     private static ReportModel CreateModel(string projectId, string edition)
@@ -96,6 +100,7 @@ public sealed class WindPdfReportBuilderTests
         Assert.Equal(WindReportLayoutProfile.AsceImperial, WindReportLayoutProfileSelector.Select("ASCE/SEI 7-22", "Gable", 15.0));
         Assert.Equal(WindReportLayoutProfile.AsNzSlopeRoof, WindReportLayoutProfileSelector.Select("AS/NZS 1170.2:2021", "Gable", 15.0));
         Assert.Equal(WindReportLayoutProfile.AsNzFlatRoof, WindReportLayoutProfileSelector.Select("AS/NZS 1170.2:2021", "Flat", 0.0));
+        Assert.Equal(WindReportLayoutProfile.AsNzFlatRoof, WindReportLayoutProfileSelector.Select("AS/NZS 1170.2:2021", "Monoslope", 14));
         Assert.Equal(WindReportLayoutProfile.AsNzFlatRoof, WindReportLayoutProfileSelector.Select("AS/NZS 1170.2:2021", "Gable", 0.5));
     }
 

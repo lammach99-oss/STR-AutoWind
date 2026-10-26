@@ -22,7 +22,7 @@ public static class WindReportLayoutProfileSelector
             (standardEdition.Contains("AS/NZS", StringComparison.OrdinalIgnoreCase) ||
              standardEdition.Contains("1170", StringComparison.OrdinalIgnoreCase)))
         {
-            if (roofSlopeDegrees <= 1.0 || roofForm.Equals("Flat", StringComparison.OrdinalIgnoreCase))
+            if (roofSlopeDegrees <= 1.0 || roofForm.Equals("Flat", StringComparison.OrdinalIgnoreCase) || roofForm.Equals("Monoslope", StringComparison.OrdinalIgnoreCase) || roofForm.Equals("Monopitch", StringComparison.OrdinalIgnoreCase))
             {
                 return WindReportLayoutProfile.AsNzFlatRoof;
             }

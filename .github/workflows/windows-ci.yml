@@ -43,4 +43,5 @@ jobs:
             artifacts/wpf/**/*.json
             artifacts/wpf/**/*.txt
             artifacts/wpf/**/*.png
+            artifacts/wpf/**/*.pdf
           if-no-files-found: warn

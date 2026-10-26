@@ -34,6 +34,7 @@ public sealed class WindWorkbookHtmlReportBuilder
     public string BuildHtml(WindPdfReportDocument doc)
     {
         ArgumentNullException.ThrowIfNull(doc);
+        if (doc.CalculationRun?.Request.ProcedureName == AsNz2021ReviewCalculation.Procedure) return new AsNz2021WorkbookPdfRenderer().BuildHtml(doc);
 
         var sb = new StringBuilder();
         var units = doc.UnitProfile;

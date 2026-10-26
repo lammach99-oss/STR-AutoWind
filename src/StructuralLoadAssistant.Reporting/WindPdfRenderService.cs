@@ -50,63 +50,43 @@ public sealed class WindPdfRenderService
     }
 
     public void RenderHtmlToPdf(string html, string outputPdfPath, int timeoutSeconds = 30)
+        => RenderHtmlToPdfAsync(html, outputPdfPath, default, timeoutSeconds).GetAwaiter().GetResult();
+
+    public async Task RenderHtmlToPdfAsync(string html, string outputPdfPath, CancellationToken cancellationToken = default, int timeoutSeconds = 30)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         ArgumentException.ThrowIfNullOrWhiteSpace(html);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPdfPath);
-
-        string? edgePath = FindChromiumPath();
-        if (edgePath == null)
-        {
-            throw new InvalidOperationException(
-                "Offline Chromium renderer (Microsoft Edge) was not found on this Windows system. " +
-                "Ensure Microsoft Edge or Edge WebView2 runtime is installed.");
-        }
-
-        string tempHtml = Path.Combine(Path.GetTempPath(), $"wind_report_{Guid.NewGuid():N}.html");
-        File.WriteAllText(tempHtml, html, System.Text.Encoding.UTF8);
-
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPdfPath))!);
-
+        string edge = FindChromiumPath() ?? throw new InvalidOperationException("Offline Chromium renderer unavailable.");
+        string workspace = Path.Combine(Path.GetTempPath(), "wind-render-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workspace);
+        string source = Path.Combine(workspace, "source.html"), staged = Path.Combine(workspace, "output.pdf");
         try
         {
-            var psi = new ProcessStartInfo
+            await File.WriteAllTextAsync(source, html, System.Text.Encoding.UTF8, cancellationToken).ConfigureAwait(false);
+            var start = new ProcessStartInfo(edge) { CreateNoWindow = true, UseShellExecute = false, WindowStyle = ProcessWindowStyle.Hidden };
+            foreach (string arg in new[] { "--headless=new", "--disable-gpu", "--no-first-run", "--no-pdf-header-footer", "--run-all-compositor-stages-before-draw", "--user-data-dir=" + Path.Combine(workspace,"profile"), "--print-to-pdf=" + staged, source }) start.ArgumentList.Add(arg);
+            using var process = Process.Start(start) ?? throw new InvalidOperationException("Cannot start offline renderer.");
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
+            try { await process.WaitForExitAsync(linked.Token).ConfigureAwait(false); }
+            catch (OperationCanceledException)
             {
-                FileName = edgePath,
-                Arguments = string.Format("--headless=new --disable-gpu --no-pdf-header-footer --run-all-compositor-stages-before-draw --print-to-pdf=\"{0}\" \"{1}\"", Path.GetFullPath(outputPdfPath), Path.GetFullPath(tempHtml)),
-                CreateNoWindow = true,
-                UseShellExecute = false,
-                WindowStyle = ProcessWindowStyle.Hidden
-            };
-
-            using var proc = Process.Start(psi)
-                ?? throw new InvalidOperationException("Failed to launch headless Chromium process.");
-
-            if (!proc.WaitForExit(timeoutSeconds * 1000))
-            {
-                try { proc.Kill(); } catch { }
-                throw new TimeoutException($"PDF rendering timed out after {timeoutSeconds} seconds.");
+                try { process.Kill(entireProcessTree: true); await process.WaitForExitAsync().ConfigureAwait(false); } catch (InvalidOperationException) { }
+                if (cancellationToken.IsCancellationRequested) throw;
+                throw new TimeoutException("PDF rendering timed out.");
             }
-
-            if (!File.Exists(outputPdfPath) || new FileInfo(outputPdfPath).Length == 0)
-            {
-                throw new InvalidOperationException(
-                    $"Headless Chromium completed with exit code {proc.ExitCode}, but no PDF output was produced at {outputPdfPath}.");
-            }
-
-            // Verify valid PDF header
-            byte[] header = new byte[4];
-            using (var fs = File.OpenRead(outputPdfPath))
-            {
-                fs.ReadExactly(header, 0, 4);
-            }
-            if (System.Text.Encoding.ASCII.GetString(header) != "%PDF")
-            {
-                throw new InvalidOperationException("Generated file does not have a valid %PDF header.");
-            }
+            cancellationToken.ThrowIfCancellationRequested();
+            if (process.ExitCode != 0 || !File.Exists(staged)) throw new InvalidOperationException("PDF rendering failed.");
+            byte[] bytes = await File.ReadAllBytesAsync(staged, cancellationToken).ConfigureAwait(false);
+            if(bytes.Length < 4 || System.Text.Encoding.ASCII.GetString(bytes,0,4) != "%PDF") throw new InvalidOperationException("Invalid rendered PDF.");
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPdfPath))!);
+            cancellationToken.ThrowIfCancellationRequested();
+            File.Move(staged, outputPdfPath, overwrite: true);
         }
         finally
         {
-            try { if (File.Exists(tempHtml)) File.Delete(tempHtml); } catch { }
+            try { Directory.Delete(workspace, recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         }
     }
 

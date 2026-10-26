@@ -99,6 +99,8 @@ public sealed record EngineeringCalculationRun(
     [System.Text.Json.Serialization.JsonIgnore]
     public string ContentHash => SnapshotJson.Hash(this);
 
+    public ImmutableArray<AsNz2021Case> AsNz2021Cases { get; init; } = [];
+
     public WindCalculationRun ToWindCalculationRun(WindState state, StandardManifest manifest)
     {
         var legacyTrace = TraceNodes.Select(t => new CalculationTraceItem(
@@ -120,4 +122,3 @@ public sealed record EngineeringCalculationRun(
         );
     }
 }
-

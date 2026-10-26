@@ -19,11 +19,12 @@ public static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        var asNzSmoke = args.Contains("--smoke-asnz-worksheet", StringComparer.Ordinal);
         var reportExportSmoke = args.Contains("--smoke-report-export", StringComparer.Ordinal);
         var zoneSmoke=args.Contains("--smoke-zone-editor",StringComparer.Ordinal);
         var workflowSmoke = args.Contains("--smoke-roof-workflow", StringComparer.Ordinal);
         var readOnlySmoke = zoneSmoke || workflowSmoke || args.Contains("--smoke-readonly", StringComparer.Ordinal);
-        var smoke = readOnlySmoke || reportExportSmoke || args.Contains("--smoke", StringComparer.Ordinal);
+        var smoke = asNzSmoke || readOnlySmoke || reportExportSmoke || args.Contains("--smoke", StringComparer.Ordinal);
         string? Option(string name) { var index = Array.IndexOf(args, name); return index >= 0 && index + 1 < args.Length ? args[index + 1] : null; }
         var output = Path.GetFullPath(Option("--smoke-output") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StructuralLoadAssistant", "smoke"));
         var database = Option("--database") ?? Path.Combine(smoke ? output : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StructuralLoadAssistant"), "demo.db");
@@ -53,7 +54,8 @@ public static class Program
                 try
                 {
                     var vm = provider.GetRequiredService<MainViewModel>();
-                    if (readOnlySmoke)
+                    if (asNzSmoke) await window.RunAsNzWorksheetSmokeAsync(output);
+                    else if (readOnlySmoke)
                     {
                         if(zoneSmoke)await window.RunZoneEditorSmokeAsync(args.Contains("--reopen"),()=>((MockInspectionAdapter)readAdapter).ChangedGeometry=true,output);
                         else if (workflowSmoke) await window.RunRoofWorkflowSmokeAsync(args.Contains("--reopen"), () => ((MockInspectionAdapter)readAdapter).ChangedGeometry = true);

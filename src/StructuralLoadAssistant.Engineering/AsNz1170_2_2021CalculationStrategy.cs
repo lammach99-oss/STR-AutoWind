@@ -18,6 +18,7 @@ public sealed class AsNz1170_2_2021CalculationStrategy : IWindCalculationStrateg
     public EngineeringCalculationRun Execute(EngineeringCalculationRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        if (request.ProcedureName == AsNz2021ReviewCalculation.Procedure) return AsNz2021ReviewCalculation.Execute(request);
         if (!WorkbookRequestDerivation.IsWorkbookMode(request, "ASNZS"))
             return ExecuteCore(request);
 

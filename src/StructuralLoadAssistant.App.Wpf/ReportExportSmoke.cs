@@ -103,4 +103,24 @@ public sealed partial class MainWindow
         vm.ExportDetailedReport(xlsxPath);
         await Idle();
     }
-}
+    public async Task RunAsNzWorksheetSmokeAsync(string outputDir)
+    {
+        vm.Edition = "AS/NZS 1170.2:2021";
+        var request = StructuralLoadAssistant.Csi.Fake.AsNzMatrixFixture.Request(workbookComparison:true) with { ProjectId = vm.Session.Project.Id };
+        vm.SetCalculationRequest(request);
+        await vm.CalculateEngineeringRunAsync();
+        if (vm.CurrentReportState != MainViewModel.WindReportState.Ready || vm.CurrentEngineeringRun?.AsNz2021Cases.Length != 320)
+            throw new InvalidOperationException("AS/NZS worksheet calculation/render failed: " + vm.CurrentReportError);
+        if (vm.CurrentPdfDocument?.CalculationRun?.ContentHash != vm.CurrentEngineeringRun.ContentHash)
+            throw new InvalidOperationException("AS/NZS PDF provenance mismatch");
+        File.Copy(vm.CurrentPdfPath!, Path.Combine(outputDir,"ASNZ_2021_FlatWorkbook_Comparison_Review.pdf"));
+        File.WriteAllText(Path.Combine(outputDir,"request.json"), SnapshotJson.Serialize(request));
+        File.WriteAllText(Path.Combine(outputDir,"run.json"), SnapshotJson.Serialize(vm.CurrentEngineeringRun));
+        vm.SetCalculationRequest(request with { BuildingLengthM = 12 });
+        if(vm.CurrentPdfPath != null || vm.CurrentEngineeringRun != null) throw new InvalidOperationException("Changed request retained stale PDF");
+        await vm.CalculateEngineeringRunAsync(new System.Threading.CancellationToken(true));
+        if(vm.CurrentReportState != MainViewModel.WindReportState.Cancelled || vm.CurrentPdfPath != null) throw new InvalidOperationException("Cancelled calculation published PDF");
+        vm.SetCalculationRequest(request);
+        await vm.CalculateEngineeringRunAsync();
+        await Dispatcher.InvokeAsync(() => { UpdateLayout(); }, DispatcherPriority.ApplicationIdle);
+    }}
