@@ -28,7 +28,7 @@ public sealed class AsNzWorksheetTests
             var fixtureRun=AsNz2021ReviewCalculation.Execute(fixture);
             var fixtureDoc=Document(fixtureRun);
             File.WriteAllText(Path.Combine(root,name+".json"),SnapshotJson.Serialize(fixtureRun));
-            new WindPdfRenderService().RenderHtmlToPdf(new AsNz2021WorkbookPdfRenderer().BuildHtml(fixtureDoc),Path.Combine(root,name+"_MAIN.pdf"));
+            new WindPdfRenderService().RenderHtmlToPdf(new AsNz2021WorkbookPdfRenderer().BuildHtml(fixtureDoc),Path.Combine(root,name+"_MAIN.pdf"),timeoutSeconds:120);
         }
         foreach(bool blocked in new[]{false,true})
         {
@@ -42,7 +42,7 @@ public sealed class AsNzWorksheetTests
                 string html=audit?renderer.BuildAuditHtml(document):renderer.BuildHtml(document);
                 string name=stem+(audit?"_Detailed_Audit":"_MAIN");
                 File.WriteAllText(Path.Combine(root,name+".html"),html);
-                new WindPdfRenderService().RenderHtmlToPdf(html,Path.Combine(root,name+".pdf"));
+                new WindPdfRenderService().RenderHtmlToPdf(html,Path.Combine(root,name+".pdf"),timeoutSeconds:120);
             }
         }
     }
