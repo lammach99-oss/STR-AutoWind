@@ -86,7 +86,13 @@ public sealed class WindPdfRenderService
         }
         finally
         {
-            try { Directory.Delete(workspace, recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            // Chromium descendants may release profile handles just after the parent exits.
+            for(int attempt=0;attempt<30 && Directory.Exists(workspace);attempt++)
+            {
+                try { Directory.Delete(workspace,recursive:true); }
+                catch(IOException) when(attempt<29) { await Task.Delay(100).ConfigureAwait(false); }
+                catch(UnauthorizedAccessException) when(attempt<29) { await Task.Delay(100).ConfigureAwait(false); }
+            }
         }
     }
 

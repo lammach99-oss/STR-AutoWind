@@ -21,12 +21,18 @@ public sealed class PdfCancellationTests
         var existing=Directory.GetDirectories(Path.GetTempPath(),"wind-render-*").ToHashSet();
         string target=Path.Combine(Path.GetTempPath(),Guid.NewGuid()+".pdf");
         using var ct=new CancellationTokenSource();
-        string html="<html><body>"+string.Concat(Enumerable.Repeat("<p>Cancellation workload</p>",50000))+"</body></html>";
+        string marker=Guid.NewGuid().ToString("N");
+        string html="<html><body>"+marker+string.Concat(Enumerable.Repeat("<p>Cancellation workload</p>",50000))+"</body></html>";
         var render=new WindPdfRenderService().RenderHtmlToPdfAsync(html,target,ct.Token);
         string? workspace=null;
         for(int i=0;i<200;i++)
         {
-            workspace=Directory.GetDirectories(Path.GetTempPath(),"wind-render-*").FirstOrDefault(d=>!existing.Contains(d)&&Directory.Exists(Path.Combine(d,"profile")));
+            workspace=Directory.GetDirectories(Path.GetTempPath(),"wind-render-*").FirstOrDefault(d=>
+            {
+                if(existing.Contains(d)||!Directory.Exists(Path.Combine(d,"profile")))return false;
+                try {return File.ReadAllText(Path.Combine(d,"source.html")).Contains(marker);}
+                catch(IOException){return false;}
+            });
             if(workspace!=null)break;
             await Task.Delay(20);
         }

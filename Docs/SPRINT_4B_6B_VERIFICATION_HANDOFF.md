@@ -41,3 +41,6 @@ Outstanding acceptance / qualification:
 - No independent engineering sign-off. CanCalculateNormativePressures and CanMutateCsi remain false. All outputs are review/diagnostic PDFs, never qualified design results. No live CSI writes.
 
 GitHub CI evidence is reported against the pushed SHA in the completion message; local test success alone is not CI success.
+
+CI follow-up: initial run 40367099078 exposed cancellation workspace cleanup timing under parallel Chromium renders (437/438). Cleanup now retries bounded profile-handle release and reports persistent failure instead of swallowing it. The cancellation regression identifies its own HTML marker rather than another test's concurrent workspace. Release regression rerun: 438/438; final follow-up CI must pass before reporting CI success.
+Final cleanup-corrected WPF rerun: all nine PASS; artifacts/4b6b/cleanup-wpf/f509920eed2646648d3a7bee0ae70b3f. Debug rerun 438/438. No worksheet calculations or normative gates changed in the CI follow-up.
