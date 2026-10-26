@@ -61,4 +61,3 @@ public sealed class WorksheetPdfExportTests : IDisposable
         Assert.False(File.Exists(output));Assert.Empty(Directory.GetDirectories(root));
     }
 }
-

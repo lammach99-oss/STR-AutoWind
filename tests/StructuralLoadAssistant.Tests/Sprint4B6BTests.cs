@@ -11,7 +11,7 @@ public sealed class Sprint4B6BTests
     {
         var run=AsNz2021ReviewCalculation.Execute(AsNzMatrixFixture.Request(true));
         string html=new AsNz2021WorkbookPdfRenderer().BuildHtml(Document(run));
-        foreach(string cell in new[]{"D57","E57","F57","I57","E22","F22","K22","L22","M46"}) Assert.Contains($"data-cell='{cell}'",html);
+        foreach(string cell in new[]{"D57","E57","F57","I57","E22","F22","K22","L22","N46"}) Assert.Contains($"data-cell='{cell}'",html);
         Assert.DoesNotContain("Workbook row / parameter",html);
         Assert.DoesNotContain("57. From",html);
         Assert.DoesNotContain(" | ",html);

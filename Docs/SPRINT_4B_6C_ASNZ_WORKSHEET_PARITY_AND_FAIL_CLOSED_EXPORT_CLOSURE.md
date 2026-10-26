@@ -1,9 +1,9 @@
 # Sprint 4B.6C — AS/NZS Worksheet Width Parity, Geometry Fail-Closed Checks & Transactional PDF Export
 
-**Repository:** `lammach99-oss/STR-AutoWind`  
-**User-local repository:** `D:\Project\Etab-Sap Tool\AutoWind`  
-**Starting point:** fetch the latest `origin/main` and verify the baseline is at least `7afb33670fd9c44943de70af659e41392816b110`. Do not assume the branch stayed unchanged.  
-**Mode:** bounded corrective sprint; **EXPLICIT-INPUT ENGINEER REVIEW ONLY**.  
+**Repository:** `lammach99-oss/STR-AutoWind`
+**User-local repository:** `D:\Project\Etab-Sap Tool\AutoWind`
+**Starting point:** fetch the latest `origin/main` and verify the baseline is at least `7afb33670fd9c44943de70af659e41392816b110`. Do not assume the branch stayed unchanged.
+**Mode:** bounded corrective sprint; **EXPLICIT-INPUT ENGINEER REVIEW ONLY**.
 **Acceptance at start:** Sprint 4B.6B has successful GitHub CI run `40368030115` (438/438 automated tests; 9/9 WPF smoke modes; Release build 0 warnings/errors). **Engineering standards qualification, live CSI geometry qualification and owner's full visual acceptance remain OPEN.**
 
 ## 0. Why this increment is required — independently observed evidence
