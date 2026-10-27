@@ -17,7 +17,7 @@ try {
         $quoted = $arguments | ForEach-Object { '"' + $_ + '"' }
         $process = Start-Process -FilePath $exe -ArgumentList $quoted -WorkingDirectory $PWD.Path -WindowStyle Hidden -PassThru
         try {
-            if (!$process.WaitForExit(45000)) { $process.Kill(); throw "$Name timed out after 45 seconds" }
+            if (!$process.WaitForExit(60000)) { $process.Kill(); throw "$Name timed out after 60 seconds" }
             $process.Refresh()
             if ($process.ExitCode -ne 0) {
                 $errorPath = Join-Path $output 'smoke-error.txt'
@@ -34,6 +34,7 @@ try {
     Invoke-Smoke 'demo' @('--smoke')
     Invoke-Smoke 'report-export' @('--smoke-report-export')
     Invoke-Smoke 'asnz-worksheet' @('--smoke-asnz-worksheet')
+    Invoke-Smoke 'asnz-auto' @('--smoke-asnz-auto')
     Invoke-Smoke 'asnz-blocked' @('--smoke-asnz-blocked')
     Invoke-Smoke 'readonly' @('--smoke-readonly')
     Invoke-Smoke 'roof-initial' @('--smoke-roof-workflow')

@@ -5,16 +5,16 @@ namespace StructuralLoadAssistant.Engineering;
 /// <summary>Explicit-input review arithmetic; contains no normative coefficient tables.</summary>
 public static class AsNz2021MatrixEngine
 {
-    public static double DesignSpeed(IReadOnlyList<double> cardinalSpeeds, double bearing, LimitState state)
+    public static double DesignSpeed(IReadOnlyList<double> cardinalSpeeds, double bearing, LimitState state,double ulsMinimum=30)
     {
         if (cardinalSpeeds.Count != 8 || cardinalSpeeds.Any(v => !double.IsFinite(v) || v <= 0)
-            || !double.IsFinite(bearing) || !Enum.IsDefined(state)) throw new ArgumentException("Eight positive cardinal speeds, finite bearing and valid limit state required.");
+            || !double.IsFinite(ulsMinimum)||ulsMinimum<0||!double.IsFinite(bearing) || !Enum.IsDefined(state)) throw new ArgumentException("Eight positive cardinal speeds, finite bearing and valid limit state required.");
         double Normalize(double a) => (a % 360 + 360) % 360;
         double At(double a) { double index = Normalize(a) / 45; int i = (int)Math.Floor(index); return cardinalSpeeds[i] + (cardinalSpeeds[(i + 1) % 8] - cardinalSpeeds[i]) * (index - i); }
         double maximum = Math.Max(At(bearing - 45), At(bearing + 45));
         for (int i = 0; i < 8; i++)
             if (Math.Abs(Normalize(i * 45 - bearing + 180) - 180) <= 45) maximum = Math.Max(maximum, cardinalSpeeds[i]);
-        return state == LimitState.Uls ? Math.Max(30, maximum) : maximum;
+        return state == LimitState.Uls ? Math.Max(ulsMinimum, maximum) : maximum;
     }
 
     public static (double ExternalPa, double InternalPa, double NetPa) Pressure(double speed, double density,

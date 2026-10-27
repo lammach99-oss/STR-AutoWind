@@ -18,8 +18,16 @@ public sealed partial class AsNz2021WorkbookPdfRenderer
         sb.Append($"<h1>LOAD CALCULATION — {E(document.Project.Name)}</h1><p>{E(run.QualificationStatus)} · AS/NZS 1170.2:2021 · metric · NO CSI WRITES</p>");
         sb.Append("<div style='break-inside:avoid'><h2>Geometry and identity</h2>");
         sb.Append($"<p class='small'>Procedure {E(req.ProcedureName)}; applied amendments: {E(string.Join(", ", req.SelectedAmendments))} (adoption / source verification pending).<br>Geometry: {E(req.Options.GetValueOrDefault("GeometrySource","OWNER_INPUT"))}; {E(req.Options.GetValueOrDefault("GeometryOverrideReason","No override reason supplied"))}; {E(req.Options.GetValueOrDefault("ReadOnlyScanEvidence","No read-only scan geometry evidence attached"))}. Automatic envelope qualification remains blocked. Ground datum {N(req.GroundElevationM)} m; eave {N(req.EaveHeightM)} m; roof slope {N(req.RoofSlopeDegrees)}°. Model fingerprint: {E(document.ModelSnapshot.GeometryFingerprint)}. Run hash: {E(run.ContentHash)}. Document hash: {E(document.ReportDocumentHash)}.</p>");
-        foreach(var i in run.Issues)sb.Append($"<p>{E(i.Code)}: {E(i.Message)}</p>");
         sb.Append("</div>");
+        if(req.Options.GetValueOrDefault("AutoLookup")=="true")
+        {
+            sb.Append($"<h2>Automatic lookup source and decisions</h2><p class='small'>Dataset {E(req.Options.GetValueOrDefault("LookupDatasetId"))}; SHA {E(req.Options.GetValueOrDefault("LookupDatasetHash"))}; rights {E(req.Options.GetValueOrDefault("LookupRightsReference"))}; adoption {E(req.Options.GetValueOrDefault("LookupAdoptionReference"))}</p>");
+            sb.Append("<table class='small'><thead><tr><th>Lookup key / state</th><th>Value / source</th><th>Selection / reason</th></tr></thead><tbody>");
+            var lookups=System.Text.Json.JsonSerializer.Deserialize<System.Collections.Immutable.ImmutableArray<AutoLookupValue>>(req.Options.GetValueOrDefault("AutoLookupDiagnostics","[]"));
+            foreach(var v in lookups)sb.Append($"<tr><td>{E(v.Key)}<br>{E(v.State.ToString())}</td><td>{N(v.Value)} {E(v.Unit)}<br>{E(v.Source)}<br>{E(string.Join(",",v.RecordIds))}</td><td>{E(v.Selection)}<br>{E(v.Reason)}</td></tr>");
+            sb.Append("</tbody></table>");
+        }
+        foreach(var i in run.Issues)sb.Append($"<p>{E(i.Code)}: {E(i.Message)}</p>");
         sb.Append("<h2>All direction / limit-state / internal-sign cases</h2><table class='small'><thead><tr><th>Stable case ID</th><th>Vdes m/s</th><th>pe kN/m²</th><th>pi kN/m²</th><th>pn kN/m²</th><th>Status</th></tr></thead><tbody>");
         foreach(var r in run.AsNz2021Cases)sb.Append($"<tr><td>{E(r.Id)}</td><td>{N(r.DesignSpeed)}</td><td>{N(r.ExternalPa/1000)}</td><td>{N(r.InternalPa/1000)}</td><td>{N(r.NetPa/1000)}</td><td>{E(r.Status)}</td></tr>");
         sb.Append("</tbody></table><h2>Case applicability and factor evidence</h2><table class='small'><colgroup><col style='width:35%'><col style='width:65%'></colgroup><thead><tr><th>Case / decision</th><th>Factor, value, source class, document / selector</th></tr></thead><tbody>");

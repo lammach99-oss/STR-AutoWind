@@ -10,6 +10,34 @@ namespace StructuralLoadAssistant.App.Wpf;
 
 public sealed partial class MainWindow
 {
+    public async Task RunAutoLookupSmokeAsync(string outputDir)
+    {
+        vm.Edition="AS/NZS 1170.2:2021";
+        vm.InstallSyntheticAutoSmokeSource();
+        vm.AutoCountry="AU";vm.AutoRegion="SYNTHETIC";
+        vm.AutoLength="30";vm.AutoWidth="20";vm.AutoHeight="4";vm.AutoGround="0";vm.AutoPitch="0";
+        vm.AutoReason="Synthetic smoke geometry / axes / datum";vm.AutoGeometry=true;
+        vm.AutoUniform=true;vm.AutoTopo=true;vm.AutoRigid=true;
+        vm.AutoOpenings="TEST";vm.AutoDebris="TEST";vm.AutoArea="10";vm.AutoWallHeight="4";
+        if(vm.AutoTerrain!="2"||vm.AutoUls!="500"||vm.AutoSls!="25")throw new InvalidOperationException("Guided defaults mismatch");
+        await vm.CalculateAutoWindAsync();
+        if(vm.CurrentReportState!=MainViewModel.WindReportState.Ready||vm.CurrentEngineeringRun?.NumericalComputationPossible!=true)throw new InvalidOperationException("Synthetic automatic workflow failed: "+vm.CurrentReportError);
+        await vm.ExportWorksheetPdfAsync(Path.Combine(outputDir,"ASNZ_AUTO_SYNTHETIC_MAIN.pdf"));
+        await vm.ExportWorksheetPdfAsync(Path.Combine(outputDir,"ASNZ_AUTO_SYNTHETIC_AUDIT.pdf"),true);
+        await File.WriteAllTextAsync(Path.Combine(outputDir,"auto-run.json"),SnapshotJson.Serialize(vm.CurrentEngineeringRun));
+        var path=vm.CurrentPdfPath!;var bytes=File.ReadAllBytes(path);File.AppendAllText(path,"tampered");
+        bool rejected=false;try{await vm.ExportWorksheetPdfAsync(Path.Combine(outputDir,"tampered.pdf"));}catch(InvalidOperationException){rejected=true;}
+        File.WriteAllBytes(path,bytes);if(!rejected)throw new InvalidOperationException("Tampered auto PDF exported");
+        vm.AutoTerrain="3";
+        if(vm.CurrentPdfPath!=null||vm.CurrentEngineeringRun!=null)throw new InvalidOperationException("Terrain change did not invalidate PDF");
+        using(var cancelled=new CancellationTokenSource()){cancelled.Cancel();try{await vm.CalculateAutoWindAsync(cancelled.Token);}catch(OperationCanceledException){}}
+        if(vm.CurrentPdfPath!=null)throw new InvalidOperationException("Cancelled lookup published PDF");
+        vm.AutoTerrain="2";await vm.CalculateAutoWindAsync();vm.AutoRegion="";
+        if(vm.CurrentPdfPath!=null)throw new InvalidOperationException("Region change did not invalidate PDF");
+        await vm.CalculateAutoWindAsync();
+        if(vm.CurrentReportState!=MainViewModel.WindReportState.Blocked)throw new InvalidOperationException("Missing region did not block");
+        await vm.ExportWorksheetPdfAsync(Path.Combine(outputDir,"ASNZ_AUTO_BLOCKED_MAIN.pdf"));
+    }
     public async Task RunReportExportSmokeAsync(string outputDir)
     {
         static void Check(bool condition, string message)

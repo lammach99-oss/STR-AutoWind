@@ -20,7 +20,7 @@ public sealed class AsNzWorksheetTests
     public void GenerateCalculatedAndBlockedSamples()
     {
         Assert.True(WindPdfRenderService.IsRendererAvailable,"Edge required for actual PDF acceptance");
-        string root=Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,"../../../../../artifacts/4b6c"));
+        string root=Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,"../../../../../artifacts/4b7/samples",Guid.NewGuid().ToString("N")));
         Directory.CreateDirectory(root);
         var request=AsNzMatrixFixture.LegacyWorkbookComparison();
         foreach(var (name,fixture) in new[]{("ASNZ_2021_Explicit_Review",AsNzMatrixFixture.Request(true)),("ASNZ_2021_Varied_Directions",AsNzMatrixFixture.VariedExplicitReview())})
