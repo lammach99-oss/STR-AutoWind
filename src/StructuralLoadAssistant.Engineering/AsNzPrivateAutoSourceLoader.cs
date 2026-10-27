@@ -19,6 +19,6 @@ public static class AsNzPrivateAutoSourceLoader
         var bundle=StandardsDataBundle.LoadFromDirectory(directory);
         var check=StandardsDataBundleValidator.GenerateIntakePreflight(bundle);
         if(!auth.SoftwareUseAuthorized||!check.SemanticHashValid||!check.ComponentBytesCoherent||bundle.Manifest.CanonicalHashAlgorithmVersion!="3.0"||bundle.Manifest.Family!=StandardFamily.AsNz1170_2||bundle.Manifest.Rights is not (DataRightsClassification.LocalLicensedOnly or DataRightsClassification.Restricted))throw new InvalidDataException("Private source integrity/rights/edition blocked");
-        return new(bundle,rights,adoption,auth.TableDecisions,true);
+        return AsNzAutoLookupReceipts.BindPrivateSource(new(bundle,rights,adoption,auth.TableDecisions,true));
     }
 }

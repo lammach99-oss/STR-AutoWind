@@ -38,25 +38,33 @@ public static class AsNz2021ReviewCalculation
             issues.Add(new("MISSING-" + key, CalculationIssueSeverity.Error, "AS/NZS matrix", "INPUT REQUIRED: " + key));
             cache[key] = double.NaN; return double.NaN;
         }
-        bool auto=request.Options.GetValueOrDefault("AutoLookup")=="true";
+        bool claimedAuto=request.Options.GetValueOrDefault("AutoLookup")=="true";
+        bool authenticated=AsNzAutoLookupReceipts.TryGet(request,out var receipt);
+        bool auto=claimedAuto&&authenticated;
+        if(!authenticated)
+        {
+            if(claimedAuto)issues.Add(new("AUTO_LOOKUP_PROVENANCE_UNVERIFIED",CalculationIssueSeverity.Error,"Source lookup","Imported or changed requests must rerun the authenticated local selector; editable flags are not lookup evidence."));
+            if(claimedAuto||request.Options.ContainsKey("AutoLookupStatus"))request=request with {Options=request.Options.SetItem("AutoLookupStatus","EXPLICIT INPUT / AUTOMATIC PROVENANCE UNVERIFIED")};
+        }
         bool geometryOk = request.StandardEdition == "AS/NZS 1170.2:2021" && Enum.IsDefined(request.LimitState) && Enum.IsDefined(request.WindDirection) && new[] { request.BuildingLengthM, request.BuildingWidthM, request.ReferenceHeightM }.All(v => double.IsFinite(v) && v > 0)
             && double.IsFinite(request.WindAngleDegrees) && double.IsFinite(request.RoofSlopeDegrees) && request.RoofSlopeDegrees >= 0 && request.RoofSlopeDegrees < 90
             && request.EaveHeightM > request.GroundElevationM && request.RidgeHeightM >= request.EaveHeightM
             && AsNz2021MethodDecision.Evaluate(request.RoofForm,request.RoofSlopeDegrees,0,0,request.ReferenceHeightM/request.BuildingLengthM,request.BuildingLengthM/request.BuildingWidthM,"UNKNOWN","UNKNOWN",1,[]).ReviewGeometrySupported;
-        if(auto&&request.Options.GetValueOrDefault("AutoLookupComplete")!="True")geometryOk=false;
+        if(claimedAuto&&(!authenticated||receipt?.ContextValid!=true))geometryOk=false;
         if (!geometryOk) issues.Add(new("UNSUPPORTED_GEOMETRY", CalculationIssueSeverity.Error, "Geometry", "Only explicit rectangular flat/monoslope geometry is supported. Ground datum, roof plane and applicability require engineer review."));
         issues.Add(new("GEOMETRY_REVIEW_REQUIRED", CalculationIssueSeverity.Warning,"Geometry","Supplied footprint, average height, pitch and roof run require engineering adjudication; no physical roof plane or full-span pitch/rise verified."));
-        double ms=Input("Ms"),mt=Input("Mt");
+        double mt=Input("Mt");
         double slopeBearing = Input("SlopeBearing", false);
         foreach (var state in new[] { LimitState.Uls, LimitState.Sls })
         {
             string StateKey(string key)=>auto?state+"_"+key:key;
+            double ms=Input(auto?state+"_Ms":"Ms");
             double mz=Input(StateKey("Mz_cat")),mc=Input(StateKey("Mc")),rho=Input(StateKey("rho")),dyn=Input(StateKey("Cdyn"));
             double vr = Input("VR_" + state), period = Input("R_" + state);
             double[] site = Enumerable.Range(0, 8).Select(i => vr * Input(StateKey("Md_" + i * 45)) * mz * ms * mt * mc).ToArray();
             for (int i = 0; i < 8; i++) if (double.IsFinite(site[i])) {
                 string id=$"Vsit_{state}_{i*45}"; quantities[id]=site[i];
-                traces.Add(new(id,"Site speed",id,"VR Md Mz,cat Ms Mt Mc",$"{vr:R} × {Input(StateKey("Md_"+i*45)):R} × {mz:R} × {ms:R} × {mt:R} × {mc:R}",$"{site[i]:R} m/s",site[i],"m/s","AS/NZS 1170.2:2021 Eq 2.2","Explicit supplied regional and direction inputs",["INPUT-VR_"+state,"INPUT-"+StateKey("Md_"+i*45),"INPUT-"+StateKey("Mz_cat"),"INPUT-Ms","INPUT-Mt","INPUT-"+StateKey("Mc")],[]));
+                traces.Add(new(id,"Site speed",id,"VR Md Mz,cat Ms Mt Mc",$"{vr:R} × {Input(StateKey("Md_"+i*45)):R} × {mz:R} × {ms:R} × {mt:R} × {mc:R}",$"{site[i]:R} m/s",site[i],"m/s","AS/NZS 1170.2:2021 Eq 2.2","Explicit supplied regional and direction inputs",["INPUT-VR_"+state,"INPUT-"+StateKey("Md_"+i*45),"INPUT-"+StateKey("Mz_cat"),"INPUT-"+(auto?state+"_Ms":"Ms"),"INPUT-Mt","INPUT-"+StateKey("Mc")],[]));
             }
             foreach (var direction in Enum.GetValues<WindDirection>())
             {
@@ -84,9 +92,12 @@ public static class AsNz2021ReviewCalculation
                     {
                         double cpi = outside ? double.NaN : Input(StateKey("Cpi_" + sign), false);
                         var method = AsNz2021MethodDecision.Evaluate(request.RoofForm,request.RoofSlopeDegrees,slopeBearing,bearing,request.ReferenceHeightM/depth,depth/breadth,request.Options.GetValueOrDefault("Jurisdiction","UNKNOWN"),request.Options.GetValueOrDefault("RegionCode","UNKNOWN"),period,request.SelectedAmendments);
-                        bool valid = geometryOk && method.ReviewGeometrySupported && new[] { surfaceSpeed,rho,dyn,cpe,ka,kce,kl,kp,cpi,kci,kv,slopeBearing,period }.All(double.IsFinite);
+                        bool externalValid=geometryOk&&method.ReviewGeometrySupported&&new[]{surfaceSpeed,rho,dyn,cpe,ka,kce,kl,kp,slopeBearing,period}.All(double.IsFinite)
+                            && new[]{surfaceSpeed,rho,dyn,ka,kce,kl,kp}.All(v=>v>0);
+                        bool valid = externalValid && new[] {cpi,kci,kv}.All(double.IsFinite)&&kci>0&&kv>0;
                         if (valid && ((sign == "Positive" && cpi < 0) || (sign == "Negative" && cpi > 0))) valid = false;
-                        var p = valid ? AsNz2021MatrixEngine.Pressure(surfaceSpeed,rho,dyn,cpe,ka,kce,kl,kp,cpi,kci,kv) : (double.NaN,double.NaN,double.NaN);
+                        double external=externalValid?0.5*rho*surfaceSpeed*surfaceSpeed*dyn*cpe*ka*kce*kl*kp:double.NaN;
+                        var p = valid ? AsNz2021MatrixEngine.Pressure(surfaceSpeed,rho,dyn,cpe,ka,kce,kl,kp,cpi,kci,kv) : (external,double.NaN,double.NaN);
                         string id = $"{state}_{prefix}_{sign}";
                         string status = outside ? "NOT_APPLICABLE" : valid ? "EXPLICIT REVIEW ARITHMETIC / APPLICABILITY UNVERIFIED" : "INPUT_REQUIRED";
                         double? Finite(double v) => double.IsFinite(v) ? v : null;
@@ -94,10 +105,11 @@ public static class AsNz2021ReviewCalculation
                             Finite(p.Item1),Finite(p.Item2),Finite(p.Item3), valid ? normal : null,valid ? new Vec3(-p.Item3*normal.X,-p.Item3*normal.Y,-p.Item3*normal.Z) : null,status,
                             "AS/NZS 1170.2:2021 Cl 2.2, 2.3, 2.4(1), 5.2(1)/(2); surface applicability and selected coefficients require review")
                         {
-                            PressureBasisPa=valid?0.5*rho*surfaceSpeed*surfaceSpeed*dyn:null,
+                            PressureBasisPa=externalValid?0.5*rho*surfaceSpeed*surfaceSpeed*dyn:null,
                             MethodDecision=method,
                             FactorEvidence=request.ExplicitCoefficients.Where(e=>e.Key.StartsWith(InputPrefix+"_")||e.Key==StateKey("Cpi_"+sign)||e.Key==StateKey("rho")||e.Key==StateKey("Cdyn")).ToImmutableDictionary()
                         });
+                        if(externalValid&&!valid)traces.Add(new(id+"-EXTERNAL","External review pressure",id,"pe = 0.5 rho Vdes² Cdyn Cpe Ka Kce Kl Kp",$"0.5 × {rho:R} × {surfaceSpeed:R}² × {dyn:R} × {cpe:R} × {ka:R} × {kce:R} × {kl:R} × {kp:R}",$"{external:R} Pa",external,"Pa","AS/NZS 1170.2:2021 Eq 5.2(2)","External review only; internal/net pressure BLOCKED",new[]{"Vdes_"+state+"_"+direction,"INPUT-"+StateKey("rho"),"INPUT-"+StateKey("Cdyn")}.Concat(new[]{"Cpe","Ka","Kce","Kl","Kp"}.Select(f=>"INPUT-"+InputPrefix+"_"+f)).ToImmutableArray(),[]));
                         if (valid) traces.Add(new(id,"Surface pressure",id,"pe = 0.5 rho Vdes² Cpe Ka Kce Kl Kp Cdyn; pi = 0.5 rho Vdes² Cpi Kci Kv Cdyn; pn = pe - pi",
                             $"pe = 0.5 × {rho:R} × {surfaceSpeed:R}² × {cpe:R} × {ka:R} × {kce:R} × {kl:R} × {kp:R} × {dyn:R}; pi = 0.5 × {rho:R} × {surfaceSpeed:R}² × {cpi:R} × {kci:R} × {kv:R} × {dyn:R}; pn = {p.Item1:R} - ({p.Item2:R})",
                             $"{p.Item3:R} Pa",p.Item3,"Pa","AS/NZS 1170.2:2021 Eqs 2.4(1), 5.2(1)/(2)","Explicit-input review arithmetic; positive net acts inward. Selected coefficient applicability is not qualified.",
@@ -113,14 +125,17 @@ public static class AsNz2021ReviewCalculation
                 double[] roof = [0,0.5*h,h,2*h,3*h,depth];
                 double a = request.RoofSlopeDegrees*Math.PI/180, b = slopeBearing*Math.PI/180;
                 Vec3 roofNormal = new(-Math.Sin(a)*Math.Cos(b),-Math.Sin(a)*Math.Sin(b),Math.Cos(a));
-                for (int c=1;c<=2;c++) for (int z=0;z<5;z++) Surface("Roof",c,z,Math.Min(depth,roof[z]),Math.Min(depth,roof[z+1]),roofNormal);
+                var roofFace=AsNzRoofApplicability.FaceForWind(slopeBearing,theta);
+                var route=roofFace.HasValue?AsNzRoofApplicability.Evaluate(request.RoofForm,request.RoofSlopeDegrees,roofFace.Value):null;
+                bool fullFace=auto&&route?.Table is "Table 5.3(B)" or "Table 5.3(C)";
+                for (int c=1;c<=2;c++) for (int z=0;z<5;z++) Surface("Roof",c,z,fullFace?(z==0?0:depth):Math.Min(depth,roof[z]),fullFace?depth:Math.Min(depth,roof[z+1]),roofNormal);
             }
         }
         bool success = !issues.Any(i => i.Severity == CalculationIssueSeverity.Error) && rows.Any(r => r.NetPa.HasValue) && rows.All(r => r.Status != "INPUT_REQUIRED");
         bool synthetic = request.ExplicitCoefficients.Values.Any(e => e.Provenance == DataProvenance.SyntheticDemoFixture);
         return new("asnz-matrix-"+Guid.NewGuid().ToString("N"),DateTimeOffset.UtcNow,request,
             synthetic ? DataProvenance.SyntheticDemoFixture : DataProvenance.Unverified,success,false,false,false,false,
-            !success ? "BLOCKED / INPUTS OR GEOMETRY REQUIRED" : auto ? request.Options.GetValueOrDefault("AutoLookupStatus","PRIVATE REVIEW / NOT FOR DESIGN") : synthetic ? "SYNTHETIC - NOT FOR DESIGN" : "SOURCE RIGHTS / VERIFIED TABLE DATA REQUIRED",[],[],traces.DistinctBy(t=>t.NodeId).ToImmutableArray(),issues.DistinctBy(i=>i.Code).ToImmutableArray(),quantities.ToImmutable())
+            !success ? "BLOCKED / INPUTS OR GEOMETRY REQUIRED" : auto ? receipt!.Status : synthetic ? "SYNTHETIC - NOT FOR DESIGN" : "SOURCE RIGHTS / VERIFIED TABLE DATA REQUIRED",[],[],traces.DistinctBy(t=>t.NodeId).ToImmutableArray(),issues.DistinctBy(i=>i.Code).ToImmutableArray(),quantities.ToImmutable())
             { AsNz2021Cases = rows.ToImmutable() };
     }
 }

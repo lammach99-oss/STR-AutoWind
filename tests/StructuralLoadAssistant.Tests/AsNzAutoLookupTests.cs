@@ -48,7 +48,7 @@ public sealed class AsNzAutoLookupTests
         var source=AsNzAutoLookupFixture.Source();var row=source.Bundle.Records.First(r=>r.ParameterCategory=="Mz");var service=new AsNz2021LocalAutoLookupService();
         Assert.Equal(AutoLookupState.OutsideDomain,service.Select(source,"Mz","Mz",row.CategoricalConditions,ImmutableDictionary<string,double>.Empty.Add("Height",7)).State);
         var duplicate=source with {Bundle=new(source.Bundle.Manifest,source.Bundle.Records.Add(row))};
-        Assert.Equal(AutoLookupState.Ambiguous,service.Select(duplicate,"Mz","Mz",row.CategoricalConditions,row.NumericalConditions).State);
+        Assert.Equal(AutoLookupState.RightsOrEditionBlocked,service.Select(duplicate,"Mz","Mz",row.CategoricalConditions,row.NumericalConditions).State);
     }
     [Theory]
     [InlineData(0,30)]

@@ -163,13 +163,15 @@ public sealed partial class MainWindow : Window
             vm.Edition = request.StandardEdition;
             vm.SetCalculationRequest(request with { ProjectId = vm.Session.Project.Id });
         })));
-        var auto=Stack();auto.Children.Add(Text("Automatic Flat Roof / private engineering review",18));
+        var auto=Stack();auto.Children.Add(Text("Automatic roof lookup / private engineering review",18));
         auto.Children.Add(Row(Text("Country"),Combo("AutoCountry",new[]{"AU","NZ"},100),Text("Region"),BoundCombo("AutoRegion","AutoRegions"),Text("Terrain"),Combo("AutoTerrain",new[]{"1","2","2.5","3","4"},90),Text("ULS years"),Input("AutoUls",70),Text("SLS years"),Input("AutoSls",70)));
-        auto.Children.Add(Row(Text("Roof"),Combo("AutoRoof",new[]{"Flat","Monoslope","Gable","Hip"},140),Text("Pitch deg"),Input("AutoPitch",70),Text("True-north bearing"),Input("AutoBearing",70)));
+        auto.Children.Add(Row(Text("Roof"),Combo("AutoRoof",new[]{"Flat","LowSlope","Monoslope","Gable","Hip"},140),Text("Pitch deg"),Input("AutoPitch",70),Text("True-north bearing"),Input("AutoBearing",70)));
         auto.Children.Add(Row(Text("Length X m"),Input("AutoLength",70),Text("Width Y m"),Input("AutoWidth",70),Text("Mean roof h m"),Input("AutoHeight",70),Text("Ground Z m"),Input("AutoGround",70)));
+        auto.Children.Add(Row(Text("Eave Z m"),Input("AutoEave",70),Text("Peak Z m"),Input("AutoPeak",70),Text("Slope bearing in model XY deg"),Input("AutoSlopeBearing",70),Check("True north verified","AutoTrueNorth")));
         auto.Children.Add(Row(Check("Geometry / datum / axes reviewed","AutoGeometry"),Text("Engineer evidence / override reason"),Input("AutoReason",450)));
         var advanced=Stack();
         advanced.Children.Add(Row(Check("Uniform upwind terrain confirmed","AutoUniform"),Check("No topographic amplification applicable","AutoTopo"),Check("Rigid dynamics assessed","AutoRigid")));
+        advanced.Children.Add(Row(Text("Wall support"),Combo("AutoSupport",new[]{"GroundSupported","Elevated"},160),Text("Wall speed basis"),Combo("AutoSpeedBasis",new[]{"AtMeanRoofHeight","VariesWithHeight"},180)));
         advanced.Children.Add(Text("No shielding benefit claimed (Ms=1). Enclosed rectangular MWFRS only. Other physical systems require separate selectors."));
         advanced.Children.Add(Row(Text("Opening/leakage classification"),Input("AutoOpenings",150),Text("Debris assessment"),Input("AutoDebris",150),Text("Coast km (C/D)"),Input("AutoCoast",70)));
         advanced.Children.Add(Row(Text("Tributary area m2"),Input("AutoArea",80),Text("Wall evaluation height m"),Input("AutoWallHeight",80),Text("Parapet m"),Input("AutoParapet",80)));

@@ -7,6 +7,23 @@ namespace StructuralLoadAssistant.Reporting;
 /// <summary>Complete opt-in audit; main worksheet is rendered by the cell projection partial.</summary>
 public sealed partial class AsNz2021WorkbookPdfRenderer
 {
+    static string autoStatus(EngineeringCalculationRun run)=>AsNz2021LocalAutoLookupService.HasAuthenticatedLookup(run.Request)
+        ?run.QualificationStatus:"Explicit-input review / automatic provenance not authenticated";
+    static void AppendRoofReviewSummary(StringBuilder sb,EngineeringCalculationRun run,bool geometry,bool detailed=false)
+    {
+        var req=run.Request;
+        if(geometry)sb.Append($"<p class='small'>Mean roof-height input {N(req.ReferenceHeightM)} m; eave {N(req.EaveHeightM-req.GroundElevationM)} m; peak {N(req.RidgeHeightM-req.GroundElevationM)} m; (peak + eave)/2 = {N((req.RidgeHeightM+req.EaveHeightM)/2-req.GroundElevationM)} m. The applicable source height definition requires engineering review. BASE-2021 / AMENDMENT APPLICABILITY UNCONFIRMED unless separately evidenced.</p>");
+        if(!AsNz2021LocalAutoLookupService.HasAuthenticatedLookup(req))return;
+        if(!req.Options.TryGetValue("RoofBranchDecisions",out var json))return;
+        using var branches=System.Text.Json.JsonDocument.Parse(json);
+        sb.Append("<div class='small'>Roof source applicability: ");
+        foreach(var branch in branches.RootElement.EnumerateArray())
+        {
+            string Field(string key)=>branch.TryGetProperty(key,out var value)?value.ToString():"";
+            sb.Append(E($"{Field("Direction")} / {Field("Face")}: {Field("Table")} {Field("Status")}"+(detailed?$"; incidence {Field("WindIncidence")} deg; pitch {Field("Pitch")} deg; {Field("Reason")}":""))+"<br>");
+        }
+        sb.Append("No roof branch or source hash constitutes engineering qualification.</div>");
+    }
     static string E(string? value)=>WebUtility.HtmlEncode(value??"");
     static string MathLabel(string label) => E(label).Replace("C_shp (C_fig in owner workbook)", "C<sub>shp</sub> (C<sub>fig</sub> in owner workbook)").Replace("Cp,e", "C<sub>p,e</sub>").Replace("Cdyn", "C<sub>dyn</sub>").Replace("VRu", "V<sub>Ru</sub>").Replace("VRs", "V<sub>Rs</sub>").Replace("Vsit,βu", "V<sub>sit,βu</sub>").Replace("Vsit,βs", "V<sub>sit,βs</sub>").Replace("Vdes,ø", "V<sub>des,θ</sub>").Replace("pair", "ρ<sub>air</sub>").Replace("kN/m2", "kN/m²");
     static string N(double? value,int digits=3)=>value.HasValue&&double.IsFinite(value.Value)?value.Value.ToString("F"+digits,CultureInfo.InvariantCulture):"NOT CALCULATED";
@@ -19,7 +36,7 @@ public sealed partial class AsNz2021WorkbookPdfRenderer
         sb.Append("<div style='break-inside:avoid'><h2>Geometry and identity</h2>");
         sb.Append($"<p class='small'>Procedure {E(req.ProcedureName)}; applied amendments: {E(string.Join(", ", req.SelectedAmendments))} (adoption / source verification pending).<br>Geometry: {E(req.Options.GetValueOrDefault("GeometrySource","OWNER_INPUT"))}; {E(req.Options.GetValueOrDefault("GeometryOverrideReason","No override reason supplied"))}; {E(req.Options.GetValueOrDefault("ReadOnlyScanEvidence","No read-only scan geometry evidence attached"))}. Automatic envelope qualification remains blocked. Ground datum {N(req.GroundElevationM)} m; eave {N(req.EaveHeightM)} m; roof slope {N(req.RoofSlopeDegrees)}°. Model fingerprint: {E(document.ModelSnapshot.GeometryFingerprint)}. Run hash: {E(run.ContentHash)}. Document hash: {E(document.ReportDocumentHash)}.</p>");
         sb.Append("</div>");
-        if(req.Options.GetValueOrDefault("AutoLookup")=="true")
+        if(AsNz2021LocalAutoLookupService.HasAuthenticatedLookup(req))
         {
             sb.Append($"<h2>Automatic lookup source and decisions</h2><p class='small'>Dataset {E(req.Options.GetValueOrDefault("LookupDatasetId"))}; SHA {E(req.Options.GetValueOrDefault("LookupDatasetHash"))}; rights {E(req.Options.GetValueOrDefault("LookupRightsReference"))}; adoption {E(req.Options.GetValueOrDefault("LookupAdoptionReference"))}</p>");
             sb.Append("<table class='small'><thead><tr><th>Lookup key / state</th><th>Value / source</th><th>Selection / reason</th></tr></thead><tbody>");
@@ -27,6 +44,7 @@ public sealed partial class AsNz2021WorkbookPdfRenderer
             foreach(var v in lookups)sb.Append($"<tr><td>{E(v.Key)}<br>{E(v.State.ToString())}</td><td>{N(v.Value)} {E(v.Unit)}<br>{E(v.Source)}<br>{E(string.Join(",",v.RecordIds))}</td><td>{E(v.Selection)}<br>{E(v.Reason)}</td></tr>");
             sb.Append("</tbody></table>");
         }
+        AppendRoofReviewSummary(sb,run,true,true);
         foreach(var i in run.Issues)sb.Append($"<p>{E(i.Code)}: {E(i.Message)}</p>");
         sb.Append("<h2>All direction / limit-state / internal-sign cases</h2><table class='small'><thead><tr><th>Stable case ID</th><th>Vdes m/s</th><th>pe kN/m²</th><th>pi kN/m²</th><th>pn kN/m²</th><th>Status</th></tr></thead><tbody>");
         foreach(var r in run.AsNz2021Cases)sb.Append($"<tr><td>{E(r.Id)}</td><td>{N(r.DesignSpeed)}</td><td>{N(r.ExternalPa/1000)}</td><td>{N(r.InternalPa/1000)}</td><td>{N(r.NetPa/1000)}</td><td>{E(r.Status)}</td></tr>");

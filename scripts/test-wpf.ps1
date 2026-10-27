@@ -35,6 +35,7 @@ try {
     Invoke-Smoke 'report-export' @('--smoke-report-export')
     Invoke-Smoke 'asnz-worksheet' @('--smoke-asnz-worksheet')
     Invoke-Smoke 'asnz-auto' @('--smoke-asnz-auto')
+    Invoke-Smoke 'asnz-sloped' @('--smoke-asnz-sloped')
     Invoke-Smoke 'asnz-blocked' @('--smoke-asnz-blocked')
     Invoke-Smoke 'readonly' @('--smoke-readonly')
     Invoke-Smoke 'roof-initial' @('--smoke-roof-workflow')

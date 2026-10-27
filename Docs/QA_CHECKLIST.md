@@ -1,3 +1,19 @@
+# Automatic review lookup verification — 2026-10-27
+
+- [x] Regression tests observed failing before routing, provenance, unit, interpolation, worksheet and trace fixes; private TRX evidence retained.
+- [x] Locked restore; Debug/Release builds with zero warnings/errors; 550/550 nonphysical tests in each configuration.
+- [x] Eleven Release WPF smoke scenarios: demo, report-export, asnz-worksheet, asnz-auto, asnz-sloped, asnz-blocked, readonly, roof initial/reopened, zone initial/reopened.
+- [x] Actual synthetic flat/sloped worksheet PDFs generated (three/four pages). All seven main pages rendered and visually inspected; detailed audits (290/206 pages) checked by text extraction and representative first/middle/last rendered pages. No claim that every audit page received visual engineering review.
+- [x] Direct selector manifest/component/coherence tampering, private source construction, wrong source scope/units and forged imported request flags rejected.
+- [x] Roof form/face/incidence and exact ten-degree boundary; wrong A/B/C table rejected; same-sign h/d interpolation; steep C b/d requirement; unsupported branches blocked.
+- [x] AU/NZ synthetic identity and separate ULS/SLS, terrain grid interpolation, state-specific shielding, no true-north default, separate external/net blockers.
+- [x] Source PDF/workbook unchanged; protected reference material and private register excluded from Git. Owner-workbook arithmetic 8/8 is separate evidence.
+- [ ] Authorized real coefficient dataset, software-use rights, table-level amendments/adoption and independent numerical benchmarks.
+- [ ] Complete gable/hip multi-face geometry, unsupported source branches and physical CSI qualification for this workflow.
+- [x] Production normative qualification, engineering approval and live CSI writes remain disabled.
+
+Historical milestone checklist follows; earlier test counts do not describe this revision.
+
 - [x] Sprint 4B.0.1: Readiness gate truthfulness preventing ReadyForIndependentReview when Error-severity issues exist.
 - [x] Sprint 4B.0.1: Robust positive-proof integrity booleans (SemanticHashValid, ComponentBytesCoherent, ProcedureCoverageValid).
 - [x] Sprint 4B.0.1: Deep reference calculation benchmark validation (tolerances, assertions, non-synthetic, independent attestation).

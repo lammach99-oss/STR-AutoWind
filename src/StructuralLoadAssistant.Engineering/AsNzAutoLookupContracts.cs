@@ -5,7 +5,9 @@ public sealed record AutoLookupValue(string Key,AutoLookupState State,double? Va
 public sealed record AsNzAutoSite(string Country,string Region,double Terrain=2,double UlsYears=500,double SlsYears=25,
     bool UniformTerrain=false,bool NoShieldingBenefit=true,bool NoTopographicAmplification=false,bool GeometryReviewed=false,
     string GeometryReason="",string Enclosure="",string Openings="",string Debris="",string Dynamics="",double? CoastDistanceKm=null,
-    string System="MWFRS",double TributaryAreaM2=0,double WindwardHeightM=0,double ParapetHeightM=0);
+    string System="MWFRS",double TributaryAreaM2=0,double WindwardHeightM=0,double ParapetHeightM=0,
+    double? SlopeBearingDegrees=null,bool TrueNorthReviewed=false,string WindwardSupport="GroundSupported",
+    string WindwardSpeedBasis="AtMeanRoofHeight",double? ShieldingParameter=null,bool ShieldingEligibilityReviewed=false);
 public sealed record AsNzAutoSource(StandardsDataBundle Bundle,string RightsReference,string AdoptionReference,
     ImmutableDictionary<string,string> TableDecisions,bool SoftwareUseAuthorized,bool Synthetic=false);
 public sealed record AsNzAutoResult(EngineeringCalculationRequest Request,ImmutableArray<AutoLookupValue> Values,bool NumericalReviewPossible,string Status)

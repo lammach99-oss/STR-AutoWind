@@ -1,3 +1,16 @@
+# Automatic AS/NZS review lookup closure — 2026-10-27
+
+Baseline: `b6674bca99032fb23f8089177a358b9974f854eb`. The bounded owner directive is implemented as source-gated review software; real-standard numerical lookup remains BLOCKED pending software-use rights and evidence. See `ASNZ_AUTOMATIC_LOOKUP_COVERAGE.md` for exact complete/partial/blocked table coverage.
+
+- Added roof-form/face/pitch routing with exact ten-degree boundary, explicit unsupported incidence, A distance bands versus B/C whole-face extents, same-sign h/d interpolation and steep C breadth/depth requirement. Single-face gable/hip lookup is available; full multi-face building results remain blocked.
+- Added terrain/height source grids, source-scoped wall support/height basis, state-specific shielding, explicit true-north/eave/peak/slope inputs, endpoint/weight audit, and external-only review results when internal pressure is unavailable. No normative table numbers are embedded.
+- Closed QA-4B7-01/02: direct selectors require coherent V3 bytes, exact scope, valid SI units and source receipts; imported requests cannot self-assert automatic provenance. Private receipts prove local execution/evidence hashes, not legal or engineering acceptance.
+- Locked restore passed. Final Debug and Release builds: zero warnings/errors. Automated tests: **550 passed, zero failed/skipped** in each configuration; physical CSI tests excluded. All **eleven WPF smoke scenarios passed**, including real bound-control sloped review and process-restart workflows. Valid RED evidence retained privately under `artifacts/lookup-closure/`.
+- Owner-workbook cached arithmetic: **8/8** local comparisons, separate from automated/independent engineering qualification. Source PDF/workbook remained unchanged. Private register stores table locators, source identity and rights/amendment limitations; no protected coefficient package was populated.
+- Production normative qualification, engineering approval and live CSI mutation stay disabled. Read-only CSI physical verification was not performed in this task. A0/coast/terrain transitions, separate internal/external height methods, unsupported monoslope incidence/leeward branches, complete gable/hip geometry, independent benchmarks, authorized datasets and amendment decisions remain explicit blockers.
+
+The earlier milestone notes below are historical; their test totals are not current.
+
 # Implementation status — 2026-10-23
 
 ## Sprint 4B.0.1: Intake Readiness Truthfulness & Owner Evidence Handoff

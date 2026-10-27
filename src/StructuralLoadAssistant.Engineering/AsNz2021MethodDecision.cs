@@ -8,9 +8,10 @@ public sealed record AsNz2021MethodDecision(string GeometryClass,bool ReviewGeom
         bool finite=new[]{pitch,slopeBearing,windBearing,hd,db,period}.All(double.IsFinite)&&pitch>=0&&pitch<90&&hd>0&&db>0&&period>0;
         bool mono=roof.Equals("Monoslope",StringComparison.OrdinalIgnoreCase)||roof.Equals("Monopitch",StringComparison.OrdinalIgnoreCase);
         bool flat=roof.Equals("Flat",StringComparison.OrdinalIgnoreCase)&&pitch==0;
-        bool supported=finite&&(mono||flat);
+        bool low=roof=="LowSlope"&&pitch>0&&pitch<10;
+        bool supported=finite&&(mono||flat||low);
         bool country=jurisdiction is "AU" or "NZ";
-        return new(pitch==0&&supported?"FLAT_OR_NEAR_FLAT":mono&&supported?"MONOSLOPE":"UNSUPPORTED",supported,country,false,
+        return new(pitch==0&&supported?"FLAT_OR_NEAR_FLAT":mono&&supported?"MONOSLOPE":low&&supported?"LOW_SLOPE":"UNSUPPORTED",supported,country,false,
             double.IsFinite(windBearing-slopeBearing)?((windBearing-slopeBearing)%360+360)%360:null,double.IsFinite(hd)?hd:null,double.IsFinite(db)?db:null,
             supported?"LOOKUP_UNAVAILABLE / SOURCE RIGHTS REQUIRED / EXPLICIT REVIEW ONLY":"UNSUPPORTED / MODEL_GEOMETRY_REVIEW_REQUIRED",
             "AS/NZS 1170.2:2021 Cl 3.2–3.4, 4.2, 5.4.1; Tables 5.2(A–C), 5.3(A–C): exact condition/row selection requires qualified source data",

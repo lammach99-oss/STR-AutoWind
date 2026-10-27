@@ -9,7 +9,7 @@ namespace StructuralLoadAssistant.Csi.Fake;
 public static class AsNzAutoLookupFixture
 {
     public static EngineeringCalculationRequest Geometry()=>AsNzMatrixFixture.Request() with {RoofForm="Flat",RoofSlopeDegrees=0,EaveHeightM=4,RidgeHeightM=4,ReferenceHeightM=4,BuildingLengthM=30,BuildingWidthM=20};
-    public static AsNzAutoSite Site()=>new("AU","SYNTHETIC",UniformTerrain:true,NoTopographicAmplification:true,GeometryReviewed:true,GeometryReason:"Synthetic rectangular test geometry",Enclosure:"Enclosed",Openings:"TEST",Debris:"TEST",Dynamics:"RigidAssessed",TributaryAreaM2:10,WindwardHeightM:4);
+    public static AsNzAutoSite Site()=>new("AU","SYNTHETIC",UniformTerrain:true,NoTopographicAmplification:true,GeometryReviewed:true,GeometryReason:"Synthetic rectangular test geometry",Enclosure:"Enclosed",Openings:"TEST",Debris:"TEST",Dynamics:"RigidAssessed",TributaryAreaM2:10,WindwardHeightM:4,TrueNorthReviewed:true);
     public static AsNzAutoResult Resolve()=>new AsNz2021LocalAutoLookupService().Resolve(Geometry(),Site(),Source());
     public static AsNzAutoSource Source()
     {

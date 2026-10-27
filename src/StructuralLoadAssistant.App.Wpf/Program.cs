@@ -19,6 +19,7 @@ public static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        var slopedSmoke=args.Contains("--smoke-asnz-sloped",StringComparer.Ordinal);
         var autoSmoke=args.Contains("--smoke-asnz-auto",StringComparer.Ordinal);
         var blockedSmoke = args.Contains("--smoke-asnz-blocked", StringComparer.Ordinal);
         var asNzSmoke = args.Contains("--smoke-asnz-worksheet", StringComparer.Ordinal);
@@ -26,7 +27,7 @@ public static class Program
         var zoneSmoke=args.Contains("--smoke-zone-editor",StringComparer.Ordinal);
         var workflowSmoke = args.Contains("--smoke-roof-workflow", StringComparer.Ordinal);
         var readOnlySmoke = zoneSmoke || workflowSmoke || args.Contains("--smoke-readonly", StringComparer.Ordinal);
-        var smoke = autoSmoke || blockedSmoke || asNzSmoke || readOnlySmoke || reportExportSmoke || args.Contains("--smoke", StringComparer.Ordinal);
+        var smoke = slopedSmoke || autoSmoke || blockedSmoke || asNzSmoke || readOnlySmoke || reportExportSmoke || args.Contains("--smoke", StringComparer.Ordinal);
         string? Option(string name) { var index = Array.IndexOf(args, name); return index >= 0 && index + 1 < args.Length ? args[index + 1] : null; }
         var output = Path.GetFullPath(Option("--smoke-output") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StructuralLoadAssistant", "smoke"));
         var database = Option("--database") ?? Path.Combine(smoke ? output : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StructuralLoadAssistant"), "demo.db");
@@ -56,7 +57,8 @@ public static class Program
                 try
                 {
                     var vm = provider.GetRequiredService<MainViewModel>();
-                    if(autoSmoke) await window.RunAutoLookupSmokeAsync(output);
+                    if(slopedSmoke) await window.RunSlopedAutoLookupSmokeAsync(output);
+                    else if(autoSmoke) await window.RunAutoLookupSmokeAsync(output);
                     else if (blockedSmoke) await window.RunAsNzBlockedSmokeAsync(output);
                     else if (asNzSmoke) await window.RunAsNzWorksheetSmokeAsync(output);
                     else if (readOnlySmoke)

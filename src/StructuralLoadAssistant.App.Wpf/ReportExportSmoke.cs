@@ -16,7 +16,7 @@ public sealed partial class MainWindow
         vm.InstallSyntheticAutoSmokeSource();
         vm.AutoCountry="AU";vm.AutoRegion="SYNTHETIC";
         vm.AutoLength="30";vm.AutoWidth="20";vm.AutoHeight="4";vm.AutoGround="0";vm.AutoPitch="0";
-        vm.AutoReason="Synthetic smoke geometry / axes / datum";vm.AutoGeometry=true;
+        vm.AutoReason="Synthetic smoke geometry / axes / datum";vm.AutoGeometry=true;vm.AutoTrueNorth=true;
         vm.AutoUniform=true;vm.AutoTopo=true;vm.AutoRigid=true;
         vm.AutoOpenings="TEST";vm.AutoDebris="TEST";vm.AutoArea="10";vm.AutoWallHeight="4";
         if(vm.AutoTerrain!="2"||vm.AutoUls!="500"||vm.AutoSls!="25")throw new InvalidOperationException("Guided defaults mismatch");
@@ -37,6 +37,42 @@ public sealed partial class MainWindow
         await vm.CalculateAutoWindAsync();
         if(vm.CurrentReportState!=MainViewModel.WindReportState.Blocked)throw new InvalidOperationException("Missing region did not block");
         await vm.ExportWorksheetPdfAsync(Path.Combine(outputDir,"ASNZ_AUTO_BLOCKED_MAIN.pdf"));
+    }
+    public async Task RunSlopedAutoLookupSmokeAsync(string outputDir)
+    {
+        vm.Edition="AS/NZS 1170.2:2021";vm.InstallSyntheticSlopedAutoSmokeSource();
+        vm.AutoCountry="AU";vm.AutoRegion="SYNTHETIC";
+        vm.AutoLength="30";vm.AutoWidth="20";vm.AutoHeight="4";vm.AutoGround="0";
+        vm.AutoEave="3";vm.AutoPeak="5";vm.AutoPitch="14";vm.AutoSlopeBearing="0";
+        vm.AutoReason="Synthetic sloped smoke / entered roof levels and model axes; not physical CSI evidence";
+        vm.AutoGeometry=true;vm.AutoUniform=true;vm.AutoTopo=true;vm.AutoRigid=true;
+        vm.AutoOpenings="TEST";vm.AutoDebris="TEST";vm.AutoArea="10";vm.AutoWallHeight="4";
+        Tabs.SelectedIndex=1;UpdateLayout();
+        static IEnumerable<System.Windows.DependencyObject> Descendants(System.Windows.DependencyObject root)
+        {
+            yield return root;
+            for(int i=0;i<System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);i++)
+                foreach(var child in Descendants(System.Windows.Media.VisualTreeHelper.GetChild(root,i)))yield return child;
+        }
+        var controls=Descendants(this).OfType<System.Windows.FrameworkElement>().ToArray();
+        var roof=controls.OfType<System.Windows.Controls.ComboBox>().Single(c=>System.Windows.Data.BindingOperations.GetBindingExpression(c,System.Windows.Controls.Primitives.Selector.SelectedItemProperty)?.ParentBinding.Path.Path=="AutoRoof");
+        roof.SelectedItem="Monoslope";
+        var north=controls.OfType<System.Windows.Controls.CheckBox>().Single(c=>System.Windows.Data.BindingOperations.GetBindingExpression(c,System.Windows.Controls.Primitives.ToggleButton.IsCheckedProperty)?.ParentBinding.Path.Path=="AutoTrueNorth");
+        north.IsChecked=true;
+        await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);
+        if(vm.AutoRoof!="Monoslope"||!vm.AutoTrueNorth)throw new InvalidOperationException("Real guided controls failed to update roof/north state");
+        await vm.CalculateAutoWindAsync();
+        var run=vm.CurrentEngineeringRun??throw new InvalidOperationException("Sloped lookup produced no diagnostic run");
+        if(vm.CurrentReportState!=MainViewModel.WindReportState.Blocked||run.NumericalComputationPossible)throw new InvalidOperationException("Incomplete monoslope source must remain blocked");
+        if(!run.AsNz2021Cases.Any(c=>c.Surface=="Roof"&&c.ExternalPa.HasValue))throw new InvalidOperationException("Supported synthetic roof external results missing");
+        if(run.PrimarySourceApplicabilityVerified||run.OwnerEngineerReviewed||run.IndependentEngineerReviewed)throw new InvalidOperationException("Sloped review safety gates changed");
+        await vm.ExportWorksheetPdfAsync(Path.Combine(outputDir,"ASNZ_AUTO_SLOPED_SYNTHETIC_MAIN.pdf"));
+        await vm.ExportWorksheetPdfAsync(Path.Combine(outputDir,"ASNZ_AUTO_SLOPED_SYNTHETIC_AUDIT.pdf"),true);
+        await File.WriteAllTextAsync(Path.Combine(outputDir,"sloped-auto-run.json"),SnapshotJson.Serialize(run));
+        north.IsChecked=false;
+        await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);
+        if(vm.CurrentPdfPath!=null||vm.CurrentEngineeringRun!=null)throw new InvalidOperationException("True-north control did not invalidate sloped PDF");
+        north.IsChecked=true;await vm.CalculateAutoWindAsync();
     }
     public async Task RunReportExportSmokeAsync(string outputDir)
     {

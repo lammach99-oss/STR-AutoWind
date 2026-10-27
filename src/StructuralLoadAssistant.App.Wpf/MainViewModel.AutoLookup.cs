@@ -7,7 +7,8 @@ public sealed partial class MainViewModel
 {
     private AsNzAutoSource? autoSource;
     private string autoCountry="AU",autoRegion="",autoTerrain="2",autoUls="500",autoSls="25",autoRoof="Flat",autoBearing="0",autoLength="",autoWidth="",autoHeight="",autoGround="0",autoPitch="0",autoReason="",autoOpenings="",autoDebris="",autoArea="",autoWallHeight="",autoParapet="0",autoCoast="";
-    private bool autoUniform,autoTopo,autoRigid,autoGeometry;
+    private string autoEave="",autoPeak="",autoSlopeBearing="0",autoSupport="GroundSupported",autoSpeedBasis="AtMeanRoofHeight";
+    private bool autoUniform,autoTopo,autoRigid,autoGeometry,autoTrueNorth;
     void AutoChanged(){SetCalculationRequest(null);Refresh();}
     void AutoText(ref string field,string value){if(field==value)return;field=value;AutoChanged();}
     void AutoBool(ref bool field,bool value){if(field==value)return;field=value;AutoChanged();}
@@ -31,6 +32,12 @@ public sealed partial class MainViewModel
     public string AutoWallHeight {get=>autoWallHeight;set=>AutoText(ref autoWallHeight,value);}
     public string AutoParapet {get=>autoParapet;set=>AutoText(ref autoParapet,value);}
     public string AutoCoast {get=>autoCoast;set=>AutoText(ref autoCoast,value);}
+    public string AutoEave {get=>autoEave;set=>AutoText(ref autoEave,value);}
+    public string AutoPeak {get=>autoPeak;set=>AutoText(ref autoPeak,value);}
+    public string AutoSlopeBearing {get=>autoSlopeBearing;set=>AutoText(ref autoSlopeBearing,value);}
+    public string AutoSupport {get=>autoSupport;set=>AutoText(ref autoSupport,value);}
+    public string AutoSpeedBasis {get=>autoSpeedBasis;set=>AutoText(ref autoSpeedBasis,value);}
+    public bool AutoTrueNorth {get=>autoTrueNorth;set=>AutoBool(ref autoTrueNorth,value);}
     public bool AutoUniform {get=>autoUniform;set=>AutoBool(ref autoUniform,value);}
     public bool AutoTopo {get=>autoTopo;set=>AutoBool(ref autoTopo,value);}
     public bool AutoRigid {get=>autoRigid;set=>AutoBool(ref autoRigid,value);}
@@ -38,13 +45,17 @@ public sealed partial class MainViewModel
     public string AutoSourceStatus {get;private set;}="LOCAL SOURCE DATA UNAVAILABLE / OWNER RIGHTS OR AMENDMENT EVIDENCE REQUIRED";
     public void InstallPrivateAutoSource(string folder){autoSource=null;AutoChanged();autoSource=AsNzPrivateAutoSourceLoader.Load(folder);AutoSourceStatus="PRIVATE REVIEW / NOT QUALIFIED FOR DESIGN / "+autoSource.Bundle.Manifest.BundleId;Refresh();}
     public void InstallSyntheticAutoSmokeSource(){autoSource=StructuralLoadAssistant.Csi.Fake.AsNzAutoLookupFixture.Source();AutoSourceStatus="SYNTHETIC / NOT FOR DESIGN";AutoChanged();}
+    public void InstallSyntheticSlopedAutoSmokeSource(){autoSource=StructuralLoadAssistant.Csi.Fake.AsNzSlopedAutoLookupFixture.Source();AutoSourceStatus="SYNTHETIC SLOPED / NOT FOR DESIGN";AutoChanged();}
     public async Task CalculateAutoWindAsync(CancellationToken ct=default)
     {
         RequireDemo();
         double Read(string v)=>double.TryParse(v,NumberStyles.Float,CultureInfo.InvariantCulture,out var n)&&double.IsFinite(n)?n:throw new InvalidOperationException("Finite metric inputs required");
         double h=Read(AutoHeight),ground=Read(AutoGround);
-        var request=new EngineeringCalculationRequest(Session.Project.Id,"AS/NZS 1170.2:2021",autoSource?.Bundle.Manifest.Amendments??[],AsNz2021ReviewCalculation.Procedure,LimitState.Uls,WindDirection.PositiveX,Read(AutoBearing),AutoRoof,"Enclosed",0,h,Read(AutoLength),Read(AutoWidth),ground+h,ground+h,Read(AutoPitch),ground,"TC"+AutoTerrain,ImmutableDictionary<string,CoefficientInputEvidence>.Empty,ImmutableDictionary<string,string>.Empty);
-        var site=new AsNzAutoSite(AutoCountry,AutoRegion,Read(AutoTerrain),Read(AutoUls),Read(AutoSls),AutoUniform,true,AutoTopo,AutoGeometry,AutoReason,"Enclosed",AutoOpenings,AutoDebris,AutoRigid?"RigidAssessed":"",string.IsNullOrWhiteSpace(AutoCoast)?null:Read(AutoCoast),TributaryAreaM2:Read(AutoArea),WindwardHeightM:Read(AutoWallHeight),ParapetHeightM:Read(AutoParapet));
+        // A blank flat-roof eave/peak uses the explicitly entered mean height; slopes require both levels.
+        double eave=AutoRoof=="Flat"&&string.IsNullOrWhiteSpace(AutoEave)?ground+h:Read(AutoEave);
+        double peak=AutoRoof=="Flat"&&string.IsNullOrWhiteSpace(AutoPeak)?ground+h:Read(AutoPeak);
+        var request=new EngineeringCalculationRequest(Session.Project.Id,"AS/NZS 1170.2:2021",autoSource?.Bundle.Manifest.Amendments??[],AsNz2021ReviewCalculation.Procedure,LimitState.Uls,WindDirection.PositiveX,Read(AutoBearing),AutoRoof,"Enclosed",0,h,Read(AutoLength),Read(AutoWidth),eave,peak,Read(AutoPitch),ground,"TC"+AutoTerrain,ImmutableDictionary<string,CoefficientInputEvidence>.Empty,ImmutableDictionary<string,string>.Empty);
+        var site=new AsNzAutoSite(AutoCountry,AutoRegion,Read(AutoTerrain),Read(AutoUls),Read(AutoSls),AutoUniform,true,AutoTopo,AutoGeometry,AutoReason,"Enclosed",AutoOpenings,AutoDebris,AutoRigid?"RigidAssessed":"",string.IsNullOrWhiteSpace(AutoCoast)?null:Read(AutoCoast),TributaryAreaM2:Read(AutoArea),WindwardHeightM:Read(AutoWallHeight),ParapetHeightM:Read(AutoParapet),SlopeBearingDegrees:Read(AutoSlopeBearing),TrueNorthReviewed:AutoTrueNorth,WindwardSupport:AutoSupport,WindwardSpeedBasis:AutoSpeedBasis);
         var source=autoSource;
         // Yield before lookup; edits invalidate the generation token while work runs.
         long generation=System.Threading.Interlocked.Read(ref _currentRequestId);
