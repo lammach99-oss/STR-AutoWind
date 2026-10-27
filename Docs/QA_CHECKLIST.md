@@ -1,3 +1,12 @@
+# Authorized Sprint 4B.8 QA follow-up — 2026-10-27
+
+- [x] Locked restore; Debug/Release builds with zero warnings/errors; 595/595 nonphysical tests in each configuration; eleven Release WPF smoke scenarios, including synthetic PDF exports and process-restart workflows.
+- [x] RED evidence for reference copying, package/coverage ambiguity and missing scenario assessor; separate RED/GREEN proves inventory-only status cannot be bypassed by existing copies and evidence.
+- [x] Metadata-only initialization against existing owner sources creates four JSON files, no source directory or controlled PDF/workbook copies. Existing original/staging files retained.
+- [x] Explicit NOT_ASSESSED package coverage; single-cell packages do not imply complete Flat Roof functionality.
+- [x] Scenario selector matrix: synthetic positive case; missing source/region/terrain/enclosure, unsupported roof, missing identity and unavailable package blocked. Normative/CSI/independent-qualification flags remain false.
+- [ ] Actual protected numerical intake, source-cell reconciliation, full worksheet parity and independent engineering benchmarks remain blocked pending documented rights/jurisdiction/adoption decisions.
+
 # Sprint 4B.8 source-staging verification — 2026-10-27
 
 - [x] RED then GREEN for source-byte mismatch, edition/adoption/rights, separate reconciliation, missing numerical domains, roof applicability, duplicate JSON, altered cell identity and coherently rehashed bundle substitution.

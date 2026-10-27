@@ -1,12 +1,36 @@
 # AS/NZS private source-to-lookup workflow — Sprint 4B.8
 
+## Authorized QA follow-up - 2026-10-27
+
+QA-4B8-01: `initialize` now streams hashes of the existing PDF/workbook and creates metadata/templates only. It never copies controlled reference bytes or creates a `source/` directory. `source-inventory.json` records existing local paths and `ControlledReferencesCopied=false`. The source entry has `ReferenceOnly=true`; validation emits `SOURCE_REFERENCE_ONLY` and packaging/loading stays blocked. An older matching copy does not bypass this status. Existing originals and the historical v1 staging directory are preserved; no cleanup/deletion is performed. Source materialization in a new version requires separately documented storage/extraction/use rights.
+
+QA-4B8-02: staging/package reports explicitly return `WorkflowCoverageStatus=NOT_ASSESSED` and `CompleteFlatRoofCoverage=false`, even for a valid single-cell package. `READY_FOR_PRIVATE_REVIEW` means only that the staged cells passed documentary/integrity checks. It does not establish all thirteen table groups, every region/direction/domain, complete Flat Roof coverage or engineering qualification.
+
+A separate `AsNzFlatRoofCoverage` assessor runs the existing selector for an explicitly identified zero-pitch Flat Roof scenario. It returns the input snapshot, dataset identity/hash, each requested lookup and its record/interpolation evidence, assumptions and exact blockers. It does not calculate pressures or change source data. `SCENARIO_INPUTS_RESOLVED_FOR_REVIEW` concerns only that requested scenario; `FullTableCoverageEstablished`, normative qualification, independent engineering qualification and CSI mutation remain false. No coverage is inferred for unrequested countries/regions, return periods, terrain intervals, faces or alternatives.
+
+```powershell
+dotnet $intake --asnz-private-intake coverage `
+  'fixtures/standards/private/asnz1170-2-2021/<package-version>' `
+  'artifacts/standards-private/<scenario>.json'
+```
+
+The scenario JSON has `ScenarioId`, `Geometry` (the existing `EngineeringCalculationRequest`) and `Site` (the existing `AsNzAutoSite`). Use reviewed explicit project inputs; imported provenance flags cannot authenticate a private dataset. The CLI loads through the source-bound private loader. Exit 0 means only that this scenario has resolved selector inputs; exit 2 means blocked/unsupported/invalid. Keep scenario inputs/results private. The scenario assessor does not itself establish worksheet numerical parity or engineering acceptance.
+
+The new local `base2021-preflight-v2` contains only four JSON files: source inventory, staging, schema and manifest template. It remains BLOCKED: zero numerical rows, thirteen unavailable table-group placeholders, unresolved software-use rights, jurisdiction and amendment decisions. No source-derived coefficient lookup or PDF exists. The coding agent retains responsibility for permitted future transcription; no duplicate sources or owner-authored numerical dataset is requested.
+
+Hash checks establish file integrity, not the authenticity or legal/engineering adequacy of the documents (QA-4B8-03).
+
+QA follow-up verification: locked restore and Debug/Release builds passed with zero warnings/errors; 595/595 nonphysical tests in each configuration and eleven Release WPF smoke scenarios passed. Source PDF/workbook hashes are unchanged. Nine new tests plus stronger existing assertions; private RED/GREEN evidence is retained under `artifacts/sprint4b8-qa`. No physical CSI run or new independent numerical benchmark was performed.
+
+The earlier v1 inventory and verification details below describe the accepted original milestone.
+
 Technical reference: **AS/NZS 1170.2:2021 BASE TEXT — REFERENCE/REVIEW ONLY**. This is not a statement of governing code adoption, publisher permission, independent engineering acceptance or production qualification.
 
 ## Actual owner-source inventory and coverage
 
 The existing publication, table references and workbook were inspected read-only. The publication has 124 PDF pages; its footer identifies temporary download and limited printing permissions. Those terms do not establish software extraction/storage/reuse permission. No such permission or project-specific jurisdiction/amendment decisions were found in the owner-referenced `Docs` directory. Implementation authorizations there explicitly distinguish software work from legal rights and governing adoption.
 
-The ignored version `fixtures/standards/private/asnz1170-2-2021/base2021-stage-v1/` was created by the new command using the already supplied sources. It contains source inventory/hashes, read-only reference copies, a machine-readable schema, `source-staging.json` and a non-loadable `manifest.template.json`. It has **zero numerical cells transcribed, zero checked, zero engineer reviewed**. Its 13 `NOT_AVAILABLE` entries are table work-queue placeholders, not an estimate of how many numerical cells those tables contain. Numerical cell coverage is **not established**, and all 13 table groups are blocked. No country, region, terrain or roof method currently runs from an actual source-derived private dataset.
+The ignored version `fixtures/standards/private/asnz1170-2-2021/base2021-stage-v1/` was created by the new command using the already supplied sources. It historically contains source inventory/hashes, reference copies created by the original initializer, a machine-readable schema, `source-staging.json` and a non-loadable `manifest.template.json`. It has **zero numerical cells transcribed, zero checked, zero engineer reviewed**. Its 13 `NOT_AVAILABLE` entries are table work-queue placeholders, not an estimate of how many numerical cells those tables contain. Numerical cell coverage is **not established**, and all 13 table groups are blocked. No country, region, terrain or roof method currently runs from an actual source-derived private dataset.
 
 | Table group | PDF page / printed page | Actual numerical coverage |
 |---|---|---|

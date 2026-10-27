@@ -6,7 +6,7 @@ namespace StructuralLoadAssistant.Engineering;
 
 public enum SourceCellStatus { NOT_AVAILABLE, TRANSCRIBED_UNREVIEWED, SOURCE_CELL_CHECKED, ENGINEER_REVIEWED }
 public sealed record PrivateEvidenceFile(string File,string Sha256);
-public sealed record AsNzSourceDocument(string Id,string File,string Sha256,string Edition);
+public sealed record AsNzSourceDocument(string Id,string File,string Sha256,string Edition,bool ReferenceOnly=false);
 public sealed record PrivateRightsReview(string Decision,string Reviewer,string DecisionReference,
     PrivateEvidenceFile? Evidence,bool ExtractionPermitted,bool PrivateStoragePermitted,bool SoftwareUsePermitted,
     ImmutableArray<string> SourceHashes);
@@ -27,6 +27,9 @@ public sealed record PrivateStagingIssue(string Code,string Location,string Mess
 public sealed record PrivateStagingReport(string Status,int Transcribed,int SourceCellChecked,int EngineerReviewed,
     int NotAvailable,ImmutableArray<PrivateStagingIssue> Issues)
 {
+    public string WorkflowCoverageStatus=>"NOT_ASSESSED";
+    public bool CompleteFlatRoofCoverage=>false;
+    public string PackageReadinessMeaning=>"Checks staged cells only; scenario inputs, full table coverage and engineering qualification are separate";
     public bool ReadyForPrivateReview=>Status=="READY_FOR_PRIVATE_REVIEW";
     public bool CanCalculateNormativePressures=>false;
     public bool CanMutateCsi=>false;

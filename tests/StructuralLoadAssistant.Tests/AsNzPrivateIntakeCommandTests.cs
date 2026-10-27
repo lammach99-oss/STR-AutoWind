@@ -22,6 +22,10 @@ public sealed class AsNzPrivateIntakeCommandTests
             Assert.True(File.Exists(Path.Combine(destination,"source-staging.schema.json")));
             Assert.False(File.Exists(Path.Combine(destination,"manifest.json")));
             Assert.False(File.Exists(Path.Combine(destination,"auto-authorization.json")));
+            Assert.False(Directory.Exists(Path.Combine(destination,"source"))); // No controlled copies before rights review.
+            Assert.DoesNotContain(Directory.GetFiles(destination,"*",SearchOption.AllDirectories),f=>f.EndsWith(".pdf")||f.EndsWith(".xlsm"));
+            using var inventory=JsonDocument.Parse(File.ReadAllText(Path.Combine(destination,"source-inventory.json")));
+            Assert.False(inventory.RootElement.GetProperty("ControlledReferencesCopied").GetBoolean());
             Assert.Contains("RIGHTS",output.ToString());
             Assert.Contains("JURISDICTION",output.ToString());
             Assert.Equal("SYNTHETIC SOURCE FILE, NOT A PUBLICATION",File.ReadAllText(pdf));

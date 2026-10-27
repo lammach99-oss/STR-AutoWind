@@ -64,6 +64,7 @@ public static class AsNzPrivateDatasetPipeline
         foreach(var source in sources)
         {
             if(source.Edition!=stage.Edition&&!stage.Amendments.Contains(source.Edition,StringComparer.Ordinal))Issue("SOURCE_EDITION_MISMATCH",source.Id,"Source edition differs from staging edition or selected amendments");
+            if(source.ReferenceOnly){Issue("SOURCE_REFERENCE_ONLY",source.Id,"Inventory only; no controlled source copy was created. Source materialization requires documented storage/use rights");continue;}
             try{ReadChecked(directory,new(source.File,source.Sha256));}
             catch(ArgumentException e){Issue("SOURCE_PATH_UNSAFE",source.Id,e.Message);}
             catch(Exception e)when(Expected(e)){Issue("SOURCE_HASH_MISMATCH",source.Id,e.Message);}

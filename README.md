@@ -167,3 +167,5 @@ See [implementation status](Docs/IMPLEMENTATION_STATUS.md), [engineering blocker
 ## Private AS/NZS source staging (Sprint 4B.8)
 
 See [private source staging workflow](Docs/ASNZ_PRIVATE_SOURCE_STAGING_WORKFLOW.md) for the versioned initialize/validate/package commands and migration from legacy authorization files. No protected numerical dataset is supplied. Actual intake remains blocked pending documented software-use rights and jurisdiction/amendment decisions; production qualification, approval and live CSI writes remain disabled.
+
+The authorized 4B.8 QA follow-up makes `initialize` metadata-only: no controlled PDF/workbook copies. Package readiness explicitly leaves workflow coverage unassessed; the separate `coverage <private-package-directory> <scenario.json>` command checks selector inputs for one explicit Flat Roof scenario and reports missing evidence. Neither status enables normative qualification or live CSI writes.

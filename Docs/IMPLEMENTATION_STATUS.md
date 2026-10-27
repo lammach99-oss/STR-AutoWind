@@ -1,3 +1,11 @@
+# Authorized Sprint 4B.8 QA follow-up — 2026-10-27
+
+- Verification: locked restore, Debug/Release builds (zero warnings/errors), **595/595 nonphysical tests in each configuration** and all **eleven Release WPF smoke scenarios passed**. Nine new cases plus strengthened existing regressions; private RED/GREEN evidence retained under `artifacts/sprint4b8-qa`. Physical CSI tests were not run.
+- QA-4B8-01 addressed: initialization creates metadata-only private preflight; no PDF/workbook copies. Inventory-only sources cannot become package-ready even if matching old copies and rights declarations exist. Existing sources/staging are preserved.
+- QA-4B8-02 addressed: package readiness explicitly does not assess full Flat Roof coverage. New scenario coverage API/CLI lists actual selector results, assumptions, source records/interpolation and blockers for one explicit zero-pitch Flat Roof scenario. It never establishes global table coverage or engineering qualification.
+- Private preflight v2 is BLOCKED: 0 transcribed / 0 checked / 0 engineer-reviewed numerical rows; 13 unavailable table groups. Software-use rights, project jurisdiction and table-specific amendment decisions remain unresolved. No protected numerical extraction, source-derived lookup completion or new engineering benchmark is claimed.
+- No calculation formulas, geometry, approval, CSI adapter or SQLite contracts changed. Production normative qualification and live CSI writes remain disabled. See `ASNZ_PRIVATE_SOURCE_STAGING_WORKFLOW.md`; milestone evidence below remains historical.
+
 # Sprint 4B.8 private source staging — 2026-10-27
 
 - Implemented versioned initialize/validate/package commands, typed source-cell lifecycle, source/evidence byte checks, separate reconciliation, explicit rights/adoption declarations and atomic private V3 publication. Existing private selector loading now requires the reconciled staging snapshot and exact bundle coherence; boolean-only legacy authorization fails closed.

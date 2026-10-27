@@ -55,6 +55,16 @@ public sealed class AsNzPrivateStagingTests : IDisposable
         var report=AsNzPrivateDatasetPipeline.Validate(Valid(),root);
         Assert.True(report.ReadyForPrivateReview,string.Join(";",report.Issues));Assert.Equal(1,report.SourceCellChecked);
         Assert.False(report.CanCalculateNormativePressures);Assert.False(report.CanMutateCsi);
+        Assert.Equal("NOT_ASSESSED",report.WorkflowCoverageStatus);Assert.False(report.CompleteFlatRoofCoverage);
+    }
+    [Fact]
+    public void InventoryOnlySourceCannotBecomeReadyEvenWhenAnOlderCopyAndRightsFilesExist()
+    {
+        var stage=Valid();stage=stage with {Sources=[stage.Sources[0] with {ReferenceOnly=true}]};
+        var report=AsNzPrivateDatasetPipeline.Validate(stage,root);
+        Assert.False(report.ReadyForPrivateReview);
+        Assert.Contains(report.Issues,i=>i.Code=="SOURCE_REFERENCE_ONLY");
+        Assert.False(report.CompleteFlatRoofCoverage);
     }
     [Theory]
     [InlineData("rights","RIGHTS_EVIDENCE_REQUIRED")]
@@ -148,6 +158,8 @@ public sealed class AsNzPrivateStagingTests : IDisposable
         var source=AsNzPrivateAutoSourceLoader.Load(output);
         var result=new AsNz2021LocalAutoLookupService().Resolve(AsNzAutoLookupFixture.Geometry(),AsNzAutoLookupFixture.Site(),source);
         Assert.False(result.NumericalReviewPossible); // A source cell is not a complete standards dataset.
+        var coverage=AsNzFlatRoofCoverage.Evaluate(new("single-cell-package",AsNzAutoLookupFixture.Geometry(),AsNzAutoLookupFixture.Site()),source);
+        Assert.False(coverage.ScenarioInputsResolved);Assert.Contains(coverage.Lookups,v=>v.State!=AutoLookupState.Resolved);
         var requestEvidence=result.Request.ExplicitCoefficients["VR_Uls"];
         Assert.Contains(stage.Sources[0].Sha256,requestEvidence.ClauseOrTable);
         var run=AsNz2021ReviewCalculation.Execute(result.Request);
