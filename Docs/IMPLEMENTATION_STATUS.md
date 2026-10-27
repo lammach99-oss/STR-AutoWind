@@ -1,3 +1,11 @@
+# Sprint 4B.8 private source staging — 2026-10-27
+
+- Implemented versioned initialize/validate/package commands, typed source-cell lifecycle, source/evidence byte checks, separate reconciliation, explicit rights/adoption declarations and atomic private V3 publication. Existing private selector loading now requires the reconciled staging snapshot and exact bundle coherence; boolean-only legacy authorization fails closed.
+- Added 33 automated regression cases, with RED evidence captured before fixes. Locked restore and Debug/Release builds passed with zero warnings/errors. Final nonphysical suites: **586/586 passed in each configuration**. All **eleven Release WPF smoke scenarios passed**. One initial overlapping Debug PDF-render run timed out; its isolated rerun passed without code or timeout changes.
+- Actual local source staging: **0 cells transcribed / 0 source-cell checked / 0 engineer reviewed**; all 13 table groups remain preflight-only. Sources are unchanged. No documented software-use rights or governing AU/NZ and table-specific amendment decisions were established from the owner-referenced Docs directory. No actual source-derived lookup workflow or PDF is claimed.
+- Owner-workbook arithmetic: **8/8** comparisons at absolute tolerance 1e-10, separate from full worksheet parity and independent engineering benchmarks. Synthetic flat/sloped PDFs retain immutable identities; all main pages and representative audit pages inspected, all audit case/trace identifiers verified.
+- Normative qualification, engineering approval and real CSI writes remain disabled. See `ASNZ_PRIVATE_SOURCE_STAGING_WORKFLOW.md` for commands, precise coverage, limitations and owner decisions. Earlier milestone totals below are historical.
+
 # Ms provenance maintenance and private intake — 2026-10-27
 
 - Owner separately authorized the Ms provenance fix and private intake subject to software-use permissions. Exact/interpolated shielding source evidence is retained without reclassifying it as an assumption; no formulas or numerical operands changed. No-shielding-benefit remains an explicit assumption.

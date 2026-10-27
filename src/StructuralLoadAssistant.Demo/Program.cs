@@ -5,6 +5,8 @@ using StructuralLoadAssistant.Domain;
 using StructuralLoadAssistant.Engineering;
 using StructuralLoadAssistant.RoofMapping;
 
+// Intake commands run before any demo database/session or fake assignment is created.
+if(args.FirstOrDefault()=="--asnz-private-intake")return AsNzPrivateIntakeCommand.Run(args.Skip(1).ToArray(),Console.Out);
 var output=Path.GetFullPath(args.Length>0?args[0]:"artifacts/demo");Directory.CreateDirectory(output);
 var session=new DemoSession(Path.Combine(output,"project.db"));session.LoadDemoFixture();
 Console.WriteLine("DEMO MODE | SYNTHETIC WIND PRESSURES | NOT FOR ENGINEERING DESIGN | REAL CSI WRITES DISABLED");
@@ -33,3 +35,4 @@ var summary=new {SchemaVersion=1,session.Project.Id,CalculationRunId=session.Cal
 File.WriteAllText(Path.Combine(output,"session-state.json"),JsonSerializer.Serialize(summary,new JsonSerializerOptions{WriteIndented=true}));
 File.WriteAllText(Path.Combine(output,"fixture-model.json"),SnapshotJson.Serialize(DemoFixtures.Model()));
 Console.WriteLine(JsonSerializer.Serialize(summary));Console.WriteLine("Output: "+output);
+return 0;

@@ -163,3 +163,7 @@ Stage explicit reviewed paths. Do not force-push, add reference workbooks/custom
 The dependency audit reports known advisories in the bundled SQLite native package and legacy transitive test packages. See [security notes](Docs/SECURITY_NOTES.md) for exposure, restrictions and remediation tasks. This public prototype is source for evaluation; it is not a hardened production release. No open-source license grant is implied by public visibility; a project license must be selected by the owner before broader reuse/distribution.
 
 See [implementation status](Docs/IMPLEMENTATION_STATUS.md), [engineering blockers](Docs/OPEN_ENGINEERING_ITEMS.md), [decisions](Docs/DECISIONS.md), [QA checklist](Docs/QA_CHECKLIST.md), and [architecture](Docs/ARCHITECTURE.md).
+
+## Private AS/NZS source staging (Sprint 4B.8)
+
+See [private source staging workflow](Docs/ASNZ_PRIVATE_SOURCE_STAGING_WORKFLOW.md) for the versioned initialize/validate/package commands and migration from legacy authorization files. No protected numerical dataset is supplied. Actual intake remains blocked pending documented software-use rights and jurisdiction/amendment decisions; production qualification, approval and live CSI writes remain disabled.

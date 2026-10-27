@@ -1,3 +1,17 @@
+# Sprint 4B.8 source-staging verification — 2026-10-27
+
+- [x] RED then GREEN for source-byte mismatch, edition/adoption/rights, separate reconciliation, missing numerical domains, roof applicability, duplicate JSON, altered cell identity and coherently rehashed bundle substitution.
+- [x] Versioned private CLI initialization, structured blocked diagnostics, no overwrite, private-only packaging and request/trace/worksheet/audit provenance.
+- [x] Locked restore, Debug/Release builds (zero warnings/errors), final **586/586** nonphysical tests per configuration and **eleven** Release WPF smoke scenarios. Physical CSI tests remain opt-in and were not run.
+- [x] Synthetic flat/sloped main PDFs (3/4 pages): every page rendered and visually inspected. Audit PDFs (290/206 pages): all text nonempty, byte sidecars and all 320 case IDs per report verified, all 1509/933 trace IDs verified; representative audit pages inspected. This is software evidence, not engineering acceptance.
+- [x] Source/workbook hashes unchanged. Eight cached workbook arithmetic rows independently recomputed within 1e-10; operands/results remain private. No claim of complete A1:N124 numerical parity.
+- [x] Actual source staging truthful: zero numerical rows, 13 unavailable table-group placeholders, blocked rights/jurisdiction/adoption. No protected numerical tables or evidence published.
+- [ ] Documented permission for numerical extraction/private storage/software reuse; governing AU/NZ jurisdiction and per-table Amendment 1:2023 / Amendment 2:2024 decisions.
+- [ ] Permitted numerical extraction, second source-cell reconciliation, full workbook comparison and independent engineering benchmarks.
+- [x] Normative qualification, engineering approval and live CSI writes remain disabled.
+
+Earlier milestone checklists below are historical.
+
 # Automatic review lookup verification — 2026-10-27
 
 - [x] Regression tests observed failing before routing, provenance, unit, interpolation, worksheet and trace fixes; private TRX evidence retained.
