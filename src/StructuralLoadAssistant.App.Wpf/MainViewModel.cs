@@ -563,6 +563,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
 
     public void InvalidateWindReport(string? reason = null)
     {
+        InvalidateExternalReview();
         reportCancellation?.Cancel();
         System.Threading.Interlocked.Increment(ref _currentRequestId);
         CurrentAuditPdfPath = null; renderedRequestHash = null; renderedModelHash = null; renderedPdfHash=null; renderedAuditHash=null;
@@ -670,6 +671,7 @@ public sealed partial class MainViewModel : INotifyPropertyChanged
             throw new InvalidOperationException("No explicit engineering calculation inputs configured. Configure or supply an explicit engineering calculation request.");
         }
 
+        InvalidateExternalReview();
         reportCancellation?.Cancel();
         using var activeCancellation = CancellationTokenSource.CreateLinkedTokenSource(ct);
         reportCancellation = activeCancellation;

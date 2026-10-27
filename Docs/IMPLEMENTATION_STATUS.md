@@ -364,3 +364,5 @@ Standards: **verified normative data: none**; unverified metadata: both requeste
 - **Automated Tests**: 233 passed, 0 failed, 0 skipped. All 6 WPF smoke processes verified.
 - **Winding & Local 3 Investigation**: Verified that in ETABS, shell Local 3 is mathematically coupled to vertex winding order. Distinguished geometric polygon equivalence from vertex-list ordering in `IndependentGeometryBenchmarkValidator` while preserving strict independent Local 3 vector comparisons.
 - **Safety Guarantees**: Engineering calculations, approvals, and live CSI write operations remain strictly disabled in RealReadOnly mode.
+
+External-only explicit-input review and selected-frame preview: see [implementation handoff](ASNZ_EXTERNAL_ONLY_FRAME_MAPPING_IMPLEMENTATION_HANDOFF.md). Normative/source qualification and physical CSI validation remain blocked; live writes disabled.

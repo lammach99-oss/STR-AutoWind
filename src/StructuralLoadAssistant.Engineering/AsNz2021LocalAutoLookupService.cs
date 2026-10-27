@@ -87,7 +87,9 @@ public sealed class AsNz2021LocalAutoLookupService
         return new(key,AutoLookupState.Resolved,value,used[0].Unit,"AUTO LOOKUP / NOT FOR DESIGN",used.Select(r=>r.RecordKey).ToImmutableArray(),string.Join(";",used.Select(r=>r.TableOrFigure+" / "+r.ClauseReference).Distinct()),selection);
     }
 
-    public AsNzAutoResult Resolve(EngineeringCalculationRequest geometry,AsNzAutoSite site,AsNzAutoSource? source)
+    public AsNzAutoResult Resolve(EngineeringCalculationRequest geometry,AsNzAutoSite site,AsNzAutoSource? source)=>ResolveCore(geometry,site,source,false);
+    public AsNzAutoResult ResolveExternalOnly(EngineeringCalculationRequest geometry,AsNzAutoSite site,AsNzAutoSource? source)=>ResolveCore(geometry,site,source,true);
+    private AsNzAutoResult ResolveCore(EngineeringCalculationRequest geometry,AsNzAutoSite site,AsNzAutoSource? source,bool externalOnly)
     {
         var values=ImmutableArray.CreateBuilder<AutoLookupValue>();var coefficients=ImmutableDictionary.CreateBuilder<string,CoefficientInputEvidence>();
         void Block(string key,string reason,AutoLookupState state=AutoLookupState.InputRequired)=>values.Add(new(key,state,null,"",reason,[],"",""));
@@ -146,7 +148,7 @@ public sealed class AsNz2021LocalAutoLookupService
             return v;
         }
         var branches=new List<object>();
-        if(!internalContext)Block("Enclosure","Net pressure blocked: explicit enclosure/openings/debris applicability required; external review remains separate");
+        if(!externalOnly&&!internalContext)Block("Enclosure","Net pressure blocked: explicit enclosure/openings/debris applicability required; external review remains separate");
         if(usable&&contextOk&&supported)
         {
             foreach(var state in new[]{LimitState.Uls,LimitState.Sls})
@@ -165,7 +167,7 @@ public sealed class AsNz2021LocalAutoLookupService
                 Lookup(S+"_rho","rho",state);
                 if(state==LimitState.Uls)Lookup("UlsMinimumSpeed","MinimumSpeed",state);
                 bool cyclonic=(site.Region.StartsWith("C",StringComparison.Ordinal)||site.Region.StartsWith("D",StringComparison.Ordinal))&&state==LimitState.Uls&&geometry.ReferenceHeightM<25;
-                if(internalContext)foreach(string sign in new[]{"Positive","Negative"})Lookup(S+"_Cpi_"+sign,"Cpi",state,new(){{"Enclosure",site.Enclosure},{"Openings",site.Openings},{"Debris",site.Debris},{"InternalBranch",cyclonic?"CyclonicLowRiseUls":"General"},{"Sign",sign}},new(){{"Height",geometry.ReferenceHeightM}});
+                if(!externalOnly&&internalContext)foreach(string sign in new[]{"Positive","Negative"})Lookup(S+"_Cpi_"+sign,"Cpi",state,new(){{"Enclosure",site.Enclosure},{"Openings",site.Openings},{"Debris",site.Debris},{"InternalBranch",cyclonic?"CyclonicLowRiseUls":"General"},{"Sign",sign}},new(){{"Height",geometry.ReferenceHeightM}});
                 foreach(var direction in Enum.GetValues<WindDirection>())
                 {
                     bool x=direction is WindDirection.PositiveX or WindDirection.NegativeX;double depth=x?geometry.BuildingLengthM:geometry.BuildingWidthM,breadth=x?geometry.BuildingWidthM:geometry.BuildingLengthM;
@@ -185,12 +187,12 @@ public sealed class AsNz2021LocalAutoLookupService
                             if(branch?.Supported!=true){Block(prefix+"_Cpe",branch?.Reason??"Oblique roof incidence unsupported",AutoLookupState.NotApplicable);continue;}
                             if(branch.Table is "Table 5.3(B)" or "Table 5.3(C)" && z>0)continue;
                         }
-                        if(surface=="Leeward"&&singleSlope){Block(prefix+"_Cpe","Table 5.2(B) does not establish monoslope leeward applicability",AutoLookupState.NotApplicable);continue;}
+                        if(surface=="Leeward"&&(singleSlope||(externalOnly&&flat))){Block(prefix+"_Cpe","Table 5.2(B) does not establish monoslope leeward applicability",AutoLookupState.NotApplicable);continue;}
                         var more=new Dictionary<string,string>{{"Surface",surface},{"Case",c.ToString()},{"Zone",z.ToString()}};
                         var nums=new Dictionary<string,double>();
                         if(surface=="Windward"){nums["Height"]=site.WindwardHeightM;if(!legacy){more["Support"]=site.WindwardSupport;more["SpeedBasis"]=site.WindwardSpeedBasis;}}
                         if(surface=="Leeward"){nums["db"]=depth/breadth;if(!legacy){nums["Pitch"]=geometry.RoofSlopeDegrees;more["Incidence"]=face?.ToString()??"Oblique";}}
-                        if(roof){nums["hd"]=geometry.ReferenceHeightM/depth;if(!legacy){more["RoofFace"]=face!.Value.ToString();nums["Pitch"]=geometry.RoofSlopeDegrees;}}
+                        if(roof){nums["hd"]=geometry.ReferenceHeightM/depth;if(!legacy){more["RoofFace"]=face!.Value.ToString();nums["Pitch"]=geometry.RoofSlopeDegrees;if(branch?.Table=="Table 5.3(C)"&&geometry.RoofSlopeDegrees>=25)nums["bd"]=breadth/depth;}}
                         var cp=Lookup(prefix+"_Cpe","Cpe",state,more,nums);
                         var factorScope=new Dictionary<string,string>{{"Surface",surface},{"Case",c.ToString()},{"Zone",z.ToString()}};
                         if(branch!=null&&cp.State==AutoLookupState.Resolved)
@@ -198,7 +200,7 @@ public sealed class AsNz2021LocalAutoLookupService
                             var rows=source!.Bundle.Records.Where(r=>cp.RecordIds.Contains(r.RecordKey));
                             if(rows.Any(r=>r.TableOrFigure!=branch.Table)) {coefficients.Remove(prefix+"_Cpe");Block(prefix+"_Cpe","Roof coefficient source table disagrees with form/incidence/pitch route",AutoLookupState.RightsOrEditionBlocked);}
                         }
-                        foreach(string factor in new[]{"Ka","Kce","Kl","Kp","Kci","Kv"})Lookup(prefix+"_"+factor,factor,state,factorScope,
+                        foreach(string factor in externalOnly?new[]{"Ka","Kce","Kl","Kp"}:new[]{"Ka","Kce","Kl","Kp","Kci","Kv"})Lookup(prefix+"_"+factor,factor,state,factorScope,
                             factor=="Ka"?new(){{"Area",site.TributaryAreaM2}}:factor=="Kl"?new(){{"Parapet",site.ParapetHeightM}}:null);
                         if(surface=="Windward")Lookup(prefix+"_Mz_cat","Mz",state,legacy?new(){{"Terrain",F(site.Terrain)}}:null,legacy?new(){{"Height",site.WindwardHeightM}}:new(){{"Height",site.WindwardHeightM},{"Terrain",site.Terrain}});
                     }
@@ -206,7 +208,7 @@ public sealed class AsNz2021LocalAutoLookupService
             }
         }
         bool complete=usable&&contextOk&&values.All(v=>v.State==AutoLookupState.Resolved);
-        var options=geometry.Options.SetItem("AutoLookup","true").SetItem("RegionCode",site.Region).SetItem("Jurisdiction",site.Country).SetItem("AutoLookupComplete",complete.ToString()).SetItem("GeometrySource","ENGINEER REVIEW INPUT").SetItem("GeometryOverrideReason",site.GeometryReason)
+        var options=geometry.Options.SetItem("PressureMode",externalOnly?"ExternalOnly":"LegacyNet").SetItem("AutoLookup","true").SetItem("RegionCode",site.Region).SetItem("Jurisdiction",site.Country).SetItem("AutoLookupComplete",complete.ToString()).SetItem("GeometrySource","ENGINEER REVIEW INPUT").SetItem("GeometryOverrideReason",site.GeometryReason)
             .SetItem("AutoLookupSite",System.Text.Json.JsonSerializer.Serialize(site,new System.Text.Json.JsonSerializerOptions {NumberHandling=System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals})).SetItem("LookupRightsReference",source?.RightsReference??"MISSING").SetItem("LookupAdoptionReference",source?.AdoptionReference??"MISSING").SetItem("LookupTableDecisions",System.Text.Json.JsonSerializer.Serialize(source?.TableDecisions)).SetItem("ParapetHeightM",F(site.ParapetHeightM))
             .SetItem("LookupDatasetHash",source?.Bundle.Manifest.ContentHash??"MISSING").SetItem("LookupDatasetId",source?.Bundle.Manifest.BundleId??"MISSING")
             .SetItem("RoofBranchDecisions",System.Text.Json.JsonSerializer.Serialize(branches)).SetItem("SourceRevisionStatus","BASE-2021 / AMENDMENT APPLICABILITY UNCONFIRMED").SetItem("AutoLookupDiagnostics",System.Text.Json.JsonSerializer.Serialize(values.ToImmutable())).SetItem("AutoLookupStatus",source?.Synthetic==true?"SYNTHETIC AUTO LOOKUP / NOT FOR DESIGN":"PRIVATE LOCAL REVIEW / NOT QUALIFIED FOR DESIGN");

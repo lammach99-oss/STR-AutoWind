@@ -31,6 +31,7 @@ try {
         }
         finally { $process.Dispose() }
     }
+    Invoke-Smoke 'external-readonly' @('--smoke-external')
     Invoke-Smoke 'demo' @('--smoke')
     Invoke-Smoke 'report-export' @('--smoke-report-export')
     Invoke-Smoke 'asnz-worksheet' @('--smoke-asnz-worksheet')

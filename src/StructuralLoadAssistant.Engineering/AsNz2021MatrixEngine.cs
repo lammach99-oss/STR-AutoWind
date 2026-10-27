@@ -17,6 +17,13 @@ public static class AsNz2021MatrixEngine
         return state == LimitState.Uls ? Math.Max(ulsMinimum, maximum) : maximum;
     }
 
+    public static double ExternalPressure(double speed,double density,double cdyn,double cpe,double ka,double kce,double kl,double kp)
+    {
+        if(new[]{speed,density,cdyn,ka,kce,kl,kp}.Any(v=>!double.IsFinite(v)||v<=0)||!double.IsFinite(cpe))throw new ArgumentException("Finite signed coefficient and positive physical factors required");
+        double value=0.5*density*speed*speed*cdyn*cpe*ka*kce*kl*kp;
+        if(!double.IsFinite(value))throw new ArgumentOutOfRangeException(nameof(speed),"External pressure overflow");
+        return value;
+    }
     public static (double ExternalPa, double InternalPa, double NetPa) Pressure(double speed, double density,
         double cdyn, double cpe, double ka, double kce, double kl, double kp, double cpi, double kci, double kv)
     {

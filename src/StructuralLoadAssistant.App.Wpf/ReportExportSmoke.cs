@@ -47,7 +47,7 @@ public sealed partial class MainWindow
         vm.AutoReason="Synthetic sloped smoke / entered roof levels and model axes; not physical CSI evidence";
         vm.AutoGeometry=true;vm.AutoUniform=true;vm.AutoTopo=true;vm.AutoRigid=true;
         vm.AutoOpenings="TEST";vm.AutoDebris="TEST";vm.AutoArea="10";vm.AutoWallHeight="4";
-        Tabs.SelectedIndex=1;UpdateLayout();
+        Tabs.SelectedItem=Tabs.Items.OfType<System.Windows.Controls.TabItem>().Single(t=>t.Header?.ToString()=="Wind");UpdateLayout();
         static IEnumerable<System.Windows.DependencyObject> Descendants(System.Windows.DependencyObject root)
         {
             yield return root;

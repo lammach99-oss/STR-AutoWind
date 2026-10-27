@@ -38,6 +38,7 @@ public static class AsNz2021ReviewCalculation
             issues.Add(new("MISSING-" + key, CalculationIssueSeverity.Error, "AS/NZS matrix", "INPUT REQUIRED: " + key));
             cache[key] = double.NaN; return double.NaN;
         }
+        bool externalOnly=request.Options.GetValueOrDefault("PressureMode")=="ExternalOnly";
         bool claimedAuto=request.Options.GetValueOrDefault("AutoLookup")=="true";
         bool authenticated=AsNzAutoLookupReceipts.TryGet(request,out var receipt);
         bool auto=claimedAuto&&authenticated;
@@ -87,10 +88,10 @@ public static class AsNz2021ReviewCalculation
                     bool outside = geometryOk && to <= from;
                     double cpe = outside ? double.NaN : Input(InputPrefix + "_Cpe", false);
                     double ka = outside ? double.NaN : Input(InputPrefix + "_Ka"), kce = outside ? double.NaN : Input(InputPrefix + "_Kce"), kl = outside ? double.NaN : Input(InputPrefix + "_Kl"), kp = outside ? double.NaN : Input(InputPrefix + "_Kp");
-                    double kci = outside ? double.NaN : Input(InputPrefix + "_Kci"), kv = outside ? double.NaN : Input(InputPrefix + "_Kv");
-                    foreach (string sign in new[] { "Positive", "Negative" })
+                    double kci = externalOnly||outside ? double.NaN : Input(InputPrefix + "_Kci"), kv = externalOnly||outside ? double.NaN : Input(InputPrefix + "_Kv");
+                    foreach (string sign in externalOnly?new[]{"External"}:new[] { "Positive", "Negative" })
                     {
-                        double cpi = outside ? double.NaN : Input(StateKey("Cpi_" + sign), false);
+                        double cpi = externalOnly||outside ? double.NaN : Input(StateKey("Cpi_" + sign), false);
                         var method = AsNz2021MethodDecision.Evaluate(request.RoofForm,request.RoofSlopeDegrees,slopeBearing,bearing,request.ReferenceHeightM/depth,depth/breadth,request.Options.GetValueOrDefault("Jurisdiction","UNKNOWN"),request.Options.GetValueOrDefault("RegionCode","UNKNOWN"),period,request.SelectedAmendments);
                         bool externalValid=geometryOk&&method.ReviewGeometrySupported&&new[]{surfaceSpeed,rho,dyn,cpe,ka,kce,kl,kp,slopeBearing,period}.All(double.IsFinite)
                             && new[]{surfaceSpeed,rho,dyn,ka,kce,kl,kp}.All(v=>v>0);
@@ -98,18 +99,24 @@ public static class AsNz2021ReviewCalculation
                         if (valid && ((sign == "Positive" && cpi < 0) || (sign == "Negative" && cpi > 0))) valid = false;
                         double external=externalValid?0.5*rho*surfaceSpeed*surfaceSpeed*dyn*cpe*ka*kce*kl*kp:double.NaN;
                         var p = valid ? AsNz2021MatrixEngine.Pressure(surfaceSpeed,rho,dyn,cpe,ka,kce,kl,kp,cpi,kci,kv) : (external,double.NaN,double.NaN);
+                        if(externalOnly&&externalValid)
+                        {
+                            if(ka*kce<0.8-1e-12){externalValid=false;external=double.NaN;}
+                            else external=AsNz2021MatrixEngine.ExternalPressure(surfaceSpeed,rho,dyn,cpe,ka,kce,kl,kp);
+                            p=(external,double.NaN,double.NaN);
+                        }
                         string id = $"{state}_{prefix}_{sign}";
-                        string status = outside ? "NOT_APPLICABLE" : valid ? "EXPLICIT REVIEW ARITHMETIC / APPLICABILITY UNVERIFIED" : "INPUT_REQUIRED";
+                        string status = outside ? "NOT_APPLICABLE" : externalOnly&&externalValid?"EXTERNAL_REVIEW_COMPUTED":valid ? "EXPLICIT REVIEW ARITHMETIC / APPLICABILITY UNVERIFIED" : "INPUT_REQUIRED";
                         double? Finite(double v) => double.IsFinite(v) ? v : null;
                         rows.Add(new(id,direction,state,surface,roofCase,zone,Finite(from),Finite(to),bearing,Finite(surfaceSpeed),Finite(cpe),Finite(cpe*ka*kce*kl*kp),Finite(cpi*kci*kv),
-                            Finite(p.Item1),Finite(p.Item2),Finite(p.Item3), valid ? normal : null,valid ? new Vec3(-p.Item3*normal.X,-p.Item3*normal.Y,-p.Item3*normal.Z) : null,status,
+                            Finite(p.Item1),Finite(p.Item2),Finite(p.Item3), externalOnly&&externalValid?normal:valid ? normal : null,externalOnly&&externalValid?normal*(-external):valid ? new Vec3(-p.Item3*normal.X,-p.Item3*normal.Y,-p.Item3*normal.Z) : null,status,
                             "AS/NZS 1170.2:2021 Cl 2.2, 2.3, 2.4(1), 5.2(1)/(2); surface applicability and selected coefficients require review")
                         {
                             PressureBasisPa=externalValid?0.5*rho*surfaceSpeed*surfaceSpeed*dyn:null,
                             MethodDecision=method,
                             FactorEvidence=request.ExplicitCoefficients.Where(e=>e.Key.StartsWith(InputPrefix+"_")||e.Key==StateKey("Cpi_"+sign)||e.Key==StateKey("rho")||e.Key==StateKey("Cdyn")).ToImmutableDictionary()
                         });
-                        if(externalValid&&!valid)traces.Add(new(id+"-EXTERNAL","External review pressure",id,"pe = 0.5 rho Vdes² Cdyn Cpe Ka Kce Kl Kp",$"0.5 × {rho:R} × {surfaceSpeed:R}² × {dyn:R} × {cpe:R} × {ka:R} × {kce:R} × {kl:R} × {kp:R}",$"{external:R} Pa",external,"Pa","AS/NZS 1170.2:2021 Eq 5.2(2)","External review only; internal/net pressure BLOCKED",new[]{"Vdes_"+state+"_"+direction,"INPUT-"+StateKey("rho"),"INPUT-"+StateKey("Cdyn")}.Concat(new[]{"Cpe","Ka","Kce","Kl","Kp"}.Select(f=>"INPUT-"+InputPrefix+"_"+f)).ToImmutableArray(),[]));
+                        if(externalValid&&!valid)traces.Add(new(id+"-EXTERNAL","External review pressure",id,"pe = 0.5 rho Vdes² Cdyn Cpe Ka Kce Kl Kp",$"0.5 × {rho:R} × {surfaceSpeed:R}² × {dyn:R} × {cpe:R} × {ka:R} × {kce:R} × {kl:R} × {kp:R}",$"{external:R} Pa",external,"Pa","AS/NZS 1170.2:2021 Eq 5.2(2)",externalOnly?"EXTERNAL ONLY / internal pressure engineer-controlled separately; no net calculated":"External review only; internal/net pressure BLOCKED",new[]{"Vdes_"+state+"_"+direction,"INPUT-"+StateKey("rho"),"INPUT-"+StateKey("Cdyn")}.Concat(new[]{"Cpe","Ka","Kce","Kl","Kp"}.Select(f=>"INPUT-"+InputPrefix+"_"+f)).ToImmutableArray(),[]));
                         if (valid) traces.Add(new(id,"Surface pressure",id,"pe = 0.5 rho Vdes² Cpe Ka Kce Kl Kp Cdyn; pi = 0.5 rho Vdes² Cpi Kci Kv Cdyn; pn = pe - pi",
                             $"pe = 0.5 × {rho:R} × {surfaceSpeed:R}² × {cpe:R} × {ka:R} × {kce:R} × {kl:R} × {kp:R} × {dyn:R}; pi = 0.5 × {rho:R} × {surfaceSpeed:R}² × {cpi:R} × {kci:R} × {kv:R} × {dyn:R}; pn = {p.Item1:R} - ({p.Item2:R})",
                             $"{p.Item3:R} Pa",p.Item3,"Pa","AS/NZS 1170.2:2021 Eqs 2.4(1), 5.2(1)/(2)","Explicit-input review arithmetic; positive net acts inward. Selected coefficient applicability is not qualified.",
@@ -131,13 +138,11 @@ public static class AsNz2021ReviewCalculation
                 for (int c=1;c<=2;c++) for (int z=0;z<5;z++) Surface("Roof",c,z,fullFace?(z==0?0:depth):Math.Min(depth,roof[z]),fullFace?depth:Math.Min(depth,roof[z+1]),roofNormal);
             }
         }
-        bool success = !issues.Any(i => i.Severity == CalculationIssueSeverity.Error) && rows.Any(r => r.NetPa.HasValue) && rows.All(r => r.Status != "INPUT_REQUIRED");
+        bool success = !issues.Any(i => i.Severity == CalculationIssueSeverity.Error) && rows.Any(r => externalOnly?r.ExternalPa.HasValue:r.NetPa.HasValue) && rows.All(r => r.Status != "INPUT_REQUIRED");
         bool synthetic = request.ExplicitCoefficients.Values.Any(e => e.Provenance == DataProvenance.SyntheticDemoFixture);
         return new("asnz-matrix-"+Guid.NewGuid().ToString("N"),DateTimeOffset.UtcNow,request,
             synthetic ? DataProvenance.SyntheticDemoFixture : DataProvenance.Unverified,success,false,false,false,false,
-            !success ? "BLOCKED / INPUTS OR GEOMETRY REQUIRED" : auto ? receipt!.Status : synthetic ? "SYNTHETIC - NOT FOR DESIGN" : "SOURCE RIGHTS / VERIFIED TABLE DATA REQUIRED",[],[],traces.DistinctBy(t=>t.NodeId).ToImmutableArray(),issues.DistinctBy(i=>i.Code).ToImmutableArray(),quantities.ToImmutable())
+            externalOnly?(success?"EXTERNAL_REVIEW_COMPUTED / NOT_QUALIFIED":rows.Any(r=>r.ExternalPa.HasValue)?"PARTIAL_EXTERNAL_REVIEW / NOT_QUALIFIED":"EXTERNAL_BLOCKED / NOT_QUALIFIED"):!success ? "BLOCKED / INPUTS OR GEOMETRY REQUIRED" : auto ? receipt!.Status : synthetic ? "SYNTHETIC - NOT FOR DESIGN" : "SOURCE RIGHTS / VERIFIED TABLE DATA REQUIRED",[],[],traces.DistinctBy(t=>t.NodeId).ToImmutableArray(),issues.DistinctBy(i=>i.Code).ToImmutableArray(),quantities.ToImmutable())
             { AsNz2021Cases = rows.ToImmutable() };
     }
 }
-
-

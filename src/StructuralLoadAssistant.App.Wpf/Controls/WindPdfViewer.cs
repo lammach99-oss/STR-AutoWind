@@ -32,6 +32,7 @@ public sealed class WindPdfViewer : DockPanel
     private Microsoft.Web.WebView2.Wpf.WebView2? _webView;
     private TextBlock? _fallbackText;
 
+    private bool pdfNavigated;
     private string? _currentPdfPath;
     private string? _currentRunHash;
     private string? _currentDocHash;
@@ -105,16 +106,21 @@ public sealed class WindPdfViewer : DockPanel
         };
         Children.Add(_contentHost);
 
-        InitializeViewer();
+        Loaded += async (_, _) => await InitializeViewerAsync();
     }
 
-    private void InitializeViewer()
+    private async System.Threading.Tasks.Task InitializeViewerAsync()
     {
+        if (_webView?.CoreWebView2 != null) return;
         try
         {
-            _webView = new Microsoft.Web.WebView2.Wpf.WebView2();
+            _webView ??= new Microsoft.Web.WebView2.Wpf.WebView2();
             _contentHost.Child = _webView;
-            _ = _webView.EnsureCoreWebView2Async();
+            var profile=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"StructuralLoadAssistant","WebView2");
+            var environment=await Microsoft.Web.WebView2.Core.CoreWebView2Environment.CreateAsync(null,profile);
+            await _webView.EnsureCoreWebView2Async(environment);
+            _webView.CoreWebView2.NavigationCompleted += (_, e) => pdfNavigated=e.IsSuccess && _currentPdfPath!=null && _webView.Source?.IsFile==true;
+            if (_currentPdfPath != null) _webView.Source = new Uri(Path.GetFullPath(_currentPdfPath));
         }
         catch (Exception ex)
         {
@@ -132,6 +138,7 @@ public sealed class WindPdfViewer : DockPanel
 
     public void Clear()
     {
+        pdfNavigated=false;
         _currentPdfPath = null;
         _currentRunHash = null;
         _currentDocHash = null;
@@ -175,6 +182,7 @@ public sealed class WindPdfViewer : DockPanel
         using var sha = SHA256.Create();
         string fileHash = Convert.ToHexString(sha.ComputeHash(bytes)).ToLowerInvariant();
 
+        pdfNavigated=false;
         _currentPdfPath = pdfPath;
         _currentRunHash = runContentHash;
         _currentDocHash = docHash ?? runContentHash;
@@ -205,6 +213,15 @@ public sealed class WindPdfViewer : DockPanel
         }
     }
 
+    public async System.Threading.Tasks.Task CapturePdfPreviewAsync(string path)
+    {
+        var deadline=DateTime.UtcNow.AddSeconds(20);
+        while(!pdfNavigated && DateTime.UtcNow<deadline)await System.Threading.Tasks.Task.Delay(100);
+        if(!pdfNavigated||_webView?.CoreWebView2==null)throw new InvalidOperationException("Embedded PDF navigation not proven");
+        await System.Threading.Tasks.Task.Delay(2000);
+        using var stream=File.Create(path);
+        await _webView.CoreWebView2.CapturePreviewAsync(Microsoft.Web.WebView2.Core.CoreWebView2CapturePreviewImageFormat.Png,stream);
+    }
     public void ZoomIn()
     {
         _zoomFactor = Math.Min(3.0, _zoomFactor + 0.15);
@@ -256,7 +273,8 @@ public sealed class WindPdfViewer : DockPanel
         }
     }
 
-    public void SaveAs(string? defaultFileName = null)
+    public Func<string,System.Threading.Tasks.Task>? SaveOverride {get;set;}
+    public async void SaveAs(string? defaultFileName = null)
     {
         if (string.IsNullOrEmpty(_currentPdfPath) || !File.Exists(_currentPdfPath))
         {
@@ -274,7 +292,8 @@ public sealed class WindPdfViewer : DockPanel
         {
             try
             {
-                File.Copy(_currentPdfPath, dlg.FileName, overwrite: true);
+                if(SaveOverride!=null)await SaveOverride(dlg.FileName);
+                else File.Copy(_currentPdfPath, dlg.FileName, overwrite: true);
                 MessageBox.Show($"Successfully saved PDF to:\n{dlg.FileName}", "Save PDF", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)

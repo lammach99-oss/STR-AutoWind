@@ -205,3 +205,5 @@ Latest build/test counts and output paths are in IMPLEMENTATION_STATUS.md. A pas
 - [ ] SAP2000 physical editor qualification.
 
 See [Sprint 3.3 qualification matrix](SPRINT_3_3_QUALIFICATION.md). Historical checkmarks in earlier sections do not close these current pending checks. No application-generated selection/model/unit/file mutation was used.
+
+External-only explicit-input review and selected-frame preview: see [implementation handoff](ASNZ_EXTERNAL_ONLY_FRAME_MAPPING_IMPLEMENTATION_HANDOFF.md). Normative/source qualification and physical CSI validation remain blocked; live writes disabled.

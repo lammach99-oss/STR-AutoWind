@@ -34,7 +34,7 @@ public sealed partial class MainWindow : Window
         var status = BoundText("Status"); status.Padding = new Thickness(10); DockPanel.SetDock(status, Dock.Bottom); root.Children.Add(status);
         root.Children.Add(Tabs); Content = root;
         AddPage("Project", ProjectPage()); AddPage("Wind", WindPage()); AddPage("CSI", CsiPage());
-        AddPage("Facade", FacadePage()); AddPage("Roof", RoofPage()); AddPage("Wall", WallPage()); AddPage("Report", ReportPage());
+        AddPage("Facade", FacadePage()); AddPage("Roof", RoofPage()); AddPage("Wall", WallPage()); AddPage("Report", ReportPage()); AddPage("External", ExternalPage());
         roof3D.ShellClicked += id => vm.SelectShell(id);
         zoneEditor.SelectionChanged+=DrawRoof;
         vm.Refreshed += () => { DrawRoof(); UpdatePdfViewer(); }; DrawRoof(); UpdatePdfViewer();
