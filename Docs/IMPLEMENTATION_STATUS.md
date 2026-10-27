@@ -1,3 +1,10 @@
+# Ms provenance maintenance and private intake — 2026-10-27
+
+- Owner separately authorized the Ms provenance fix and private intake subject to software-use permissions. Exact/interpolated shielding source evidence is retained without reclassifying it as an assumption; no formulas or numerical operands changed. No-shielding-benefit remains an explicit assumption.
+- TDD reproduced two provenance failures before the fix; targeted regressions are green. Locked restore and Debug/Release builds passed (zero warnings/errors); 553/553 nonphysical automated tests passed in each configuration.
+- Private intake verified unchanged source PDF/workbook hashes and recorded a 13-table local extraction plan. Numerical extraction remains blocked pending documented software-use permission, governing jurisdiction/adoption and independent benchmarks. No protected numerical dataset was populated. See `ASNZ_MS_PROVENANCE_AND_PRIVATE_INTAKE.md`.
+- Normative qualification, engineering approval and live CSI writes stay disabled. Earlier milestone notes below remain historical.
+
 # Automatic AS/NZS review lookup closure — 2026-10-27
 
 Baseline: `b6674bca99032fb23f8089177a358b9974f854eb`. The bounded owner directive is implemented as source-gated review software; real-standard numerical lookup remains BLOCKED pending software-use rights and evidence. See `ASNZ_AUTOMATIC_LOOKUP_COVERAGE.md` for exact complete/partial/blocked table coverage.

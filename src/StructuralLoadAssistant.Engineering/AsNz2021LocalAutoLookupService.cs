@@ -156,7 +156,9 @@ public sealed class AsNz2021LocalAutoLookupService
                 if(site.Region.StartsWith("C",StringComparison.Ordinal)||site.Region.StartsWith("D",StringComparison.Ordinal))vrNumbers["CoastKm"]=site.CoastDistanceKm!.Value;
                 Lookup("VR_"+S,"VR",state,numeric:vrNumbers);
                 Lookup(S+"_Mc","Mc",state);
-                if(!site.NoShieldingBenefit&&site.ShieldingEligibilityReviewed&&site.ShieldingParameter.HasValue) {var shield=Lookup(S+"_Ms","Ms",state,numeric:new(){{"Parameter",site.ShieldingParameter.Value},{"Height",geometry.ReferenceHeightM}});if(shield.Value.HasValue)Supply(S+"_Ms",shield.Value.Value,"dimensionless","Source-declared shielding eligibility/interpolation: "+shield.Source+" "+shield.Selection);}
+                // Lookup already binds source records and interpolation evidence; do not replace it with an assumption.
+                if(!site.NoShieldingBenefit&&site.ShieldingEligibilityReviewed&&site.ShieldingParameter.HasValue)
+                    Lookup(S+"_Ms","Ms",state,numeric:new(){{"Parameter",site.ShieldingParameter.Value},{"Height",geometry.ReferenceHeightM}});
                 Lookup(S+"_Mz_cat","Mz",state,legacy?new(){{"Terrain",F(site.Terrain)}}:null,legacy?new(){{"Height",geometry.ReferenceHeightM}}:new(){{"Height",geometry.ReferenceHeightM},{"Terrain",site.Terrain}});
                 for(int bearing=0;bearing<360;bearing+=45)Lookup(S+"_Md_"+bearing,"Md",state,numeric:new(){{"Bearing",bearing}});
                 Lookup(S+"_Cdyn","Cdyn",state,new(){{"Dynamics",site.Dynamics}});
